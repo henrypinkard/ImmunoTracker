@@ -1,0 +1,54 @@
+The Spectral Hypersphere Segmentation Sorter (SHSS) is a high throughput data data pipeling to generate surface objects in Imaris, and pick out specific ones of interest based on their chromatic signatures--the relative intensities in different channels. Detailed instructions on how to use it are given below. There is also a TRoubleshooting section at the bottom of this document with common issues that might crop up when using this software
+
+
+Workflow
+1) Load Magellan dataset into Imaricumpiler, click "Positions as time". Instead of stitching images together, Imaricumpiler will output them as one long time series with all time points from each position in succession. This file will be used to generate a large number of candidate surfaces for cells of interest, from which a small number of cells can be picked out and imported into the stitched dataset. In step 3, a subset of these candidates will be imported into a stitched Imaris dataset. 
+
+2) Open "Positions as time" file in Imaris
+	a) Open Matlab and navigate the Matlab current folder to the SHSS root folder 
+	b) Run create_save_and_stitch_surfaces.m from matlab. The arguments for this functions are the parameters used in Imaris' surface wizard. The best way to determine these is by running the surface wizard (from Imaris) on a small representive ROI of the cells of interest, so that they can be quickly altered and tuned to get good segmentation. It is best to choose parameters that have many false positives for cells of interest, but few or none false negatives, as any cells that are not picked up in this step can not be easily added later on
+		-The arguments for create_stitch_and_save_surfaces are: 
+			-The index of the current Imaris instance (ususally 0)
+			-The saving name for the surface candidate dataset that will be generated in single quotes (e.g. 'T cell candidates')
+			-The channel index (starting at 0, even though channel indices displayed in Imaris start at 1)
+			-The size of the smoothing filter
+			-The size of the local contrast filter
+			-The background subtraction threshold
+			-The diameter of seed points used for splitting surfaces
+			-The minimum Quality for surfaces to be included
+			-the minimum number of voxels for surfaces to be included
+		-Putting it all together, one would type a command that looks something like this into the Matlab command window:
+			
+			create_save_and_stitch_surfaces(0,'T cell Candidates',5,1.5,20,2,15,0.5,120)
+
+	c) When the file dialog initializes, open the Magellan dataset corresponding to the data of interest. This step is neccesary so that metadata can be read which will allow conversion of surface coordinates from the "Positions as time" file to those of the stitched file
+
+
+3) Start the Spectral Hypersphere Segmentation Sorter
+	a) Open the stitched Imaris file
+	b) Run population_sorter.m from Matlab
+	c) Open the surface candidate file generated from step 2
+	d) A window will pop up asking to input the object selection name. This refers to a population of interest withing a candidate data set (e.g. GFP T cells). If (when...) Imaris crashes, selection of a population can be resumed without any data loss by repeating steps b-d and entering the same selection name.
+	e) A matlab figure window with the title "Imaris bridge" will pop up. This window must be selected any time you want to send input to Imaris through Matlab. Each time something is selected within Imaris (or any other program), the Imaris bridge window will need to be resleceted in order for keyboard input to be propogated.
+
+4) Find populations of interest
+	a) The population sorter supports two modes of finding populations, depending on how accurate of a population identification is desired. The first step of either mode is to manually identify a small number of representative cells of interest to create a baseline of their spectral signature, from which others of the same group can be identified. 
+		-Cells are indexed in the candidate file by various statistics, including their XYY postions. Thus they can be selected by specificying an XYZ point, and finding the cells closest to it. Specifying an XYZ point is accomplished by positioning three planes, the intersection of which is single point
+		-With the Imaris bridge Matlab window selected, press "1" to show two planes orthoganol to the viewpoint in Imaris. They will appear as lines, since they are perpendicular to the view.
+			-It makes it easier to see the planes if "Show Manipulator" is deselected on the left tab in Imaris
+			-Position the two planes by clicking and dragging them so that they intersect atop the cell of interest (this might require pressing "esc" to toggle from rotate mode to selecion mode in Imaris. If the data set is accidentally rotated before planes have been positioned, press "1" on the Imaris bridge again to restart)
+			-Once the planes are positioned over a cell of interest, press "esc" in Imaris and rotate the image to another viewpoint from which the cell of interst is visible
+			-Press "2" on the Imaris bridge to store the positions of the first two planes and show the third one
+			-Position the new plane intersecting with the cell of interest
+
+
+
+
+Troubleshooting
+-Many matlab functions used here ask for "imarisIndex" as a parameter. This is usually 0 if only one instance of Imaris is open. Sometimes it can be 1,2,etc if multiple instances are open, or if Imaris has been closed and reopened in succession (it seems that instances of Imaris take a bit longer to close even after they disappear from the screen and/or Windows task Manager) 
+
+-All code tested and degbugged using Imaris 7.6.5. Compatibility with other versions unknown
+
+-Magellan.jar must be added to Matlab's java path (not the same as Matlab's regular path). This is done automatically in the file "read_magellan_metadata.m". If the path 'C:\Users\hpinkard\Dropbox\Henry\Code\Builds\Magellan.jar' is not valid, this line will need to be changed
+
+-Optimization: In Imaris, select edit-preferences-calculation. Under "Cache File Paths", create a folder on the fastest hard drive on the computer. Imaris will write/read lots of temp files into this folder, and the faster it can do this, the faster th analysis will go. The Data Cache Memory Limit controls how much image data is held in RAM at a time. For fast viewing of data, set this to ~0.75 the amount of RAM on the computer. For calculations, set it lower. Its a good idea to keep the windows task manager open while doing high perfomance tasks, to see if these paramaters have been set correctly. Making use of nearly all ofthe computers RAM is optimal, but if memory usage reaches 100% things will slow down substantially.
