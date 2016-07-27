@@ -2,31 +2,25 @@ clear
 clc
 
 aImarisApplicationID = 0;
-directory = 'C:\Users\hpinkard\Desktop\New folder';
-timepoints_to_project = 5;
-spot_radius = 30;
+directory = '/Users/henrypinkard/Desktop/LNData/TimeProjections/';
+radius = 30;
 xyDownsample = 10;
 
 %make sure the matlab librarypath.txt file is set correctly for JNI calls
 javaaddpath jarh5obj.jar;
 javaaddpath jarhdf5-2.10.0.jar;
 javaaddpath jarhdfobj.jar;
-javaaddpath Imaris_writer.jar;
-javaaddpath ImarisLib.jar;
-javaaddpath('C:\Users\hpinkard\Dropbox\Henry\Code\Matlab\time projection\jhdf.dll');
-javaaddpath('C:\Users\hpinkard\Dropbox\Henry\Code\Matlab\time projection\jhdf5.dll');
+javaaddpath xt/Imaris_writer.jar;
+javaaddpath xt/ImarisLib.jar;
+% javaaddpath('C:\Users\hpinkard\Dropbox\Henry\Code\Matlab\time projection\jhdf.dll');
+% javaaddpath('C:\Users\hpinkard\Dropbox\Henry\Code\Matlab\time projection\jhdf5.dll');
 
 vImarisLib = ImarisLib;
 imarisApplication = vImarisLib.GetApplication(aImarisApplicationID);
 vDataSet = imarisApplication.GetDataSet;
 
 
-% get the spots--use currently selected or first to find in list
-spots = imarisApplication.GetFactory.ToSpots(imarisApplication.GetSurpassSelection);
-if isequal(spots, [])
-    msgbox('Please create some spots!');
-    return;
-end
+objects = imarisApplication.GetFactory.ToSurfaces(imarisApplication.GetSurpassSelection);
 
 
 
@@ -48,7 +42,7 @@ slices = vDataSet.GetSizeZ;
 frames = vDataSet.GetSizeT;
 width = floor(vDataSet.GetSizeX / xyDownsample);
 height = floor(vDataSet.GetSizeY / xyDownsample);
-prefix = strcat(spotsName,sprintf('_%d um %d timepoint time projection',spot_radius,timepoints_to_project));
+prefix = strcat(spotsName,sprintf('_%d um %d timepoint time projection',radius,timepoints_to_project));
 imarisWriter = HDF.ImarisWriter(directory,prefix,width,height,slices,1,frames,pixelSizeXY,pixelSizeZ,[]);
 
 
@@ -73,8 +67,8 @@ for frame = 0:frames-1
         %create empty pixel data
         pixels = zeros(width, height, slices, 'uint8');
         
-        pixelRadiusXY = spot_radius / pixelSizeXY;
-        pixelRadiusZ = spot_radius / pixelSizeZ;
+        pixelRadiusXY = radius / pixelSizeXY;
+        pixelRadiusZ = radius / pixelSizeZ;
         for i = 1:size(spotsInWindow,1)
             %add to pixel values in time projection channel based on coordinates
             %of spot
@@ -85,7 +79,7 @@ for frame = 0:frames-1
                         %increment only those that lie within inscribed ellipsoid
                         %subtract one and multiply by pixel size to get um position
                         if sqrt(sum([pixelSizeXY*((x-1) - spotsInWindow(i,1)) pixelSizeXY*((y-1) - spotsInWindow(i,2))...
-                                pixelSizeZ*((z-1) - spotsInWindow(i,3))].^2)) < spot_radius
+                                pixelSizeZ*((z-1) - spotsInWindow(i,3))].^2)) < radius
                             indices = round([x y z]);
                             pixels(indices(1), indices(2), indices(3)) = pixels(indices(1), indices(2), indices(3)) + 1;
                         end
