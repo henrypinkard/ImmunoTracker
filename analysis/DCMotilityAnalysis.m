@@ -1,55 +1,22 @@
 clear
-%connect to imaris to get DC tracks
-javaaddpath xt/ImarisLib.jar
-vImarisLib = ImarisLib;
-xImarisApp = vImarisLib.GetApplication(0);
-if (isempty(xImarisApp))
-    msgbox('Wrong imaris index');
-    return;
-end
-xSurpass = xImarisApp.GetSurpassScene;
-surfaces = xImarisApp.GetFactory.ToSurfaces(xImarisApp.GetSurpassSelection);
-
-%convert Imaris tracks to something more sensible
-edges = surfaces.GetTrackEdges; %0 based
-%make adjacency matrix
-adjMat = zeros(max(edges(:))+1);
-adjMat(sub2ind(size(adjMat),edges(:,1)+1,edges(:,2)+1)) = 1;
-adjMat = adjMat + adjMat';
-gr = graph(adjMat);
-trackSurfaceIndices = conncomp(gr,'OutputForm','cell');
-
-tracks = cell(size(trackSurfaceIndices));
-for trackIndex = 1:length(tracks)
-   surfaceIndices = trackSurfaceIndices{trackIndex} - 1; 
-   xyzt = zeros(length(surfaceIndices),1);
-   for i = 1:length(surfaceIndices)
-      xyzt(i,4) = surfaces.GetTimeIndex(surfaceIndices(i));
-      xyzt(i,1:3) = surfaces.GetCenterOfMass(surfaceIndices(i));
-   end
-   %sort by time
-   [~,I] = sort(xyzt(:,4));
-   xyzt = xyzt(I,:);
-   tracks{trackIndex} = xyzt;
-end
+load ('DCs_tracks.mat');
 
 figure(1)
 %plot number of tracked cells at each time point
-allData = cell2mat(tracks');
-histogram(allData(:,4), range(allData(:,4))+1)
+allData = cell2mat(tracks);
+histogram([allData.t], range([allData.t])+1)
 
-deltaTmin = xImarisApp.GetDataSet.GetTimePointsDelta / 60;
-deltaTh = deltaTMin / 60;
+deltaTh = deltaTmin / 60;
 %get displacements for each track 
-getDispSq = @(xyzt) [sum((xyzt(:,1:3) - repmat(xyzt(1,1:3),size(xyzt,1),1)).^2,2) xyzt(:,4)];
+getDispSq = @(track) sum((cat(1,track.xyz) - repmat(track(1).xyz,size(cat(1,track.xyz),1),1)).^2,2);
 tracksDispSq = cellfun(getDispSq,tracks,'UniformOutput',false);
 figure(1)
 singleTrackDispSq = tracksDispSq{1};
-plot(deltaTh * singleTrackDispSq(:,2),singleTrackDispSq(:,1))
+plot(deltaTh * [tracks{1}.t],singleTrackDispSq)
 hold on
-for i = 2:length(trackDispSq)
+for i = 2:length(tracksDispSq)
     singleTrackDispSq = tracksDispSq{i};
-    plot(deltaTh * singleTrackDispSq(:,2),singleTrackDispSq(:,1),'.-')
+    plot(deltaTh * [tracks{i}.t],singleTrackDispSq,'.-')
 end
 hold off
 ylabel('Displacement^2 (\mum^2)')
@@ -58,14 +25,14 @@ exportPlot('DC displacementSq')
 
 
 %velocity vs time
-getVelocity = @(xyzt) [sqrt(sum((xyzt(2:end,1:3) - xyzt(1:end-1,1:3)).^2,2))/deltaTh xyzt(2:end,4)];
-velocities = cellfun(getVelocity,tracks,'UniformOutput',false);
 figure(2)
-avgSpeed = zeros(max(allData(:,4))+1,1);
-stdError = zeros(max(allData(:,4))+1,1);
+getVelocity = @(track) sqrt(sum((cat(1,track(2:end).xyz) - cat(1,track(1:end-1).xyz)).^2,2))/deltaTh;
+velocities = cellfun(getVelocity,tracks,'UniformOutput',false);
+avgSpeed = zeros(max([allData.t]),1);
+stdError = zeros(max([allData.t]),1);
 for t = 1:length(avgSpeed)
     %find velocity for all tracks at timepoint
-    vAtTP = cellfun(@(track) track(find(track(:,2)==t,1),1),velocities,'UniformOutput',false);
+    vAtTP = cellfun(@(track,speed) speed(find([track(2:end).t]==t,1)),tracks,velocities,'UniformOutput',false);
     vAtTP = cell2mat(vAtTP(~cellfun(@isempty,vAtTP)));  %ignore missing tracks
     avgSpeed(t) = mean(vAtTP);
     stdError(t) = std(vAtTP) / sqrt(length(vAtTP)-1);
@@ -74,3 +41,12 @@ errorbar((1:length(avgSpeed))*deltaTh,avgSpeed,stdError)
 ylabel('Velocity (\mum/h)')
 xlabel('Time (h)')
 exportPlot('DC velocities')
+
+%Directions of movement vs chemokine gradients
+figure(3)
+tracks = getChemokineAndMigrationVecs(tracks);
+% for i = 
+
+
+plot([tracks{7}.migGradAngle])
+
