@@ -25,9 +25,9 @@ for i = 1:length(tracks)
                 %calculate distance
                 distance = norm(cell2cellVec);
                 normalizedVec = cell2cellVec / distance;
-                %scale by negative exp
+                %scale by 
                 %arbitrary scale parameter for numerical stability
-                scale = exp(-distance / 1000);
+                scale = 1 ./ distance.^2;
                 scaledVec = scale*normalizedVec;
                 gradientVectorSum = gradientVectorSum + scaledVec;
             end  

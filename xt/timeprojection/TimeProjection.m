@@ -3,10 +3,9 @@ clc
 
 aImarisApplicationID = 0;
 directory = '/Users/henrypinkard/Desktop/LNData/TimeProjections/';
-radius = 300;
+radius = 200;
 timepoints_to_project = 1;
 xyDownsample = 1;
-scale = 40;
 
 %make sure the matlab librarypath.txt file is set correctly for JNI calls
 javaaddpath ../ImarisLib.jar
@@ -76,9 +75,8 @@ for frame = 0:frames-1
                         if sqrt(sum([pixelSizeXY*((x-1) - coordsInTimeRange(i,1)) pixelSizeXY*((y-1) - coordsInTimeRange(i,2))...
                                 pixelSizeZ*((z-1) - coordsInTimeRange(i,3))].^2)) < radius
                             indices = round([x y z]);
-                            %increment by exponential decay from center
                             pixels(indices(1), indices(2), indices(3)) = pixels(indices(1), indices(2), indices(3)) +...
-                                scale * exp(- sqrt(sum((coordsInTimeRange(i,:) -[x y z]).^2)) / radius);
+                                radius / sqrt(sum((coordsInTimeRange(i,:) -[x y z]).^2)) ;
                         end
                     end
                 end

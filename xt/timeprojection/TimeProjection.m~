@@ -3,10 +3,10 @@ clc
 
 aImarisApplicationID = 0;
 directory = '/Users/henrypinkard/Desktop/LNData/TimeProjections/';
-radius = 150;
+radius = 300;
 timepoints_to_project = 1;
 xyDownsample = 1;
-scale = (1500
+scale = 250;
 
 %make sure the matlab librarypath.txt file is set correctly for JNI calls
 javaaddpath ../ImarisLib.jar
@@ -58,38 +58,38 @@ for frame = 0:frames-1
         startTimeIndex = frame - (timepoints_to_project-1);
         endTimeIndex = frame;
         
-        spotsInWindow = spotPixelCoords(timeIndices >= startTimeIndex & timeIndices <= endTimeIndex,:);
+        coordsInTimeRange = spotPixelCoords(timeIndices >= startTimeIndex & timeIndices <= endTimeIndex,:);
         
         %create empty pixel data
-        pixels = zeros(width, height, slices, 'uint8');
+        pixels = zeros(width, height, slices);
         
         pixelRadiusXY = radius / pixelSizeXY;
         pixelRadiusZ = radius / pixelSizeZ;
-        for i = 1:size(spotsInWindow,1)
+        for i = 1:size(coordsInTimeRange,1)
             %add to pixel values in time projection channel based on coordinates of spot
-            for x = max(1,spotsInWindow(i,1) - pixelRadiusXY):min(size(pixels,1), spotsInWindow(i,1) + pixelRadiusXY)
-                for y = max(1,spotsInWindow(i,2) - pixelRadiusXY): min(size(pixels,2), spotsInWindow(i,2) + pixelRadiusXY)
-                    for z = max(1,spotsInWindow(i,3) - pixelRadiusZ):min(size(pixels,3), spotsInWindow(i,3) + pixelRadiusZ)
+            for x = max(1,coordsInTimeRange(i,1) - pixelRadiusXY):min(size(pixels,1), coordsInTimeRange(i,1) + pixelRadiusXY)
+                for y = max(1,coordsInTimeRange(i,2) - pixelRadiusXY): min(size(pixels,2), coordsInTimeRange(i,2) + pixelRadiusXY)
+                    for z = max(1,coordsInTimeRange(i,3) - pixelRadiusZ):min(size(pixels,3), coordsInTimeRange(i,3) + pixelRadiusZ)
                         %iterating through a 3D rectangle of all possible pixels,
                         %increment only those that lie within inscribed ellipsoid
                         %subtract one and multiply by pixel size to get um position
-                        if sqrt(sum([pixelSizeXY*((x-1) - spotsInWindow(i,1)) pixelSizeXY*((y-1) - spotsInWindow(i,2))...
-                                pixelSizeZ*((z-1) - spotsInWindow(i,3))].^2)) < radius
+                        if sqrt(sum([pixelSizeXY*((x-1) - coordsInTimeRange(i,1)) pixelSizeXY*((y-1) - coordsInTimeRange(i,2))...
+                                pixelSizeZ*((z-1) - coordsInTimeRange(i,3))].^2)) < radius
                             indices = round([x y z]);
                             %increment by exponential decay from center
                             pixels(indices(1), indices(2), indices(3)) = pixels(indices(1), indices(2), indices(3)) +...
-                                exp(-scale *;
+                                scale / sqrt(sum((coordsInTimeRange(i,:) -[x y z]).^2)) ;
                         end
                     end
                 end
             end
-            sprintf('frame: %d\t\tspot: %d of %d',frame,i,size(spotsInWindow,1))
+            sprintf('frame: %d\t\tspot: %d of %d',frame,i,size(coordsInTimeRange,1))
         end
         
         %write pixels to tiff storage
         for s = 0:slices-1
             %add slices
-            imarisWriter.addImage(reshape(pixels(:,:,s+1),1,width*height),s,0,frame,[],vDataSet.GetTimePoint(frame));
+            imarisWriter.addImage(reshape(uint8(pixels(:,:,s+1)),1,width*height),s,0,frame,[],vDataSet.GetTimePoint(frame));
         end
     end
     waitbar(frame/frames, vProgressDisplay)
