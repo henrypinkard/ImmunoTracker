@@ -1,4 +1,4 @@
-function [ output_args ] = activeLearningClassifier(  )
+function [  ] = cellPopulationLearner(  )
 %ACTIVELEARNINGCLASSIFIER Master function for querying user and classifying surfaces
 % This function loads an unlabelled nxp data matrix and prompts the user
 % for labeling of examples so that it can learn and generalize to the full
@@ -23,24 +23,39 @@ featuresAndLabels = matfile(dataFile,'Writable',false);
 %Load surface data into virtual memory
 surfaceData = matfile(surfaceFile,'Writable',false);
 
+%createLabels for cells of interest
+
+%TODO: create this from scratch or pull from a small labelled subset
+coiIndices = featuresAndLabels.labelledTCell + 1;
+ncoiIndices = featuresAndLabels.labelledNotTCell + 1;
+%pull nxp feature matrix and imaris indices in memory
+features = featuresAndLabels.features;
+imarisIndices = featuresAndLabels.imarisIndices;
+
 %Connect to Imaris
-[ xImarisApp, xPreviewSurface, xPopulationSurface, xSurfaceToClassify ] = xtSetupSurfaceTransfer(  )
+[ xImarisApp, xPopulationSurface, xSurfaceToClassify ] = xtSetupSurfaceTransfer(  );
 xSurpassCam = xImarisApp.GetSurpassCamera;
+
+%make functions for manipulating view
+[quatMult,quatRot,rotVect2Q] = makeQuaterionFunctions();
 
 %create figure for key listening
 figure(1);
 title('Imaris bridge');
 set(gcf,'KeyPressFcn',@keyinput);
 surfaceClassicationIndex_ = -1;
+presentNextExample();
 
+%t
 
-    function [] = presentNextExample()
-%         xImarisApp
+    function [labels] = classifyInstances(mask)
+       %Classify instances specified by the provided mask
+       pred = neuralNet( features(~trainDataMask,:)' )';
+
+       %override any classifications with manual labels if available
         
-        surfaceClassicationIndex_ = nextSampleToClassify( features, labelledTCell, labelledNotTCell );
-        func_addsurfacestosurpass(xImarisApp,surfFile,1, imarisIndices(surfaceClassicationIndex_));
-        centerToSurface(xSurfaceToClassify);
     end
+
 
 %Controls
     function [] = keyinput(~,~)
@@ -51,26 +66,45 @@ surfaceClassicationIndex_ = -1;
         elseif strcmp(key,'2')
             % 2 - Classify and visualize all instances at current time point
             
+            %train classifier
+            
+            %delete all surfaces that have been previously classified from
+            %imaris
+            %run classifier on instances at current TP
+            %overide classification with any manual labellings
+            
         elseif strcmp(key,'3')
             % 3 - Activate crosshair selection mode to manually select an instance to classify
             
         elseif strcmp(key,'y')
             %Yes the currently presented instance show be laballed as a T cell
-            labelledTCells = unique([labelledTCells surfaceClassicationIndex_]);
-             presentNextExample();
+            coiIndices = unique([coiIndices surfaceClassicationIndex_]);
+            presentNextExample();
         elseif strcmp(key,'n')
             %Yes the currently presented instance show be laballed as a T cell
-            labelledNotTCells = unique([labelledNotTCells surfaceClassicationIndex_]);
+            ncoiIndices = unique([ncoiIndices surfaceClassicationIndex_]);
             presentNextExample();
         end
     end
 
-%surpass camera parameters:
-%height--distance from the object it is centered on, changes with zoom but not with rotation
-%position--camera position, not related to center of rotation
-%focus--seemingly not related to anything... (maybe doesn't matter for orthgraphic)
-%Fit will fit viewing frame around entire image...which will in turn set the center of rotation to the center of image
+    function [] = presentNextExample()
+        %find most informative example at this time point
+        timeIndex = xImarisApp.GetVisibleIndexT; %0 based
+        timeIndices = featuresAndLabels.timeIndices; %also 0 based
+        atCurrentTPMask = timeIndex == timeIndices;
+        
+        surfaceClassicationIndex_ = nextSampleToClassify( features, atCurrentTPMask, coiIndices, ncoiIndices );
+        func_addsurfacestosurpass(xImarisApp,surfaceData,1, xSurfaceToClassify,imarisIndices(surfaceClassicationIndex_));
+        centerToSurface(xSurfaceToClassify);
+    end
+
     function [] = centerToSurface(surface)
+        %surpass camera parameters:
+        %height--distance from the object it is centered on, changes with zoom but not with rotation
+        %position--camera position, not related to center of rotation
+        %focus--seemingly not related to anything... (maybe doesn't matter for orthgraphic)
+        %Fit will fit viewing frame around entire image...which will in turn set the center of rotation to the center of image
+        
         %get initial height for resetting
         height = xSurpassCam.GetHeight;
         %Oreint top down
@@ -85,9 +119,9 @@ surfaceClassicationIndex_ = -1;
         surface.SetVisible(true);
     end
 
-    function [ xImarisApp, xPreviewSurface, xPopulationSurface, xSurfaceToClassify ] = xtSetupSurfaceTransfer(  )
+    function [ xImarisApp, xPopulationSurface, xSurfaceToClassify ] = xtSetupSurfaceTransfer(  )
         previewName = 'Preview surface';
-        populationName = 'TCells';
+        populationName = 'Cells of interest';
         surfaceToClassifyName ='SurfaceToClassify';
         
         xtIndex = 0;
@@ -106,9 +140,9 @@ surfaceClassicationIndex_ = -1;
                 xSurpass.RemoveChild(xSurpass.GetChild(i));
             end
         end
-        xPreviewSurface = xImarisApp.GetFactory.CreateSurfaces;
-        xPreviewSurface.SetName(previewName);
-        xSurpass.AddChild(xPreviewSurface,-1);
+        %         xPreviewSurface = xImarisApp.GetFactory.CreateSurfaces;
+        %         xPreviewSurface.SetName(previewName);
+        %         xSurpass.AddChild(xPreviewSurface,-1);
         xPopulationSurface = xImarisApp.GetFactory.CreateSurfaces;
         xPopulationSurface.SetName(populationName);
         xSurpass.AddChild(xPopulationSurface,-1);
@@ -117,14 +151,14 @@ surfaceClassicationIndex_ = -1;
         xSurpass.AddChild(xSurfaceToClassify,-1);
     end
 
-
-% quaternion functions %
-%multiply 2 quaternions
-quatMult = @(q1,q2) [ q1(4).*q2(1:3) + q2(4).*q1(1:3) + cross(q1(1:3),q2(1:3)); q1(4)*q2(4) - dot(q1(1:3),q2(1:3))];
-%generate a rotation quaternion
-quatRot = @(theta,axis) [axis / norm(axis) * sin(theta / 2); cos(theta/2)];
-%Rotate a vector and return a quaternion, which then needs to be subindexed
-%to get a vector again
-rotVect2Q = @(vec,quat) quatMult(quat,quatMult([vec; 0],[-quat(1:3); quat(4)]));
+    function [quatMult,quatRot,rotVect2Q] = makeQuaterionFunctions()
+        % quaternion functions %
+        %multiply 2 quaternions
+        quatMult = @(q1,q2) [ q1(4).*q2(1:3) + q2(4).*q1(1:3) + cross(q1(1:3),q2(1:3)); q1(4)*q2(4) - dot(q1(1:3),q2(1:3))];
+        %generate a rotation quaternion
+        quatRot = @(theta,axis) [axis / norm(axis) * sin(theta / 2); cos(theta/2)];
+        %Rotate a vector and return a quaternion, which then needs to be subindexed to get a vector again
+        rotVect2Q = @(vec,quat) quatMult(quat,quatMult([vec; 0],[-quat(1:3); quat(4)]));
+    end
 
 end

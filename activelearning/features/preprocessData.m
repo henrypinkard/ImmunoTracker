@@ -29,10 +29,10 @@ inCenter = rawFeatures(:,88) > distanceFromEdge & rawFeatures(:,88) < (max(rawFe
 
 
 %visulaized excluded edges
-plot(rawFeatures(:,88),rawFeatures(:,89),'k.')
-hold on
-plot(rawFeatures(inCenter,88),rawFeatures(inCenter,89),'r.')
-hold off
+% plot(rawFeatures(:,88),rawFeatures(:,89),'k.')
+% hold on
+% plot(rawFeatures(inCenter,88),rawFeatures(inCenter,89),'r.')
+% hold off
 
 
 imarisIndices = imarisIndices(inCenter,:);
