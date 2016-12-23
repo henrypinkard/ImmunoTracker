@@ -30,11 +30,9 @@ net = patternnet(20,'trainscg','crossentropy' );
 net.divideParam.testRatio = 0;
 net.divideParam.trainRatio = 0.8;
 net.divideParam.valRatio = 0.2;
-[neuralNet,tr] = train(net,trainData,trainLabels);
-
-
-
-
+net.trainParam.showWindow = false;
+net.trainParam.showCommandLine = false; 
+[neuralNet,tr] = train(net,trainData',trainLabels','useParallel','yes');
 
 end
 

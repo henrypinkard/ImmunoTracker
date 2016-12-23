@@ -15,6 +15,8 @@ function [  ] = cellPopulationLearner(  )
 % y - Yes the currently presented instance show be laballed as a T cell
 % n - No the currently presented instance in not a T cell
 
+%start parallel pool for training NN
+% parpool;
 
 dataFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/CMTMRFeaturesAndLabels.mat';
 surfaceFile = '/Users/henrypinkard/Desktop/LNData/CMTMRCandidates.mat';
@@ -47,13 +49,14 @@ surfaceClassicationIndex_ = -1;
 presentNextExample();
 
 neuralNet = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],...
-    [ones(length(coiIndices),1); zeros(length*ncoiIndices,1)]);
+    [ones(length(coiIndices),1); zeros(length(ncoiIndices),1)]);
 
-    function [labels] = classifyInstances(mask)
-       %Classify instances specified by the provided mask
-       pred = neuralNet( features(~trainDataMask,:)' )';
-
-       %override any classifications with manual labels if available
+    function [pred] = classifyInstances(mask)
+        %Classify instances specified by the provided mask
+        pred = neuralNet( features(mask,:)' )' > 0.5;
+        
+        
+        %override any classifications with manual labels if available
         
     end
 
@@ -69,13 +72,23 @@ neuralNet = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],..
             
             %train classifier
             neuralNet = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],...
-                [ones(length(coiIndices),1); zeros(length*ncoiIndices,1)]);
-
-            %delete all surfaces that have been previously classified from
-            %imaris
-            %run classifier on instances at current TP
-            %overide classification with any manual labellings
+                [ones(length(coiIndices),1); zeros(length(ncoiIndices),1)]);
             
+            %delete all predeicted surfaces from imaris
+            xPopulationSurface.RemoveAllSurfaces;
+            
+            %run classifier on instances at current TP
+            currentTPMask = xImarisApp.GetVisibleIndexT == featuresAndLabels.timeIndices;
+            currentTPPred = classifyInstances(currentTPMask);
+            
+            %generate mask for predicted cells of interest at current TP
+            currentTPIndices = find(currentTPMask);
+            coiAtCurrentTPIndices = currentTPIndices(currentTPPred);
+            
+            %send to Imaris
+            func_addsurfacestosurpass(xImarisApp,surfaceData,100, xPopulationSurface,imarisIndices(coiAtCurrentTPIndices));
+
+                 
         elseif strcmp(key,'3')
             % 3 - Activate crosshair selection mode to manually select an instance to classify
             
