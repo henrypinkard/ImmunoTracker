@@ -1,19 +1,23 @@
-function [ index ] = nextSampleToClassify( features, atCurrentTPMask, coiIndices, ncoiIndices )
+function [ index ] = nextSampleToClassify( currentTPPredValue, mask )
 %NEXTSAMPLETOCLASSIFY 
 %Use the active learning query strategy to determine which unlabelled
-%instance should be classified next, and return its index within the
-%nxp data matrix features
+%instance at the current time point should be classified next, and return
+%its index within the nxp design matrix. 
+%currentTPPredValue -- value between 0 and 1 that represents confidence of
+%prediction
+%mask -- binary mask for which instances in consideration (unlabelled and
+%displayed at current TP)
 
+designMatrixIndices = find(mask);
 
-%for now do a dumb thing and just return an unlabelled instance at the
-%current timepoint
-unlabelledAtCurrentTP = atCurrentTPMask;
-unlabelledAtCurrentTP(coiIndices) = 0;
-unlabelledAtCurrentTP(ncoiIndices) = 0;
-
-unlabelledAtCurrentTPIndices = find(unlabelledAtCurrentTP);
+certainty = abs(currentTPPredValue - 0.5);
+[~,sortedIndices] = sort(certainty);
 
 %index should be 1-based
-index = unlabelledAtCurrentTPIndices(1);
+index = designMatrixIndices(sortedIndices(1));
+
+histogram(currentTPPredValue,100);
+set(gca,'YScale','log')
 end
+
 

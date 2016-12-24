@@ -1,4 +1,8 @@
-function [ neuralNet ] = trainClassifier( trainData, trainLabels )
+function [ classifier ] = trainClassifier( trainData, trainLabels )
+% train a classifier using given training data and labels. Return some kind
+% of classifier object that will later be passed to classify.m for
+% classificaiton
+
 
 %Determine number of hiddens by cross validation
 % nHiddens = [1 5 10 15 20 50 100 120]
@@ -32,7 +36,7 @@ net.divideParam.trainRatio = 0.8;
 net.divideParam.valRatio = 0.2;
 net.trainParam.showWindow = false;
 net.trainParam.showCommandLine = false; 
-[neuralNet,tr] = train(net,trainData',trainLabels','useParallel','yes');
+[classifier,tr] = train(net,trainData',trainLabels','useParallel','yes');
 
 end
 

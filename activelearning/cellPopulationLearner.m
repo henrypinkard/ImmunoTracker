@@ -18,8 +18,8 @@ function [  ] = cellPopulationLearner(  )
 %start parallel pool for training NN
 % parpool;
 
-dataFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/CMTMRFeaturesAndLabels.mat';
-surfaceFile = '/Users/henrypinkard/Desktop/LNData/CMTMRCandidates.mat';
+dataFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/e670FeaturesAndLabels.mat';
+surfaceFile = '/Users/henrypinkard/Desktop/LNData/e670Candidates.mat';
 %load features and known labels
 featuresAndLabels = matfile(dataFile,'Writable',false);
 %Load surface data into virtual memory
@@ -46,19 +46,9 @@ figure(1);
 title('Imaris bridge');
 set(gcf,'KeyPressFcn',@keyinput);
 surfaceClassicationIndex_ = -1;
-presentNextExample();
 
-neuralNet = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],...
-    [ones(length(coiIndices),1); zeros(length(ncoiIndices),1)]);
-
-    function [pred] = classifyInstances(mask)
-        %Classify instances specified by the provided mask
-        pred = neuralNet( features(mask,:)' )' > 0.5;
-        
-        
-        %override any classifications with manual labels if available
-        
-    end
+%train initial classifier
+classifier = retrain();
 
 
 %Controls
@@ -69,47 +59,56 @@ neuralNet = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],..
             presentNextExample();
         elseif strcmp(key,'2')
             % 2 - Classify and visualize all instances at current time point
+            fprintf('Classifying all surfaces at current time point...\n');
+            predictCurrentTP();
             
-            %train classifier
-            neuralNet = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],...
-                [ones(length(coiIndices),1); zeros(length(ncoiIndices),1)]);
-            
-            %delete all predeicted surfaces from imaris
-            xPopulationSurface.RemoveAllSurfaces;
-            
-            %run classifier on instances at current TP
-            currentTPMask = xImarisApp.GetVisibleIndexT == featuresAndLabels.timeIndices;
-            currentTPPred = classifyInstances(currentTPMask);
-            
-            %generate mask for predicted cells of interest at current TP
-            currentTPIndices = find(currentTPMask);
-            coiAtCurrentTPIndices = currentTPIndices(currentTPPred);
-            
-            %send to Imaris
-            func_addsurfacestosurpass(xImarisApp,surfaceData,100, xPopulationSurface,imarisIndices(coiAtCurrentTPIndices));
-
-                 
         elseif strcmp(key,'3')
             % 3 - Activate crosshair selection mode to manually select an instance to classify
             
         elseif strcmp(key,'y')
             %Yes the currently presented instance show be laballed as a T cell
-            coiIndices = unique([coiIndices surfaceClassicationIndex_]);
+            coiIndices = unique([coiIndices; surfaceClassicationIndex_]);
+            classifier = retrain();
             presentNextExample();
         elseif strcmp(key,'n')
             %Yes the currently presented instance show be laballed as a T cell
-            ncoiIndices = unique([ncoiIndices surfaceClassicationIndex_]);
+            ncoiIndices = unique([ncoiIndices; surfaceClassicationIndex_]);
+            classifier = retrain();
             presentNextExample();
         end
     end
 
-    function [] = presentNextExample()
-        %find most informative example at this time point
-        timeIndex = xImarisApp.GetVisibleIndexT; %0 based
-        timeIndices = featuresAndLabels.timeIndices; %also 0 based
-        atCurrentTPMask = timeIndex == timeIndices;
+    function [cls] = retrain()
+        %train classifier
+        cls = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],...
+            [ones(length(coiIndices),1); zeros(length(ncoiIndices),1)]);
+    end
+
+    function [] = predictCurrentTP()
+        retrain();
+        %delete all predeicted surfaces from imaris
+        xPopulationSurface.RemoveAllSurfaces;
+        %run classifier on instances at current TP
+        currentTPMask = xImarisApp.GetVisibleIndexT == featuresAndLabels.timeIndices;
+        currentTPPred = classify( classifier, features, currentTPMask, coiIndices, ncoiIndices);
         
-        surfaceClassicationIndex_ = nextSampleToClassify( features, atCurrentTPMask, coiIndices, ncoiIndices );
+        %generate mask for predicted cells of interest at current TP
+        currentTPIndices = find(currentTPMask);
+        coiAtCurrentTPIndices = currentTPIndices(currentTPPred);
+        %send to Imaris
+        func_addsurfacestosurpass(xImarisApp,surfaceData,100, xPopulationSurface,imarisIndices(coiAtCurrentTPIndices));
+    end
+
+    function [] = presentNextExample()
+        %find most informative example at this time point (that arent
+        %already labelled)
+        unlabelledAtCurrentTP = xImarisApp.GetVisibleIndexT == featuresAndLabels.timeIndices;
+        unlabelledAtCurrentTP([coiIndices; ncoiIndices]) = 0;
+        [~, currentTPPredValue] = classify( classifier, features, unlabelledAtCurrentTP, coiIndices, ncoiIndices);
+        
+        surfaceClassicationIndex_ = nextSampleToClassify( currentTPPredValue, unlabelledAtCurrentTP );
+        %remove exisiting surfaces to classify
+        xSurfaceToClassify.RemoveAllSurfaces;
         func_addsurfacestosurpass(xImarisApp,surfaceData,1, xSurfaceToClassify,imarisIndices(surfaceClassicationIndex_));
         centerToSurface(xSurfaceToClassify);
     end
@@ -156,15 +155,14 @@ neuralNet = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],..
                 xSurpass.RemoveChild(xSurpass.GetChild(i));
             end
         end
-        %         xPreviewSurface = xImarisApp.GetFactory.CreateSurfaces;
-        %         xPreviewSurface.SetName(previewName);
-        %         xSurpass.AddChild(xPreviewSurface,-1);
         xPopulationSurface = xImarisApp.GetFactory.CreateSurfaces;
         xPopulationSurface.SetName(populationName);
         xSurpass.AddChild(xPopulationSurface,-1);
         xSurfaceToClassify = xImarisApp.GetFactory.CreateSurfaces;
         xSurfaceToClassify.SetName(surfaceToClassifyName);
         xSurpass.AddChild(xSurfaceToClassify,-1);
+        xSurfaceToClassify.SetColorRGBA(16646399); %teal
+        xPopulationSurface.SetColorRGBA(16711424); %magenta
     end
 
     function [quatMult,quatRot,rotVect2Q] = makeQuaterionFunctions()

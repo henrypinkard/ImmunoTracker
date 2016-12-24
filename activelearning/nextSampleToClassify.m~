@@ -1,0 +1,29 @@
+function [ index ] = nextSampleToClassify( currentTPPredValue, atCurrentTPMask, coiIndices, ncoiIndices )
+%NEXTSAMPLETOCLASSIFY 
+%Use the active learning query strategy to determine which unlabelled
+%instance should be classified next, and return its index within the
+%nxp data matrix. Consider only instances that are at the current time
+%point being dislayed in Imaris
+%currentTPPredValue -- value between 0 and 1 that represents confidence of
+%prediction
+%atCurrentTPMask -- binary mask for which instances are at current Time
+%point
+%coiIndices -- indices of instances that have already been manually
+%labelled as cells of interest
+%ncoiIndices -- indices of instances that have already been manually
+%labelled as cells of interest
+
+
+unlabelledAtCurrentTP = atCurrentTPMask;
+unlabelledAtCurrentTP([coiIndices; ncoiIndices]) = 0;
+unlabelledAtCurrentTPIndices = find(unlabelledAtCurrentTP);
+
+%ecxlude those that have been manually labelled
+currentTPPredValue([coiIndices; ncoiIndices]) = Inf;
+certainty = abs(currentTPPredValue(unlabelledAtCurrentTPIndices) - 0.5);
+[~,sortedIndices] = sort(certainty);
+
+%index should be 1-based
+index = unlabelledAtCurrentTPIndices(sortedIndices(1));
+end
+
