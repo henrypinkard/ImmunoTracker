@@ -6,11 +6,10 @@ saveFilename = 'e670FeaturesAndLabels.mat';
 channelOffsets = [8 12 16 12 10 8];
 %TODO: mechanism for reading magellan summary metadata
 %TODO: add initial or current surface interpolation into metadata
-%TODO: remove features that elastic net says are not useful
 summaryMD = load('summaryMD');
 interpPoints = load('6-6 updated.txt');
 
-ncDataFilename = 'e670MasksAndImageData.mat';
+ncFilename =
 
 
 
@@ -34,20 +33,33 @@ fprintf('Calculating Speactral features...\n');
 featureNames = {featureNames{:}, newFeatureNames{:}}';
 features = [features newFeatures];
 
-%%%%%%%%%%%%%  Normalized cut features %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-fprintf('Calculating Normalized cut features...\n');
-[featuresNC, featureNamesNC]  = readNormCutFeatures(ncDataFilename);
-features = [featuresNC toAppendFeatures];
+
+
+%add Normalized cut features%%%%%%
+fprintf('Calculating Normalized cut features');
+
+%%%%%%%%%TODO change to single file for e670
+ncDataFilename1 = 'e670MasksAndImageData';
+ncDataFilename2 = 'CMTMRUnlablelledMasksAndImageData';
+
+[imarisIndicesNC, featuresNC, featureNamesNC]  = readNormCutFeatures(ncDataFilename1);
+%reshuffle based on imaris indices
+[~, ind] = ismember(imarisIndicesNC, imarisIndices);
+%index into zeros matrix in case of incoplete set
+toAppendFeatures = zeros(size(features,1),length(featureNamesNC));
+toAppendFeatures(ind,:) = featuresNC;
+
+[imarisIndicesNC, featuresNC, featureNamesNC]  = readNormCutFeatures(ncDataFilename2);
+%reshuffle based on imaris indices
+[~, ind] = ismember(imarisIndicesNC, imarisIndices);
+%index into zeros matrix in case of incoplete set
+toAppendFeatures(ind,:) = featuresNC;
+
+features = [features toAppendFeatures];
 featureNames = {featureNames{:}, featureNamesNC{:}}';
-
-
-%TODO: remove features that elasticNet says are not usefule
-
-
-%%%%%%%%%%% Standardize all features %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%store time indices seperately before it is standardized
-fprintf('Standardizing and saving...\n');
 timeIndices = features(:,find(strcmp(featureNames,'Time Index')));
+
+% standardize all features
 avg = mean(features);
 features = features - repmat(avg,size(features,1),1); 
 stddev = std(features);
@@ -55,4 +67,4 @@ stddev(stddev == 0) = 1;
 features = features ./ repmat(stddev, size(features,1),1); 
 
 save(strcat('/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/',saveFilename),...
-    'features','featureNames','imarisIndices','timeIndices');
+    'features','featureNames','imarisIndices','labelledTCell','labelledNotTCell','unlabelled','timeIndices');

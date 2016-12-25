@@ -1,9 +1,7 @@
-function [imarisIndices, features, featureNames  ] = readNormCutFeatures( filename )
-
-%unpack
-load(filename,'imarisIndices', 'normCutFeatures')
-imarisIndices = imarisIndices{1};
-
+function [features, featureNames  ] = readNormCutFeatures( filename )
+%unpack previously calculated normalized cut features and put them into
+%design matrix format
+load(filename, 'normCutFeatures')
 
 totalProjNormedIntesnity = cell2mat(normCutFeatures(:,1));
 totalProjUnnormedIntesnity =  cell2mat(normCutFeatures(:,2));
