@@ -5,55 +5,56 @@ library(ROCR)
 require(ggplot2)
 
 set.seed(100)
-data<-read.csv("~/Dropbox/Berkeley_Projects/ActiveLearning/TCell.csv", sep=",", header=FALSE)
-
+data<-read.csv("~/Dropbox/Berkeley_Projects/ActiveLearning/12-16/data_12_16.csv", sep=",", header=TRUE)
+boot=100
+iter=100
 
 all_predictors<-data.frame(rep(0,ncol(data)))
 names(all_predictors)<-"new"
 
-all_accuracy<- rep(NA, 100)
+all_accuracy<- rep(NA, iter)
 header<-data.frame(names(data))
 names(header)<-"Predictors"
 
-for (j in 1:100)
+for (j in 1:boot)
 {
-  #Shuffle
-  data <- data[sample(nrow(data)),]
-  
   data$Type<-as.factor(data$Type)
   levels(data$Type)<-c('N','Y')
   
   data_N<-data[grep("N", data$Type), ]
   data_Y<-data[grep("Y", data$Type), ]
   
-  data_N<-data_N[1:250,]
+  #Shuffle
+  data_N <- data_N[sample(nrow(data_N)),]
+  data_N<-data_N[1:nrow(data_Y),]
   
-  data<-rbind.data.frame(data_N,data_Y)
+  data_new<-rbind.data.frame(data_N,data_Y)
   
-  condition_dn2_1<-cbind.data.frame(row.names(data),data$Type)
+  condition_dn2_1<-cbind.data.frame(row.names(data_new),data_new$Type)
   names(condition_dn2_1)<-c("Sample","Type")
   
-  x=model.matrix(Type~.,data)[,-1]
-  y=data$Type
+  x=model.matrix(Type~.,data_new)[,-1]
+  y=data_new$Type
   
   #Implement the glmnet() function over a grid of values ranging from 10^10 to 10^-2
   grid=10^seq(10,-2,length=1000)
   
-  all_lambda<- rep(NA, 100)
-  all_cvm<- rep(NA, 100)
-  all_mce<- rep(NA, 100)
-  all_compare<-rep(NA,200)
+  all_lambda<- rep(NA, iter)
+  all_cvm<- rep(NA, iter)
+  all_mce<- rep(NA, iter)
+  all_compare<-rep(NA,2*iter)
   
-  pre<-rep(NA,nrow(data))
-  pred<-matrix(rep(pre,100), ncol = 100)
+  pre<-rep(NA,nrow(data_new))
+  pred<-matrix(rep(pre,iter), ncol = iter)
   
   all_out2<-cbind.data.frame(condition_dn2_1,pred)
   
-  for (i in 1:100)
+  for (i in 1:iter)
   { 
+    m=30
     #Pick random sample from each category
     rows <- 1:length(y)
-    test<-tapply(rows, y, function(x) sample(x, 5)) 
+    test<-tapply(rows, y, function(x) sample(x, m)) 
     train<-(-unlist(test))
     y.test=y[unlist(test)]
     
@@ -95,7 +96,7 @@ for (j in 1:100)
     compare[,2] <- factor(compare[,2], levels=c("Y", "N"))
     compare[,3] <- factor(compare[,3], levels=c("Y", "N"))
     
-    for (p in 1:10)
+    for (p in 1:(m*2))
     {
       if(compare[p,2]==compare[p,3])
       {
@@ -108,7 +109,7 @@ for (j in 1:100)
     
     #Misclassification percent from the test data
     
-    mce<-(1-(sum(compare[,4]))/10)*100
+    mce<-(1-(sum(compare[,4]))/(m*2))*100
     
     all_mce[i]<-mce
     
@@ -117,10 +118,9 @@ for (j in 1:100)
   }
   
   all_compare<-as.data.frame(all_compare[2:nrow(all_compare),])
-  all_compare_add<-rep(NA,nrow(all_compare))
-  all_compare<-as.data.frame(cbind(all_compare,all_compare_add))
+  all_compare<-as.data.frame(cbind(all_compare,rep(NA,nrow(all_compare))))
   
-  #All lambdas from 100 iterations
+  #All lambdas from iter iterations
   all_lambda<-as.data.frame(all_lambda)
   colnames(all_lambda)<-c("Lambda")
   
@@ -170,12 +170,12 @@ for (j in 1:100)
   
   out=glmnet(x,y, alpha=1, lambda=grid, family = "binomial")
   
-  all_lambda2<- rep(NA, 100)
-  all_cvm2<- rep(NA, 100)
+  all_lambda2<- rep(NA, iter)
+  all_cvm2<- rep(NA, iter)
   
   #Get lambda and mean misclassification error for each iteration
   
-  for (i in 1:100)
+  for (i in 1:iter)
   {
     cv.out=cv.glmnet(x,y,alpha=0.5,family = "binomial",type.measure = "class", nfolds=5)
     
@@ -192,7 +192,7 @@ for (j in 1:100)
     all_cvm2[i]<-error
   }
   
-  #All lambdas from 100 iterations
+  #All lambdas from iter iterations
   all_lambda2<-as.data.frame(all_lambda2)
   colnames(all_lambda2)<-c("Lambda")
   
@@ -209,13 +209,12 @@ for (j in 1:100)
   #Lambda value with the smallest mean misclassification error:
   lambda_wmincvm2<-inds_all1[1,1]
   
-  lasso.coef=predict(out,type="coefficients", s=lambda_wmincvm2)
-  lasso.coef2<-as.matrix(lasso.coef)
-  lasso.coef3<-as.data.frame(lasso.coef2[2:nrow(lasso.coef2)])
-  lasso<-as.data.frame(cbind(names(data)[2:138],lasso.coef3))
-  colnames(lasso)<-c("Feature", "Value")
-  InterestingFeatures<-subset(lasso, abs(Value)>0)
-  
+  lasso.coef=data.frame(as.matrix(predict(out,type="coefficients", s=lambda_wmincvm2)))
+  lasso.coef<-cbind.data.frame(row.names(lasso.coef),lasso.coef[,1])
+  lasso.coef<-lasso.coef[-1,]
+  names(lasso.coef)<-c("Feature", "Value")
+  InterestingFeatures<-subset(lasso.coef, abs(Value) > 0)
+
   bind<-cbind.data.frame(header, InterestingFeatures[, "Feature"][match(rownames(header), rownames(InterestingFeatures))])
   bind<-data.frame(bind[,2])
   bind[] <- lapply(bind, as.character)
@@ -230,5 +229,5 @@ for (j in 1:100)
 }
 
 MostImportantFeatures<-cbind.data.frame(header,all_predictors)
-write.table(MostImportantFeatures,"~/Dropbox/Berkeley_Projects/CS289/MostImportantFeatures.txt", quote = FALSE)
+write.table(MostImportantFeatures,"~/Dropbox/Berkeley_Projects/ActiveLearning/12-16/MostImportantFeatures.txt", quote = FALSE)
 
