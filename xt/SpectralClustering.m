@@ -63,7 +63,7 @@ end
 % now use the k-means algorithm to cluster U row-wise
 % C will be a n-by-1 matrix containing the cluster number for
 % each data point
-C = kmeans(U, k, 'start', 'plus', 'EmptyAction', 'singleton');
+C = kmeans(U, k, 'start', 'plus', 'EmptyAction', 'singleton','MaxIter',1000);
              
 % now convert C to a n-by-k matrix containing the k indicator
 % vectors as columns

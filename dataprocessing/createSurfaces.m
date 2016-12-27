@@ -1,14 +1,15 @@
 function [] = createSurfaces(imarisIndex, surfName,...
     channelIndex, smoothFilter, localContrast, backgroundSub, seedDiam, quality, minNumVoxels)
-%CREATE_SAVE_AND_STITCH_SURFACES
+%CREATESURFACES
 % Open a Imaricumpiler "Positions as time" file in Imaris
 % this function will prompt user to open  a Micro-Magellan dataset
-% to read calibrtion and posiotion metadata 
+% to read calibrtion and posiotion metadata
 % channelIndex is 0 based, but shows up in Imaris as 1 based
+%creates and saves surfaces and statistics, reads image data and masks 
 
 
 %GFP DCs on high res Gen3
-%     channelIndex = 2; 
+%     channelIndex = 2;
 %     smoothFilter = 1.5;
 %     localContrast = 25;
 %     backgroundSub = 2.5;
@@ -17,7 +18,7 @@ function [] = createSurfaces(imarisIndex, surfName,...
 %number of voxels = 150
 
 %CMTMR/e670 T cells on high res Gen3
-%     channelIndex = 4/5; 
+%     channelIndex = 4/5;
 %     smoothFilter = 1.5;
 %     localContrast = 20;
 %     backgroundSub = 2;
@@ -27,8 +28,8 @@ function [] = createSurfaces(imarisIndex, surfName,...
 
 backupDirectory = 'D:\Data\Henry\Surface autosave backups\';
 %Parameters that can be tuned to optimize performance
-batchSize = 400;
-framesPerLoop = 20; %number of frames for which surfaces are created with each loop
+batchSize = 200;
+framesPerLoop = 10; %number of frames for which surfaces are created with each loop
 
 
 %connect to imaris
@@ -62,7 +63,7 @@ ds = imaris.GetDataSet;
 imsFileFullPath = strsplit(char(filename),'.');
 imsFilePathAndName = imsFileFullPath{1};
 %save in same directory as data
-saveName = strcat(imsFilePathAndName,'_',char(surfName),' stitched','.mat');
+saveName = strcat(imsFilePathAndName,'_',char(surfName),'.mat');
 %delete exisiting file with same name
 if (exist(saveName,'file') == 2)
     if (strcmp(questdlg('Delete exisiting file'),'Yes'))
@@ -71,34 +72,120 @@ if (exist(saveName,'file') == 2)
         return;
     end
 end
-saveFile = [];
+saveFile = matfile(saveName);
+if ~any(strcmp('vertices',who(saveFile)))
+    %start from beginning
+    saveFile.masks = {};
+    saveFile.imageData = {};
+    saveFile.imarisIndices = {imarisIndices(featureIndices)};
+    startIndex = 0;
+    %initialize fields
+    saveFile.vertices = single([]);
+    saveFile.triangles = int32([]);
+    saveFile.normals = single([]);
+    saveFile.timeIndex = int32([]);
+    saveFile.numTriangles = int32([]);
+    saveFile.numVertices = int32([]);
+    saveFile.name = surfName;
+else
+    startIndex = saveFile.lastWrittenFrameIndex + 1;
+end
+
+
+
 
 %Incrementally segment surfaces, get and save their info, and delete
 maxFrameIndex = numTimePoints*posList.length-1;
-for startFrame = 0:framesPerLoop:maxFrameIndex
+for startFrame = startIndex:framesPerLoop:maxFrameIndex
     tic
     fprintf('Calculating surfaces on frame %i-%i of %i\n',startFrame, startFrame + framesPerLoop, maxFrameIndex);
     % time index is 0 indexed and inclusive, but shows up in imaris as 1
     % indexed
     roi = [0,0,0,startFrame,ds.GetSizeX,ds.GetSizeY,ds.GetSizeZ,min(startFrame + framesPerLoop-1,maxFrameIndex)];
-
+    
     surface = imageProcessing.DetectSurfacesRegionGrowing(ds, roi,channelIndex,smoothFilter,localContrast,false,backgroundSub,...
         seedDiam,true, sprintf('"Quality" above %1.3f',quality),sprintf('"Number of Voxels" above %i',minNumVoxels));
-    %only process if there acre actually surfaces
+    %only process if there are actually surfaces
     if surface.GetNumberOfSurfaces <= 0
         surface.RemoveAllSurfaces;
         continue;
-    end  
+    end
     
-    %get stats and save them
+    %get stats
     stats = xtgetstats(imaris, surface, 'ID', 'ReturnUnits', 1);
     %modify stats to reflect stitching
     stats = modify_stats_for_stitched_view(stats);
-    %add to exisiting statSruct in file
-    if (isempty(saveFile))
-        saveFile = create_surface_save_file(saveName, surfName);
-        saveFile.stats = stats;
-    else
+    
+    % write batches of surfaces at a time so as not to overflow memory
+    for i = 0:ceil((surface.GetNumberOfSurfaces)/batchSize ) - 1
+        startIndex = batchSize*i;
+        endIndex = min(surface.GetNumberOfSurfaces-1, batchSize*(i+1) - 1);
+        fprintf('%d to %d of %d\n',startIndex+1, endIndex +1, surface.GetNumberOfSurfaces)
+        surfList = surface.GetSurfacesList(startIndex:endIndex);
+        %stitch surfaces
+        [vertices, tIndices] = modify_surfaces_for_stitched_view(surfList.mVertices, surfList.mTimeIndexPerSurface, surfList.mNumberOfVerticesPerSurface,...
+            posList, imageWidth, imageHeight, xPixelOverlap, yPixelOverlap, pixelSize, numTimePoints);
+       
+        maskTemp = cell(endIndex-startIndex+1,1);
+        imgTemp = cell(endIndex-startIndex+1,1);
+        %iterate through each surface to get its mask and image data
+        for index = startIndex:endIndex
+            position = surface.GetCenterOfMass(index);
+            %get axis aligned bounding box
+            boundingBoxSize = [stats(find(strcmp({stats.Name},'BoundingBoxAA Length X'))).Values(index + 1),...
+                stats(find(strcmp({stats.Name},'BoundingBoxAA Length Y'))).Values(index + 1),...
+                stats(find(strcmp({stats.Name},'BoundingBoxAA Length Z'))).Values(index + 1)];
+            
+            %get its mask from imaris
+            topLeft = position -  boundingBoxSize / 2;
+            bottomRight = position + boundingBoxSize / 2;
+            topLeftPix = int32(floor([topLeft(1:2) ./ pixelSizeXY topLeft(3) ./ pixelSizeZ]));
+            bottomRightPix = int32(floor([bottomRight(1:2) ./ pixelSizeXY bottomRight(3) ./ pixelSizeZ]));
+            pixelResolution = bottomRightPix - topLeftPix + 1;
+            mask = surface.GetSingleMask(index-1, topLeft(1), topLeft(2), topLeft(3), bottomRight(1), bottomRight(2),...
+                bottomRight(3), pixelResolution(1), pixelResolution(2), pixelResolution(3));
+            byteMask = uint8(squeeze(mask.GetDataBytes));
+            
+            timeIndex = tIndices(index+1);
+            imgData = readRawMagellan( mmData, byteMask, topLeftPix - int32([xPixelOverlap/2, yPixelOverlap/2, 0]), timeIndex );
+            
+            %trim to border of mask, but leave an extra pixel in xy for
+            %filtering
+            maskBorder = false(size(byteMask));
+            zMin = find(squeeze(sum(sum(byteMask,1),2)),1);
+            zMax = find(squeeze(sum(sum(byteMask,1),2)),1,'last');
+            xMin = find(squeeze(sum(sum(byteMask,2),3)),1) ;
+            xMax = find(squeeze(sum(sum(byteMask,2),3)),1,'last') ;
+            yMin = find(squeeze(sum(sum(byteMask,1),3)),1) ;
+            yMax = find(squeeze(sum(sum(byteMask,1),3)),1,'last');
+            maskBorder(xMin:xMax,yMin:yMax,zMin:zMax) = 1;
+            byteMask = reshape(byteMask(maskBorder), xMax-xMin+1, yMax-yMin+1, zMax-zMin+1);
+            imgData = reshape(imgData(repmat(maskBorder,1,1,1,6)), xMax-xMin+1, yMax-yMin+1, zMax-zMin+1,6);
+            
+            %visualize pixels
+            %         xtTransferImageData(imgData);
+            
+            maskTemp{surfaceIndex} = byteMask;
+            imgTemp{surfaceIndex} = imgData; 
+        end
+        
+    %store masks and pixel data in file
+    saveFile.masks(startIndex:endIndex,1) = maskTemp;
+    saveFile.imageData(startIndex:endIndex,1) = imgTemp;
+    
+    %store surface data in file
+    saveFile.vertices(size(saveFile, 'vertices', 1)+1:size(saveFile, 'vertices', 1)+size(surfList.mVertices,1),1:3) = single(vertices);
+    saveFile.triangles(size(saveFile, 'triangles', 1)+1:size(saveFile, 'triangles', 1)+size(surfList.mTriangles,1),1:3) = surfList.mTriangles;
+    saveFile.normals(size(saveFile, 'normals', 1)+1:size(saveFile, 'normals', 1)+size(surfList.mNormals,1),1:3) =  surfList.mNormals;
+    saveFile.timeIndex(size(saveFile, 'timeIndex',1)+1 : size(saveFile, 'timeIndex',1)+length(surfList.mTimeIndexPerSurface),1) = int32(tIndices);
+    saveFile.numTriangles(size(saveFile, 'numTriangles',1)+1 : size(saveFile, 'numTriangles',1)+length(surfList.mNumberOfTrianglesPerSurface),1) = surfList.mNumberOfTrianglesPerSurface;
+    saveFile.numVertices(size(saveFile, 'numVertices',1)+1 : size(saveFile, 'numVertices',1)+length(surfList.mNumberOfVerticesPerSurface),1) =  surfList.mNumberOfVerticesPerSurface;
+        
+    end
+    %write statistics for all surfaces in batch of time points
+    if ~any(strcmp('stats',who(saveFile))) %store first set
+        saveFile.stats = stats; 
+    else %append to existing
         oldStats = saveFile.stats;
         newIds = (0:(length(oldStats(1).Ids) + surface.GetNumberOfSurfaces - 1) )';
         for j = 1:length(stats)
@@ -110,38 +197,43 @@ for startFrame = 0:framesPerLoop:maxFrameIndex
         saveFile.stats = oldStats;
     end
     
+    saveFile.lastWrittenFrameIndex = startFrame + framesPerLoop - 1;
     
-    % write batches of surfaces at a time so as not to overflow memory
-    for i = 0:ceil((surface.GetNumberOfSurfaces)/batchSize ) - 1
-        startIndex = batchSize*i;
-        endIndex = min(surface.GetNumberOfSurfaces-1, batchSize*(i+1) - 1);
-        fprintf('%d to %d of %d\n',startIndex+1, endIndex +1, surface.GetNumberOfSurfaces)
-        surfList = surface.GetSurfacesList(startIndex:endIndex);
-        
-        %stitch surfaces
-        [vertices, tIndex] = modify_surfaces_for_stitched_view(surfList.mVertices, surfList.mTimeIndexPerSurface, surfList.mNumberOfVerticesPerSurface,...
-            posList, imageWidth, imageHeight, xPixelOverlap, yPixelOverlap, pixelSize, numTimePoints);
-        
-        saveFile.vertices(size(saveFile, 'vertices', 1)+1:size(saveFile, 'vertices', 1)+size(surfList.mVertices,1),1:3) = single(vertices);
-        saveFile.triangles(size(saveFile, 'triangles', 1)+1:size(saveFile, 'triangles', 1)+size(surfList.mTriangles,1),1:3) = surfList.mTriangles;
-        saveFile.normals(size(saveFile, 'normals', 1)+1:size(saveFile, 'normals', 1)+size(surfList.mNormals,1),1:3) =  surfList.mNormals;
-        saveFile.timeIndex(size(saveFile, 'timeIndex',1)+1 : size(saveFile, 'timeIndex',1)+length(surfList.mTimeIndexPerSurface),1) = int32(tIndex);
-        saveFile.numTriangles(size(saveFile, 'numTriangles',1)+1 : size(saveFile, 'numTriangles',1)+length(surfList.mNumberOfTrianglesPerSurface),1) = surfList.mNumberOfTrianglesPerSurface;
-        saveFile.numVertices(size(saveFile, 'numVertices',1)+1 : size(saveFile, 'numVertices',1)+length(surfList.mNumberOfVerticesPerSurface),1) =  surfList.mNumberOfVerticesPerSurface;
-    end
     %delete surfaces now that they're saved
     surface.RemoveAllSurfaces;
     toc
 end
 
+%Preprocess statistics for creation of design matrix
+statistics = saveFile.stats;
+featureNames = {statistics.Name}';
+% read Imaris indices
+imarisIndices = statistics(1).Ids;
+%make design matrix
+rawFeatures = cell2mat({statistics.Values});
+%remove data points within _ um of edges of tiles
+distanceFromEdge = 3;
+xPosIdx = find(strcmp(featureNames,'Position X'));
+xPosIdy = find(strcmp(featureNames,'Position Y'));
+distanceToBorder = min([rawFeatures(:,xPosIdx), rawFeatures(:,xPosIdy),...
+    max(rawFeatures(:,xPosIdx)) - rawFeatures(:,xPosIdx),  max(rawFeatures(:,xPosIdy)) - rawFeatures(:,xPosIdy) ],[],2);
+inCenter = rawFeatures(:,xPosIdx) > distanceFromEdge & rawFeatures(:,xPosIdx) < (max(rawFeatures(:,xPosIdx)) - distanceFromEdge) &...
+    rawFeatures(:,xPosIdy) > distanceFromEdge & rawFeatures(:,xPosIdy) < (max(rawFeatures(:,xPosIdy)) - distanceFromEdge);
+%use only central surfaces
+imarisIndices = imarisIndices(inCenter,:);
+features = rawFeatures(inCenter,:);
+
+saveFile.imarisIndices = imarisIndices;
+saveFile.features = features;
+saveFile.featureNames = featureNames;
 
 % Copy to backup directory on different drive
-if (any(imsFilePathAndName == '\'))
-    dirs = strsplit(imsFilePathAndName,'\');
-else
-    dirs = strsplit(imsFilePathAndName,'/');
-end
-copyfile(saveName, strcat(backupDirectory,dirs{end-1},'_',dirs{end},'_',char(surfName),'.mat') );
+% if (any(imsFilePathAndName == '\'))
+%     dirs = strsplit(imsFilePathAndName,'\');
+% else
+%     dirs = strsplit(imsFilePathAndName,'/');
+% end
+% copyfile(saveName, strcat(backupDirectory,dirs{end-1},'_',dirs{end},'_',char(surfName),'.mat') );
 
 
     function [newStats] = modify_stats_for_stitched_view(stats)
@@ -182,6 +274,29 @@ copyfile(saveName, strcat(backupDirectory,dirs{end-1},'_',dirs{end},'_',char(sur
         newStats = newStats(statOrder);
     end
 end
+
+function [ pixelData ] = readRawMagellan( magellanDataset, surfaceMask, offset, timeIndex )
+%offset is in in 0 indexed pixels
+%timeIndexStarts with 0
+unsign = @(arr) uint8(bitset(arr,8,0)) + uint8(128*(arr < 0));
+
+%Read raw pixels from magellan
+%TODO: change this to read from raw tiles
+%take stiched pixels instead of decoding position indices
+pixelData = zeros(size(surfaceMask,1),size(surfaceMask,2),size(surfaceMask,3),6, 'uint8'); 
+for channel = 0:5
+    for relativeSlice = 0:size(surfaceMask,3)-1
+        slice = offset(3) + relativeSlice;
+        ti = magellanDataset.getImageForDisplay(channel, slice, timeIndex, 0, offset(1), offset(2),...
+            size(pixelData,1), size(pixelData,2));
+        pixels = reshape(unsign(ti.pix),size(pixelData,1),size(pixelData,2));  
+       
+        pixelData(:,:,relativeSlice+1,channel+1) = pixels;
+    end
+end
+
+end
+
 
 function [newVertices, newTimeIndex] = modify_surfaces_for_stitched_view(vertices, timeIndex, numVertices, posList, imageWidth, imageHeight,...
     xPixelOverlap, yPixelOverlap, pixelSize, numTimePoints)

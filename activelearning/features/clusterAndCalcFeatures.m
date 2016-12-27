@@ -70,7 +70,6 @@ for sliceIndex = 1:numSlices
     nPixels = sum(sliceMask(:));
     %compute number of clusters based on number of pixels
     numClusters = max(1,ceil(nPixels ./ pixelsPerCluster));
-    
     [pixelCoordsX, pixelCoordsY, pixelCoordsZ] = arrayfun(@(index) ind2sub(maskSize,maskIndices(index)), 1:nPixels );
     pixelCoordsMicron = [pixelSizeXY*pixelCoordsX' pixelSizeXY*pixelCoordsY' pixelSizeZ*pixelCoordsZ'];
     %compute distance matrices
@@ -84,7 +83,7 @@ for sliceIndex = 1:numSlices
     ij = ij(i > j,:);
     rawSpecDist = zeros(nPixels);
     rawIntensityDist = zeros(nPixels);
-    if ~isempty(ij) %prevetns error when theres only one pixel
+    if ~isempty(ij) %prevents error when theres only one pixel
         specDistVec = 1 - dot(normalizedMaksedPixVec(ij(:,1),:),normalizedMaksedPixVec(ij(:,2),:),2);
         rawSpecDist( sub2ind(size(rawSpecDist),ij(:,1), ij(:,2)) ) = specDistVec;      
         sliceSpectralMag = spectralMag(:,:,sliceIndex);
@@ -175,7 +174,7 @@ for sliceIndex = 1:numSlices
     % Visualize
 %     figure(1)
 %     subplot(3,1,1)
-%     imshow(imfuse(pixels(:,:,sliceIndex,5),pixels(:,:,sliceIndex,6)),[])
+%     imshow(imfuse(pixels(:,:,sliceIndex,3),pixels(:,:,sliceIndex,5)),[])
 %     %show segmented regions
 %     subplot(3,1,2)
 %     imshow(clusterImg,[])

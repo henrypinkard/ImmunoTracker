@@ -6,17 +6,19 @@
 % %Imaris index 169026 -- green red overlap
 % %Imaris index 168870 -- T cell overlap with green-red DC
 % 
+% referenceVector = [0.1024    0.0700    0.0953    0.0691    0.9660    0.1939]; %CMTMR
+% channelOffsets = [8 12 16 12 10 8];
 % file = matfile('CMTMRTCellAndNonTCellMasksAndImageData.mat');
 % imarisIndices = file.imarisIndices;
-% ii = 35908;
+% ii = 168870;
 % i = find(imarisIndices{1} == ii);
 % img = file.imageData(i,1);
 % mask = file.masks(i,1);
 % % xtTransferImageData(img);
-% clusterAndCalcFeatures(img{1},mask{1});
+% clusterAndCalcFeatures(img{1},mask{1},channelOffsets,referenceVector);
 %% 
 clear
-maxImagesToCache = 150;
+maxImagesToCache = 100;
 
 saveFile = matfile('e670MasksAndImageData.mat','Writable',true);
 
@@ -53,8 +55,7 @@ while ~isempty(remainingCalcIndices)
     masks = saveFile.masks(calcIndices,:);
     cellSize = 10;
     normCutFeatures = cell(length(calcIndices),cellSize);
-    
-    parfor i = 1:length(calcIndices)
+    parfor i = 1:length(calcIndices)      
         [ totalProjNormedIntesnity, totalProjUnnormedIntesnity, avgProjNormedIntensity,...
             avgProjUnnormedIntensity, roiMeanIntensitySpectrum, roiMeanIntensityMagnitude,...
             corrMatROI, corrMatGlob, roiTotalPixels, roiCentroidOffset ] =...
