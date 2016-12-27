@@ -1,23 +1,44 @@
-function [vertDistBelowSurface, normalAngleWithVertical, normalProjection] = interpolationFeatures(...
-    cellSurfaceXYPixelIndices, cellSurfaceZCoords, cellSurfaceXYTilePixelIndices)
+function [vertDistBelowSurface, normalAngleWithVertical, normalProjection] = calcInterpFeatures(...
+    features, featureNames,summaryMD, interpPoints)
+
+pixelSize = summaryMD.PixelSize_um;
+
+stitchedPosX = features(:,strcmp(featureNames,'Stitched Position X'));
+stitchedPosY = features(:,strcmp(featureNames,'Stitched Position Y'));
+stitchedPosZ = features(:,strcmp(featureNames,'Stitched Position Z'));
+
+indexX = floor(stitchedPosX ./ pixelSize) + 1;
+indexY = floor(stitchedPosY ./ pixelSize) + 1;
+tilePosX = features(:,strcmp(featureNames,'Position X'));
+tilePosY = features(:,strcmp(featureNames,'Position Y'));
+tileIndexX = floor(tilePosX ./ pixelSize) + 1;
+tileIndexY = floor(tilePosY ./ pixelSize) + 1;
+
+cellSurfaceXYPixelIndices = [indexX indexY];
+cellSurfaceXYTilePixelIndices = [tileIndexX tileIndexY];
+
+
 %use stage position data to align pixel coordiantes of image and
 %interpolation coordinates of stage
-%read stage coordinates
-load('summaryMD');
-posList = data.InitialPositionList;
+
+posList = summaryMD.InitialPositionList;
 stagePositions = cell2mat(cellfun(@(entry) cell2mat(entry.DeviceCoordinatesUm.XYStage)',...
     posList,'UniformOutput', false))';
-%image is 3884 x 4270 pixels
-linearTransform = [-0.01646 -0.3626; 0.3626 -0.01647];
+
+%figure out pixel size of stitched image
+rowColIndices = cell2mat(cellfun(@(entry) [entry.GridColumnIndex entry.GridRowIndex],...
+    posList,'UniformOutput',false)');
+gridDims = range(rowColIndices) + 1;
+tileDim = [summaryMD.Width - summaryMD.GridPixelOverlapX summaryMD.Height - summaryMD.GridPixelOverlapY];
+stitchedImageSize = [tileDim .* gridDims] + [summaryMD.GridPixelOverlapX summaryMD.GridPixelOverlapY];
+
+%convert interpolation points to pixel coordinates
+linearTransform = reshape(str2double(strsplit(summaryMD.AffineTransform,'_')),2,2)';
 stagePixelPositions = (stagePositions / linearTransform );
 centerPixel = min(stagePixelPositions) + 0.5*range(stagePixelPositions);
-pixelOrigin = centerPixel - 0.5*[3884 4270];
-
-interpPoints = load('6-6 updated.txt');
+pixelOrigin = centerPixel - 0.5*stitchedImageSize;
 interpPointsPixelCoords = interpPoints(:,1:2) / linearTransform - repmat(pixelOrigin,size(interpPoints,1),1);
-
 stagePositionPixelCoordinates = stagePixelPositions- repmat(pixelOrigin,size(stagePixelPositions,1),1);
-
 [zVals, ~] = calcInterpedValues(interpPointsPixelCoords, interpPoints(:,3), cellSurfaceXYPixelIndices);
 
 %replace all undefined values outside convex hull with the closest value
@@ -53,7 +74,7 @@ for i = 1:size(cellSurfaceXYPixelIndices,1)
     normals(i,:) = normals(i,:) ./ norm( normals(i,:) );
 end
 
-vertDistBelowSurface =  cellSurfaceZCoords - zVals;
+vertDistBelowSurface =  stitchedPosZ - zVals;
 normalAngleWithVertical = acos(normals(:,3));
 
 % take xy component of normal
@@ -70,6 +91,7 @@ cellCoords(doubleNegMask,:) =  cellCoords(doubleNegMask,:) - 410;
 cellCoords(xNegMask,:) = [(cellCoords(xNegMask,1)- 410), cellCoords(xNegMask,2)];
 cellCoords(yNegMask,:) = [cellCoords(yNegMask,1), (cellCoords(yNegMask,2) - 410)];
 normalProjection = dot(cellCoords',normalXYProj')' ./ sqrt(sum(normalXYProj.^2,2));
+
 end
 
 

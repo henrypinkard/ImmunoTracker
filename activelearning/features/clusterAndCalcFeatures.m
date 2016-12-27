@@ -1,6 +1,7 @@
 function [ totalProjNormedIntesnity, totalProjUnnormedIntesnity, avgProjNormedIntensity,...
     avgProjUnnormedIntensity, roiMeanIntensitySpectrum, roiMeanIntensityMagnitude,...
-    corrMatROI, corrMatGlob, roiTotalPixels, roiCentroidOffset ] = clusterAndCalcFeatures( pixels, mask )
+    corrMatROI, corrMatGlob, roiTotalPixels, roiCentroidOffset ] = clusterAndCalcFeatures( pixels, mask,...
+    channelOffsets, referenceVector)
 % totalProjNormedIntesnity -- sum of all projected normalized pixels in ROI
 % totalProjUnnormedIntesnity -- sum of all projected unnormalized pixels in ROI
 % avgProjNormedIntensity -- average projected normalized intenisty in ROI
@@ -13,25 +14,26 @@ function [ totalProjNormedIntesnity, totalProjUnnormedIntesnity, avgProjNormedIn
 
 %pixels are x,y,z,c
 
-referenceVector = [0.1024    0.0700    0.0953    0.0691    0.9660    0.1939]; %CMTMR
-% referenceVector = [0.0877    0.0642    0.0684    0.0049    0.1772    0.9757]; %e670
-% referenceVector =   [0.0701    0.0660    0.9262    0.3365    0.1170    0.0777]; %green DC
-% referenceVector =   [  0.0506    0.0347    0.8640    0.3520    0.1245    0.3322]; %green pink DC
-% referenceVector =   [ 0.0844    0.1937    0.7024    0.5647    0.3643 0.1018];   %autofluor DC
-% referenceVector = [0.0426    0.0297    0.6433    0.3601    0.6675 0.0909]; %green red DC
-
+%TODO: which of these need to be changed with new data with new piel sizes
+%etc
 maxEclideanDistance = 10;
 numSlices2Use = 6; %window size of slices used for ROI calculation
 pixelsPerCluster = 250; %approximate size of T cell
 
-channelOffsets = uint8([8 12 16 12 10 8]);
+alpha = 0.7; %spatial distance weight
+beta = 1; %spectral distance weight
+gamma = 0; %intenisty distance weight
+
+
+channelOffsets = uint8(channelOffsets);
 channelOffsets = reshape(channelOffsets,1,1,1,6);
 %background subtract pixels
 pixels = pixels - repmat(channelOffsets,size(pixels,1),size(pixels,2),size(pixels,3),1);
 
-
+%TODO: remove this for use with new data
 %reverse rank filter
 pixels = reverseRankFilter(pixels);
+
 %remove border to limit filtering artifacts
 pixels = pixels(2:end-1,2:end-1,:,:);
 mask = mask(2:end-1,2:end-1,:);
@@ -111,9 +113,6 @@ for sliceIndex = 1:numSlices
     % figure(3)
     % hist((specDist( ~isinf(spaceDist) & spaceDist ~=0)),100)
     
-    alpha = 0.7;
-    beta = 1;
-    gamma = 0;
     
     distMat = spaceDist*alpha + specDist*beta + intensityDist*gamma;
     % distMat =  (specDist*beta + intensityDist*gamma);
