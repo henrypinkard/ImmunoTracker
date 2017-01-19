@@ -37,7 +37,7 @@ features = [features newFeatures];
 %%%%%%%%%%%%%  Normalized cut features %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fprintf('Calculating Normalized cut features...\n');
 [featuresNC, featureNamesNC]  = readNormCutFeatures(ncDataFilename);
-features = [featuresNC toAppendFeatures];
+features = [features featuresNC];
 featureNames = {featureNames{:}, featureNamesNC{:}}';
 
 

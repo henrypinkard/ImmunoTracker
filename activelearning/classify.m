@@ -11,8 +11,8 @@ function [ predLabel, predValue ] = classify( classifier, features, mask, coiInd
 predValue = classifier( features(mask,:)' )';
 %override any classifications with manual labels if available
 maskIndices = find(mask);
-predValue(intersect(maskIndices,coiIndices)) = 1;
-predValue(intersect(maskIndices,ncoiIndices)) = 0;
+predValue(ismember(maskIndices,intersect(maskIndices,coiIndices))) = 1;
+predValue(ismember(maskIndices,intersect(maskIndices,ncoiIndices))) = 0;
 % predValue(
 predLabel = predValue > 0.5;
 

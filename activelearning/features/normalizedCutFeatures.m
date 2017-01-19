@@ -18,7 +18,7 @@
 % clusterAndCalcFeatures(img{1},mask{1},channelOffsets,referenceVector);
 %% 
 clear
-maxImagesToCache = 100;
+maxImagesToCache = 50;
 
 saveFile = matfile('e670MasksAndImageData.mat','Writable',true);
 
@@ -43,10 +43,9 @@ end
 
 %figure out which ones are empty
 
-tic
 while ~isempty(remainingCalcIndices)
+    tic
     fprintf('remaining calculations: %i\n',length(remainingCalcIndices));
-    toc
     fprintf('\n\n');
     calcIndices = remainingCalcIndices(1:min(end,maxImagesToCache));
     %cache pixels and masks for batches at a tiem so as to not overload
@@ -68,4 +67,5 @@ while ~isempty(remainingCalcIndices)
     
     %remove indices that were just calculated
     remainingCalcIndices(ismember(remainingCalcIndices,calcIndices)) = [];
+    toc
 end

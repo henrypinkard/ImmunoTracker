@@ -19,17 +19,27 @@ function [  ] = cellPopulationLearner(  )
 % parpool;
 
 dataFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/e670FeaturesAndLabels.mat';
-surfaceFile = '/Users/henrypinkard/Desktop/LNData/e670Candidates.mat';
+surfaceFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/e670Candidates.mat';
 %load features and known labels
-featuresAndLabels = matfile(dataFile,'Writable',false);
+featuresAndLabels = matfile(dataFile,'Writable',true);
 %Load surface data into virtual memory
 surfaceData = matfile(surfaceFile,'Writable',false);
+%cache stats
+stats = surfaceData.stats;
+%TODO: save this in the file when extraneous stats are deleted
+%TODO: delete when new data
+preprocessedIndices = find(ismember(stats(1).Ids,featuresAndLabels.imarisIndices));
+xPositions = stats(find(strcmp({stats.Name},'Stitched Position X'))).Values(preprocessedIndices);
+yPositions = stats(find(strcmp({stats.Name},'Stitched Position Y'))).Values(preprocessedIndices);
+zPositions = stats(find(strcmp({stats.Name},'Stitched Position Z'))).Values(preprocessedIndices);
+xyzPositions = [xPositions yPositions zPositions];
+
 
 %createLabels for cells of interest
-
-%TODO: create this from scratch or pull from a small labelled subset
-coiIndices = featuresAndLabels.labelledTCell + 1;
-ncoiIndices = featuresAndLabels.labelledNotTCell + 1;
+if (~any(strcmp('coiIndices',who(featuresAndLabels))))
+    featuresAndLabels.coiIndices = [];
+    featuresAndLabels.ncoiIndices = [];
+end
 %pull nxp feature matrix and imaris indices in memory
 features = featuresAndLabels.features;
 imarisIndices = featuresAndLabels.imarisIndices;
@@ -37,9 +47,30 @@ imarisIndices = featuresAndLabels.imarisIndices;
 %Connect to Imaris
 [ xImarisApp, xPopulationSurface, xSurfaceToClassify ] = xtSetupSurfaceTransfer(  );
 xSurpassCam = xImarisApp.GetSurpassCamera;
-
+%make stuff for manual selection
+%delete old  clipping planes
+for k = xSurpass.GetNumberOfChildren - 1 :-1: 0
+   if  strcmp(char(xSurpass.GetChild(k).GetName),'Clip 1') || strcmp(char(xSurpass.GetChild(k).GetName),'Clip 2') 
+      xSurpass.RemoveChild(xSurpass.GetChild(k)); 
+   end
+end
+xClip1 = xImarisApp.GetFactory.CreateClippingPlane;
+xClip2 = xImarisApp.GetFactory.CreateClippingPlane;
+xClip1.SetName('Clip 1');
+xClip2.SetName('Clip 2');
+xClip1.SetVisible(false);
+xClip2.SetVisible(false);
+xSurpass.AddChild(xClip1,-1);
+xSurpass.AddChild(xClip2,-1);
+closestSurfaceIndices = [];
+manualPreviewIndex = 1; 
+%create holder for first two planes from crosshairs
+planeMatrix = zeros(3,3);
+planeConstants = zeros(3,1);
 %make functions for manipulating view
 [quatMult,quatRot,rotVect2Q] = makeQuaterionFunctions();
+
+
 
 %create figure for key listening
 figure(1);
@@ -51,28 +82,142 @@ surfaceClassicationIndex_ = -1;
 classifier = retrain();
 
 
+
+    %Get indices of surfaces sorted by distance to point specified
+    function [indices] = getsurfacesnearpoint(point)       
+        %Get indices of surfaces in current TP 
+        currentTPIndices = find(xImarisApp.GetVisibleIndexT == featuresAndLabels.timeIndices); 
+        surfaceCentersCell = mat2cell(xyzPositions(currentTPIndices,:),ones(length(currentTPIndices),1),3);
+        distances = cellfun(@(surfCenter) sum((surfCenter - point).^2) ,surfaceCentersCell);
+        [~, closestIndices] = sort(distances,1,'ascend');
+        %get indices corresponding to set of all surfaces, sorted by
+        %distance to axis
+        indices = currentTPIndices(closestIndices);        
+    end
+
+    function [intersectionPoint] = getcrosshairintersectionpoint() 
+        q1 = xClip1.GetOrientationQuaternion;
+        %get normals to clipping planes
+        normal = rotVect2Q([0;0;1],q1);
+        normal = normal(1:3);
+        %get center positions of clipping planes
+        pos = xClip1.GetPosition;
+        %find point at intersection of previous line
+        planeMatrix(3,:) = normal';
+        planeConstants(3) = dot(normal,pos);
+        intersectionPoint = (planeMatrix \ planeConstants)';
+    end
+
+    %Store parameters from two croshair planes
+    function  storecrosshairplanes()
+        q1 = xClip1.GetOrientationQuaternion;
+        q2 = xClip2.GetOrientationQuaternion;
+        %get normals to clipping planes
+        norm1 = rotVect2Q([0;0;1],q1);
+        norm1 = norm1(1:3);
+        norm2 = rotVect2Q([0;0;1],q2);
+        norm2 = norm2(1:3);
+        %get center positions of clipping planes
+        pos1 = xClip1.GetPosition;
+        pos2 = xClip2.GetPosition;
+        %store these two planes 
+        planeMatrix(1,:) = norm1';
+        planeMatrix(2,:) = norm2';
+        planeConstants(1:2) = [dot(norm1,pos1); dot(norm2,pos2)];
+            
+    end
+
+    %set clipping planes perpendicular to view and eachother so they
+    %finction as crosshairs
+    function [] = positioncrosshairs()
+       %get camera orientation axis, and set clipping planes mutually
+       %perpendicular to it and perpendicular to each other
+       
+       %Quaternions for image (surpass camera) are based on coordinates of
+       %the screen, with z axis coming out of the plane of the screen
+       %Quaternions for clipping planes are based on the axis of the image
+       
+       %first three entries of quaternion are vector of axis of rotation,
+       %final one is amount of rotation
+
+       %get camera quaternion
+       xSurpassCam.SetOrthographic(true);
+       camQ = xSurpassCam.GetOrientationQuaternion;
+       xClip1.SetOrientationQuaternion(quatMult(camQ,quatRot(pi/2,[1;0;0])));
+       xClip2.SetOrientationQuaternion(quatMult(camQ,quatRot(pi/2,[0;1;0])));
+    end
+
+    function [] = updatepreviewsurface()
+        %instance into deisgn matrix
+        index = closestSurfaceIndices(manualPreviewIndex);
+        xSurfaceToClassify.RemoveAllSurfaces; %clear old ones
+        func_addsurfacestosurpass(xImarisApp,surfaceData,1,xSurfaceToClassify,...
+            find(featuresAndLabels.imarisIndices(index,1) == stats(1).Ids));
+    end
+
 %Controls
     function [] = keyinput(~,~)
         key = get(gcf,'CurrentCharacter');
-        if strcmp(key,'1')
-            % Enter active learning mode: begin presenting unlabelled examples at current time point
-            presentNextExample();
+        
+                    
+        if strcmp(key,'1') %position crosshairs orthagonal to view
+            xClip1.SetVisible(true);
+            xClip2.SetVisible(true);
+            positioncrosshairs();
         elseif strcmp(key,'2')
+            %store planes from positioning of first two crosshiars
+            storecrosshairplanes();
+            %show 1 set of crosshairs to get another position
+            xClip1.SetVisible(true);
+            xClip2.SetVisible(false);
+            %reposition crosshairs
+            positioncrosshairs();
+        elseif strcmp(key,'3')  
+             %find point at intersection of three positioned planes
+             point = getcrosshairintersectionpoint();
+             closestSurfaceIndices = getsurfacesnearpoint(point);
+             manualPreviewIndex = 1; %start with closest
+             updatepreviewsurface( );
+             %hide crosshairs
+             xClip1.SetVisible(false);
+             xClip2.SetVisible(false);
+             %show preview
+             xSurfaceToClassify.SetVisible(true);
+        elseif strcmp(key,'4') %add previewed surface to persistent set
+            %Select in file (so saves as you go)
+            indices = unique([featuresAndLabels.coiIndices; closestSurfaceIndices(manualPreviewIndex)]);
+            featuresAndLabels.coiIndices = indices;
+            fprintf('total selected cells of interest: %i\n',length(indices));            
+        elseif strcmp(key,'5') %previewd is not a cell of interest
+            indices = unique([featuresAndLabels.ncoiIndices; closestSurfaceIndices(manualPreviewIndex)]);
+            featuresAndLabels.ncoiIndices = indices;
+            fprintf('total selected not cells of interest: %i\n',length(indices));    
+        elseif strcmp(key,'6') %preview previous surface
+            manualPreviewIndex = max(1,manualPreviewIndex - 1);
+            updatepreviewsurface();
+        elseif strcmp(key,'7') %preview next surface
+            manualPreviewIndex = min(length(closestSurfaceIndices),manualPreviewIndex+1);
+            updatepreviewsurface();   
+        %%%%%%%%% Active Learning %%%%%%%%%
+        elseif strcmp(key,'q')
+            if (isempty(featuresAndLabels.coiIndices) || isempty(featuresAndLabels.ncoiIndices))
+               error('Must manually select 2 small populations of cells to train classifier'); 
+            end
+            % Enter active learning mode: begin presenting unlabelled examples at current time point            
+            classifier = retrain();
+            presentNextExample();
+        elseif strcmp(key,'w')
             % 2 - Classify and visualize all instances at current time point
             fprintf('Classifying all surfaces at current time point...\n');
-            predictCurrentTP();
-            
-        elseif strcmp(key,'3')
-            % 3 - Activate crosshair selection mode to manually select an instance to classify
-            
+            predictCurrentTP();           
         elseif strcmp(key,'y')
             %Yes the currently presented instance show be laballed as a T cell
-            coiIndices = unique([coiIndices; surfaceClassicationIndex_]);
+            featuresAndLabels.coiIndices = unique([featuresAndLabels.coiIndices; surfaceClassicationIndex_]);
             classifier = retrain();
             presentNextExample();
         elseif strcmp(key,'n')
             %Yes the currently presented instance show be laballed as a T cell
-            ncoiIndices = unique([ncoiIndices; surfaceClassicationIndex_]);
+            featuresAndLabels.ncoiIndices = unique([featuresAndLabels.ncoiIndices; surfaceClassicationIndex_]);
             classifier = retrain();
             presentNextExample();
         end
@@ -80,17 +225,17 @@ classifier = retrain();
 
     function [cls] = retrain()
         %train classifier
-        cls = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],...
-            [ones(length(coiIndices),1); zeros(length(ncoiIndices),1)]);
+        cls = trainClassifier([features(featuresAndLabels.coiIndices,:); features(featuresAndLabels.ncoiIndices,:)],...
+            [ones(length(featuresAndLabels.coiIndices),1); zeros(length(featuresAndLabels.ncoiIndices),1)]);
     end
 
     function [] = predictCurrentTP()
-        retrain();
+        classifier = retrain();
         %delete all predeicted surfaces from imaris
         xPopulationSurface.RemoveAllSurfaces;
         %run classifier on instances at current TP
         currentTPMask = xImarisApp.GetVisibleIndexT == featuresAndLabels.timeIndices;
-        currentTPPred = classify( classifier, features, currentTPMask, coiIndices, ncoiIndices);
+        currentTPPred = classify( classifier, features, currentTPMask, featuresAndLabels.coiIndices, featuresAndLabels.ncoiIndices);
         
         %generate mask for predicted cells of interest at current TP
         currentTPIndices = find(currentTPMask);
@@ -103,8 +248,8 @@ classifier = retrain();
         %find most informative example at this time point (that arent
         %already labelled)
         unlabelledAtCurrentTP = xImarisApp.GetVisibleIndexT == featuresAndLabels.timeIndices;
-        unlabelledAtCurrentTP([coiIndices; ncoiIndices]) = 0;
-        [~, currentTPPredValue] = classify( classifier, features, unlabelledAtCurrentTP, coiIndices, ncoiIndices);
+        unlabelledAtCurrentTP([featuresAndLabels.coiIndices; featuresAndLabels.ncoiIndices]) = 0;
+        [~, currentTPPredValue] = classify( classifier, features, unlabelledAtCurrentTP, featuresAndLabels.coiIndices, featuresAndLabels.ncoiIndices);
         
         surfaceClassicationIndex_ = nextSampleToClassify( currentTPPredValue, unlabelledAtCurrentTP );
         %remove exisiting surfaces to classify
@@ -140,7 +285,7 @@ classifier = retrain();
         surfaceToClassifyName ='SurfaceToClassify';
         
         xtIndex = 0;
-        javaaddpath('../xt/ImarisLib.jar')
+        javaaddpath('./ImarisLib.jar')
         vImarisLib = ImarisLib;
         xImarisApp = vImarisLib.GetApplication(xtIndex);
         if (isempty(xImarisApp))

@@ -31,28 +31,30 @@ backupDirectory = 'D:\Data\Henry\Surface autosave backups\';
 batchSize = 200;
 framesPerLoop = 10; %number of frames for which surfaces are created with each loop
 
-
 %connect to imaris
-vImarisLib = ImarisLib;
-imaris = vImarisLib.GetApplication(imarisIndex);
-if (isempty(imaris))
-    msgbox('Wrong imaris index');
-    return;
-end
+% vImarisLib = ImarisLib;
+% imaris = vImarisLib.GetApplication(imarisIndex);
+% if (isempty(imaris))
+%     msgbox('Wrong imaris index');
+%     return;
+% end
 
 %select magellan dataset for reading of metadata, etc
 magellanDir = uigetdir('','select Magellan dataset');
 if (magellanDir == 0)
     return; %canceled
 end
-%Get metadata an position info from Magellan dataset
-%do this twice because it always fails the first time due to problems with
-%javaaddpath inthis function
-try
-    [posList, imageWidth, imageHeight, xPixelOverlap, yPixelOverlap, pixelSize, numTimePoints] = read_magellan_metadata(magellanDir);
-catch
-    [posList, imageWidth, imageHeight, xPixelOverlap, yPixelOverlap, pixelSize, numTimePoints] = read_magellan_metadata(magellanDir);
-end
+javaaddpath('./dataprocessing/xt/Magellan.jar');
+% Open magellan data
+mmData = org.micromanager.plugins.magellan.acq.MultiResMultipageTiffStorage(directory);
+summaryMD = mmData.getSummaryMetadata;
+posList = summaryMD.getJSONArray('InitialPositionList');
+imageWidth = summaryMD.getInt('Width');
+imageHeight = summaryMD.getInt('Height');
+xPixelOverlap = summaryMD.getInt('GridPixelOverlapX');
+yPixelOverlap  = summaryMD.getInt('GridPixelOverlapY');
+pixelSize = summaryMD.getDouble('PixelSize_um');
+numTimePoints = mmData.getNumFrames;
 
 % Create matlab file to save surface data in
 filename = imaris.GetCurrentFileName;
@@ -90,8 +92,6 @@ if ~any(strcmp('vertices',who(saveFile)))
 else
     startIndex = saveFile.lastWrittenFrameIndex + 1;
 end
-
-
 
 
 %Incrementally segment surfaces, get and save their info, and delete
@@ -235,6 +235,8 @@ saveFile.featureNames = featureNames;
 % end
 % copyfile(saveName, strcat(backupDirectory,dirs{end-1},'_',dirs{end},'_',char(surfName),'.mat') );
 
+mmData.close;
+clear mmData;
 
     function [newStats] = modify_stats_for_stitched_view(stats)
         newStats = stats;
