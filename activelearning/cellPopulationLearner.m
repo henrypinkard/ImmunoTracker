@@ -18,6 +18,10 @@ function [  ] = cellPopulationLearner(  )
 %start parallel pool for training NN
 % parpool;
 
+%change to folder above
+cd(fileparts(mfilename('fullpath')))
+cd('..')
+
 dataFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/e670FeaturesAndLabels.mat';
 surfaceFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/e670Candidates.mat';
 %load features and known labels
@@ -79,7 +83,7 @@ set(gcf,'KeyPressFcn',@keyinput);
 surfaceClassicationIndex_ = -1;
 
 %train initial classifier
-classifier = retrain();
+classifier = retrain(3);
 
 
 
@@ -204,33 +208,49 @@ classifier = retrain();
                error('Must manually select 2 small populations of cells to train classifier'); 
             end
             % Enter active learning mode: begin presenting unlabelled examples at current time point            
-            classifier = retrain();
+            classifier = retrain(3);
             presentNextExample();
         elseif strcmp(key,'w')
-            % 2 - Classify and visualize all instances at current time point
+            % Classify and visualize all instances at current time point
             fprintf('Classifying all surfaces at current time point...\n');
-            predictCurrentTP();           
+            predictCurrentTP();
+        elseif strcmp(key,'e')
+            % Classify all
+            fprintf('Classifying all surfaces...\n');
+            predictAll();
         elseif strcmp(key,'y')
             %Yes the currently presented instance show be laballed as a T cell
             featuresAndLabels.coiIndices = unique([featuresAndLabels.coiIndices; surfaceClassicationIndex_]);
-            classifier = retrain();
+            classifier = retrain(3);
             presentNextExample();
         elseif strcmp(key,'n')
             %Yes the currently presented instance show be laballed as a T cell
             featuresAndLabels.ncoiIndices = unique([featuresAndLabels.ncoiIndices; surfaceClassicationIndex_]);
-            classifier = retrain();
+            classifier = retrain(3);
             presentNextExample();
         end
     end
 
-    function [cls] = retrain()
+    function [cls] = retrain(numLearners)
         %train classifier
         cls = trainClassifier([features(featuresAndLabels.coiIndices,:); features(featuresAndLabels.ncoiIndices,:)],...
-            [ones(length(featuresAndLabels.coiIndices),1); zeros(length(featuresAndLabels.ncoiIndices),1)]);
+            [ones(length(featuresAndLabels.coiIndices),1); zeros(length(featuresAndLabels.ncoiIndices),1)],numLearners);
+    end
+
+    function [] = predictAll()
+        classifier = retrain(50);
+        %delete all predeicted surfaces from imaris
+        xPopulationSurface.RemoveAllSurfaces;
+        %run classifier on instances at current TP
+        pred = classify( classifier, features, ones(size(featuresAndLabels.timeIndices),'logical'),...
+            featuresAndLabels.coiIndices, featuresAndLabels.ncoiIndices);
+        
+        func_addsurfacestosurpass(xImarisApp,surfaceData,100, xPopulationSurface,imarisIndices(logical(pred)));
+  
     end
 
     function [] = predictCurrentTP()
-        classifier = retrain();
+        classifier = retrain(20);
         %delete all predeicted surfaces from imaris
         xPopulationSurface.RemoveAllSurfaces;
         %run classifier on instances at current TP
