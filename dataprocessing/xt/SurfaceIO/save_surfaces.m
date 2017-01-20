@@ -50,12 +50,12 @@ saveFile.trackEdges = surface.GetTrackEdges;
 
 
 % Copy to backup directory on different drive
-if (any(imsFilePathAndName == '\'))
-    dirs = strsplit(imsFilePathAndName,'\');
-else
-    dirs = strsplit(imsFilePathAndName,'/');
-end
-copyfile(saveName, strcat('D:\Data\Henry\Surface autosave backups\',dirs{end-1},'_',dirs{end},'_',char(surfName),'.mat') );
+% if (any(imsFilePathAndName == '\'))
+%     dirs = strsplit(imsFilePathAndName,'\');
+% else
+%     dirs = strsplit(imsFilePathAndName,'/');
+% end
+% copyfile(saveName, strcat('D:\Data\Henry\Surface autosave backups\',dirs{end-1},'_',dirs{end},'_',char(surfName),'.mat') );
 
 end
 
