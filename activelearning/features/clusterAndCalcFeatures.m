@@ -30,9 +30,8 @@ channelOffsets = reshape(channelOffsets,1,1,1,6);
 %background subtract pixels
 pixels = pixels - repmat(channelOffsets,size(pixels,1),size(pixels,2),size(pixels,3),1);
 
-%TODO: remove this for use with new data
 %reverse rank filter
-pixels = reverseRankFilter(pixels);
+% pixels = reverseRankFilter(pixels);
 
 %remove border to limit filtering artifacts
 pixels = pixels(2:end-1,2:end-1,:,:);

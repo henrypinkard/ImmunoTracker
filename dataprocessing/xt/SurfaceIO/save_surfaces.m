@@ -1,6 +1,6 @@
 %Get surfaces object selected in surpass and save it, along with any tracks
 function [] = save_surfaces(imarisIndex)
-batchSize = 500;
+batchSize = 200;
 
 %connect to imaris
 vImarisLib = ImarisLib;

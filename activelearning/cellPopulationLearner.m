@@ -22,21 +22,15 @@ function [  ] = cellPopulationLearner(  )
 cd(fileparts(mfilename('fullpath')))
 cd('..')
 
-dataFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/e670FeaturesAndLabels.mat';
-surfaceFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/e670Candidates.mat';
+dataFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/CMTMRFeaturesAndLabels.mat';
+surfaceFile = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/data/CMTMRCandidates.mat';
 %load features and known labels
 featuresAndLabels = matfile(dataFile,'Writable',true);
 %Load surface data into virtual memory
 surfaceData = matfile(surfaceFile,'Writable',false);
 %cache stats
 stats = surfaceData.stats;
-%TODO: save this in the file when extraneous stats are deleted
-%TODO: delete when new data
-preprocessedIndices = find(ismember(stats(1).Ids,featuresAndLabels.imarisIndices));
-xPositions = stats(find(strcmp({stats.Name},'Stitched Position X'))).Values(preprocessedIndices);
-yPositions = stats(find(strcmp({stats.Name},'Stitched Position Y'))).Values(preprocessedIndices);
-zPositions = stats(find(strcmp({stats.Name},'Stitched Position Z'))).Values(preprocessedIndices);
-xyzPositions = [xPositions yPositions zPositions];
+xyzPositions = featuresAndLabels.stitchedXYZPositions;
 
 
 %createLabels for cells of interest
@@ -218,6 +212,7 @@ classifier = retrain(3);
             % Classify all
             fprintf('Classifying all surfaces...\n');
             predictAll();
+            %TODO: prompt for filename and export
         elseif strcmp(key,'y')
             %Yes the currently presented instance show be laballed as a T cell
             featuresAndLabels.coiIndices = unique([featuresAndLabels.coiIndices; surfaceClassicationIndex_]);

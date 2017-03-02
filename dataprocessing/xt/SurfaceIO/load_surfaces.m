@@ -1,8 +1,8 @@
 %Read surfaces from .mat file and add them
 function [] = load_surfaces(imarisIndex)
 
-batchSize = 1000;
-
+batchSize = 200;
+javaaddpath('./ImarisLib.jar')
 vImarisLib = ImarisLib;
 imaris = vImarisLib.GetApplication(imarisIndex);
 if (isempty(imaris))
