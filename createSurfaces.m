@@ -39,7 +39,7 @@ function [] = createSurfaces(surfName,...
 
 %Parameters that can be tuned to optimize performance
 batchSize = 100;
-framesPerLoop = 10; %number of frames for which surfaces are created with each loop
+framesPerLoop = 8; %number of frames for which surfaces are created with each loop
 distanceFromEdge = 4; %remove data points within _ um of edges of tiles
 
 %connect to imaris?
@@ -92,8 +92,8 @@ saveFile = matfile(saveName,'Writable',true);
 saveFile.summaryMD = summaryMD;
 if ~any(strcmp('vertices',who(saveFile)))
     %initialize fields
-    saveFile.stitchedXYZPositions = [];
-    saveFile.excitations = [];
+    saveFile.stitchedXYZPositions = single([]);
+    saveFile.excitations = single([]);
     saveFile.masks = {};
     saveFile.imageData = {};
     saveFile.imarisIndices = {};
@@ -115,7 +115,7 @@ end
 maxFrameIndex = numTimePoints*posList.length-1;
 for startFrame = startIndex:framesPerLoop:maxFrameIndex
     tic
-    fprintf('Calculating surfaces on frame %i-%i of %i\n',startFrame, startFrame + framesPerLoop, maxFrameIndex);
+    fprintf('Calculating surfaces on frame %i-%i of %i\n',startFrame, min(startFrame + framesPerLoop-1,maxFrameIndex));
     % time index is 0 indexed and inclusive, but shows up in imaris as 1
     % indexed
     roi = [0,0,0,startFrame,ds.GetSizeX,ds.GetSizeY,ds.GetSizeZ,min(startFrame + framesPerLoop-1,maxFrameIndex)];
@@ -212,12 +212,15 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
         end
         
         %store masks, pixels, and other data
-        saveFile.excitations(startIndex+1:endIndex+1,1:2) = excitations;
-        saveFile.masks(startIndex+1:endIndex+1,1) = maskTemp;
-        saveFile.imageData(startIndex+1:endIndex+1,1) = imgTemp;
-        saveFile.stitchedXYZPositions(startIndex+1:endIndex+1,1:3) = [stats(find(strcmp({stats.Name},'Stitched Position X'))).Values(startIndex+1:endIndex+1),...
+        indicesInFile = size(saveFile, 'excitations', 1)+1:size(saveFile, 'excitations', 1)+endIndex-startIndex+1;
+        
+        saveFile.excitations(indicesInFile,1:2) = excitations;
+        saveFile.masks(indicesInFile,1) = maskTemp;
+        saveFile.imageData(indicesInFile,1) = imgTemp;
+        saveFile.stitchedXYZPositions(indicesInFile,1:3) = [stats(find(strcmp({stats.Name},'Stitched Position X'))).Values(startIndex+1:endIndex+1),...
             stats(find(strcmp({stats.Name},'Stitched Position Y'))).Values(startIndex+1:endIndex+1),...
             stats(find(strcmp({stats.Name},'Stitched Position Z'))).Values(startIndex+1:endIndex+1)];
+                
         
         %store surface data in file
         saveFile.vertices(size(saveFile, 'vertices', 1)+1:size(saveFile, 'vertices', 1)+size(surfList.mVertices,1),1:3) = single(vertices);
@@ -264,12 +267,16 @@ xPosIdy = find(strcmp(featureNames,'Position Y'));
 inCenter = rawFeatures(:,xPosIdx) > distanceFromEdge & rawFeatures(:,xPosIdx) < (max(rawFeatures(:,xPosIdx)) - distanceFromEdge) &...
     rawFeatures(:,xPosIdy) > distanceFromEdge & rawFeatures(:,xPosIdy) < (max(rawFeatures(:,xPosIdy)) - distanceFromEdge);
 %use only central surfaces
-imarisIndices = imarisIndices(inCenter,:);
-features = rawFeatures(inCenter,:);
+saveFile.imarisIndices = imarisIndices(inCenter); 
+excitations = saveFile.excitations;
+saveFile.excitations = excitations(inCenter,:);
+xyzPos = saveFile.stitchedXYZPositions; 
+saveFile.stitchedXYZPositions = xyzPos(inCenter,:); 
+ti = saveFile.timeIndex;
+saveFile.timeIndex = ti(inCenter); 
 
-saveFile.imarisIndices = imarisIndices;
-saveFile.features = features;
-saveFile.featureNames = featureNames;
+saveFile.rawFeatures = rawFeatures(inCenter,:);
+saveFile.rawFeatureNames = featureNames;
 
 % Copy to backup directory on different drive
 % if (any(imsFilePathAndName == '\'))

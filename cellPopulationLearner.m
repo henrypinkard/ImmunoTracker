@@ -74,8 +74,7 @@ surfaceClassicationIndex_ = -1;
 
 %train initial classifier
 classifier = retrain(3);
-printManualSelectionInstructions();
-printAutomatedSelectionInstructions();
+
 
     %Get indices of surfaces sorted by distance to point specified
     function [indices] = getsurfacesnearpoint(point)       
@@ -160,15 +159,6 @@ printAutomatedSelectionInstructions();
        fprintf('7: Step forwards through preview \n');        
     end
 
-    function [] = printAutomatedSelectionInstructions()
-        fprintf('Interactive Learning selection mode: \n');
-        fprintf('q: label next example at current timepoint \n');
-        fprintf('y: yes, the currently presented example is a cell of interest \n');
-        fprintf('n: no, the currently presented example is not a cell of interest \n');
-        fprintf('w: classify and visualize all surfaces at current TP \n');
-        fprintf('e: classify and visualize all surfaces at all timepoints \n');        
-    end
-
 %Controls
     function [] = keyinput(~,~)
         key = get(gcf,'CurrentCharacter');
@@ -218,7 +208,6 @@ printAutomatedSelectionInstructions();
             if (isempty(dataFile.coiIndices) || isempty(dataFile.ncoiIndices))
                error('Must manually select 2 small populations of cells to train classifier'); 
             end
-            printAutomatedSelectionInstructions();
             % Enter active learning mode: begin presenting unlabelled examples at current time point            
             classifier = retrain(3);
             presentNextExample();
@@ -354,4 +343,3 @@ printAutomatedSelectionInstructions();
     end
 
 end
-
