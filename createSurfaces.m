@@ -273,7 +273,7 @@ saveFile.excitations = excitations(inCenter,:);
 xyzPos = saveFile.stitchedXYZPositions; 
 saveFile.stitchedXYZPositions = xyzPos(inCenter,:); 
 ti = saveFile.timeIndex;
-saveFile.timeIndex = ti(inCenter); 
+saveFile.designMatrixTimeIndices = ti(inCenter); 
 
 saveFile.rawFeatures = rawFeatures(inCenter,:);
 saveFile.rawFeatureNames = featureNames;
