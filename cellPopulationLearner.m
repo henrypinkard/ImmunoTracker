@@ -22,8 +22,7 @@ function [  ] = cellPopulationLearner(  )
 cd(fileparts(mfilename('fullpath')))
 cd('..')
 
-file = strcat('/Users/henrypinkard/Desktop/2017-1-16_Lymphocyte_iLN_calibration/C_600Rad_70MFP_25_BP_MT_600Rad',...
-'_30MFP_25BP(MT on this time)_1--Positions as time_333Filtered_e670Candidates.mat');
+file = 'F:\For Henry 2017-1-16\2017-1-16 GFP RFP e670 Venus\C_600Rad_70MFP_25_BP_MT_600Rad_30MFP_25BP(MT on this time)_1--Positions as time_333Filtered_gfpCandidates.mat';
 dataFile = matfile(file,'Writable',true);
 
 stats = dataFile.stats;
@@ -35,7 +34,11 @@ if (~any(strcmp('coiIndices',who(dataFile))))
     dataFile.ncoiIndices = [];
 end
 %pull nxp feature matrix and imaris indices in memory
-features = dataFile.features;
+if (~any(strcmp('features',who(dataFile))))
+    features = dataFile.rawFeatures;
+else
+    features = dataFile.features;
+end
 imarisIndices = dataFile.imarisIndices;
 
 %Connect to Imaris
@@ -79,7 +82,7 @@ classifier = retrain(3);
     %Get indices of surfaces sorted by distance to point specified
     function [indices] = getsurfacesnearpoint(point)       
         %Get indices of surfaces in current TP 
-        currentTPIndices = find(xImarisApp.GetVisibleIndexT == dataFile.timeIndex); 
+        currentTPIndices = find(xImarisApp.GetVisibleIndexT == dataFile.designMatrixTimeIndices); 
         surfaceCentersCell = mat2cell(xyzPositions(currentTPIndices,:),ones(length(currentTPIndices),1),3);
         distances = cellfun(@(surfCenter) sum((surfCenter - point).^2) ,surfaceCentersCell);
         [~, closestIndices] = sort(distances,1,'ascend');
@@ -244,7 +247,7 @@ classifier = retrain(3);
         %delete all predeicted surfaces from imaris
         xPopulationSurface.RemoveAllSurfaces;
         %run classifier on instances at current TP
-        pred = classify( classifier, features, ones(size(dataFile.timeIndex),'logical'),...
+        pred = classify( classifier, features, ones(size(dataFile.designMatrixTimeIndices),'logical'),...
             dataFile.coiIndices, dataFile.ncoiIndices);
         
         func_addsurfacestosurpass(xImarisApp,surfaceData,100, xPopulationSurface,imarisIndices(logical(pred)));
@@ -256,7 +259,7 @@ classifier = retrain(3);
         %delete all predeicted surfaces from imaris
         xPopulationSurface.RemoveAllSurfaces;
         %run classifier on instances at current TP
-        currentTPMask = xImarisApp.GetVisibleIndexT == dataFile.timeIndex;
+        currentTPMask = xImarisApp.GetVisibleIndexT == dataFile.designMatrixTimeIndices;
         currentTPPred = classify( classifier, features, currentTPMask, dataFile.coiIndices, dataFile.ncoiIndices);
         
         %generate mask for predicted cells of interest at current TP
@@ -269,7 +272,7 @@ classifier = retrain(3);
     function [] = presentNextExample()
         %find most informative example at this time point (that arent
         %already labelled)
-        unlabelledAtCurrentTP = xImarisApp.GetVisibleIndexT == dataFile.timeIndex;
+        unlabelledAtCurrentTP = xImarisApp.GetVisibleIndexT == dataFile.designMatrixTimeIndices;
         unlabelledAtCurrentTP([dataFile.coiIndices; dataFile.ncoiIndices]) = 0;
         [~, currentTPPredValue] = classify( classifier, features, unlabelledAtCurrentTP, dataFile.coiIndices, dataFile.ncoiIndices);
         
