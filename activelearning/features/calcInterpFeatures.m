@@ -39,7 +39,7 @@ centerPixel = min(stagePixelPositions) + 0.5*range(stagePixelPositions);
 pixelOrigin = centerPixel - 0.5*stitchedImageSize;
 interpPointsPixelCoords = interpPoints(:,1:2) / linearTransform - repmat(pixelOrigin,size(interpPoints,1),1);
 stagePositionPixelCoordinates = stagePixelPositions- repmat(pixelOrigin,size(stagePixelPositions,1),1);
-[zVals, ~] = calcInterpedValues(interpPointsPixelCoords, interpPoints(:,3), cellSurfaceXYPixelIndices);
+[zVals, ~] = calcInterpedValues(interpPointsPixelCoords, interpPoints(:,3), cellSurfaceXYPixelIndices, summaryMD.PixelSize_um);
 
 %replace all undefined values outside convex hull with the closest value
 outOfBoundsIndices = find(zVals == -1);
@@ -51,7 +51,7 @@ for i = outOfBoundsIndices'
 end
 
 %find normals at centers of stage positions
-[~, stagePosNormals] = calcInterpedValues(interpPointsPixelCoords, interpPoints(:,3), stagePositionPixelCoordinates);
+[~, stagePosNormals] = calcInterpedValues(interpPointsPixelCoords, interpPoints(:,3), stagePositionPixelCoordinates,summaryMD.PixelSize_um);
 undefinedNormalMask = cell2mat(cellfun(@(a) length(a) == 1 && a == -1,stagePosNormals,'UniformOutput',false));
 stagePosNormals = cell2mat(stagePosNormals(~undefinedNormalMask));
 %normalize
@@ -95,8 +95,7 @@ normalProjection = dot(cellCoords',normalXYProj')' ./ sqrt(sum(normalXYProj.^2,2
 end
 
 
-function [zVals, normals] = calcInterpedValues(interpolationPixelCoordsXY, zCoordinates, queryPoints)
-pixelSize = 0.351;
+function [zVals, normals] = calcInterpedValues(interpolationPixelCoordsXY, zCoordinates, queryPoints, pixelSizeXY)
 %calculate DT
 tris = delaunay(interpolationPixelCoordsXY(:,1),interpolationPixelCoordsXY(:,2));
 zVals = -1*ones(size(queryPoints,1),1);
@@ -110,8 +109,8 @@ for i = 1:length(tris)
     inTriangleMask = inpolygon(queryPoints(:,1),queryPoints(:,2),verticesX,verticesY);
     %calculate normal
     %multiply by pixel size for x and y so all units are um
-    verticesX_um = pixelSize*verticesX;
-    verticesY_um = pixelSize*verticesY;
+    verticesX_um = pixelSizeXY*verticesX;
+    verticesY_um = pixelSizeXY*verticesY;
     verticesZ_um = zCoordinates(vertexIndices);
     allVertices = [verticesX_um verticesY_um verticesZ_um];
     edge1 =  allVertices(2,:) - allVertices(1,:);
@@ -123,7 +122,7 @@ for i = 1:length(tris)
     %n dot (x - x0) = 0, solve for z coordinate
     interpZ = @(xy) (xy - repmat(allVertices(1,1:2),size(xy, 1),1))*normal(1:2)'./ -normal(3) + allVertices(1,3);   
     %convert query points to pixel coords
-    zVals(inTriangleMask) = interpZ(queryPoints(inTriangleMask,:).*pixelSize );
+    zVals(inTriangleMask) = interpZ(queryPoints(inTriangleMask,:).*pixelSizeXY );
 end
 
 %replace empty entries (outside interp area)

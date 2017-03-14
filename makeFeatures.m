@@ -1,5 +1,6 @@
 clear
 normalizedCutFeatures = 0;
+nnCalibrationChannel = 6; %1 indexed
 file = strcat('/Users/henrypinkard/Desktop/2017-1-16_Lymphocyte_iLN_calibration/C_600Rad_70MFP_25_BP_MT_600Rad',...
 '_30MFP_25BP(MT on this time)_1--Positions as time_333Filtered_e670Candidates.mat');
 
@@ -25,6 +26,18 @@ fprintf('Calculating Interpolation features...\n');
 featureNames = {featureNames{:} 'Vertical distance below LN surface'...
     'Surface normal angle with vertical', 'Field of view excitation correction'}';
 features = [features vertDistBelowSurface normalAngleWithVertical normPorjection];
+
+%%%%%%%%%%%%  excitation NN design matrix %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if (nnCalibrationChannel ~= -1)
+    fprintf('Calculating Excitation Neural Net design matrix...\n');
+    tilePosition = dataFile.rawFeatures(:,[find(strcmp(dataFile.rawFeatureNames,'Position X')) find(strcmp(dataFile.rawFeatureNames,'Position Y'))]);
+    brightness = dataFile.rawFeatures(:,find(strcmp(dataFile.rawFeatureNames,sprintf('Intensity Mean - Channel %i',nnCalibrationChannel))));
+    positions = dataFile.stitchedXYZPositions;
+    load('e670CellIndices.mat')
+    designMat = makeExcitationDesignMatrix(positions(TCellIndices),interpPoints, summaryMD,...
+        brightness(TCellIndices), tilePosition(TCellIndices));
+    dataFile.nnDesignMatrix = designMat;
+end
 
 %%%%%%%%%%%%%  Spectral features %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fprintf('Calculating Speactral features...\n');

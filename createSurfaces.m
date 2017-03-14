@@ -37,6 +37,10 @@ function [] = createSurfaces(surfName,...
 %   quality = 0.1
 %number of voxels = 100
 
+%change to folder above
+cd(fileparts(mfilename('fullpath')))
+cd('.')
+
 %Parameters that can be tuned to optimize performance
 batchSize = 100;
 framesPerLoop = 8; %number of frames for which surfaces are created with each loop
@@ -115,7 +119,7 @@ end
 maxFrameIndex = numTimePoints*posList.length-1;
 for startFrame = startIndex:framesPerLoop:maxFrameIndex
     tic
-    fprintf('Calculating surfaces on frame %i-%i of %i\n',startFrame, min(startFrame + framesPerLoop-1,maxFrameIndex));
+    fprintf('Calculating surfaces on frame %i-%i of %i\n',startFrame, min(startFrame + framesPerLoop-1,maxFrameIndex),maxFrameIndex);
     % time index is 0 indexed and inclusive, but shows up in imaris as 1
     % indexed
     roi = [0,0,0,startFrame,ds.GetSizeX,ds.GetSizeY,ds.GetSizeZ,min(startFrame + framesPerLoop-1,maxFrameIndex)];
@@ -192,22 +196,26 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
             imgTemp{index + 1 - startIndex} = imgData;
             
             %get surface interpolation and laser excitation
-            mdString = char(md.toString);
-            mdString(mdString == ' ') = '';
-            mdString(mdString == '#') = '';
-            mdString(mdString == ')') = '';
-            mdString(mdString == '(') = '';
-            md = JSON.parse(mdString);
-            laser1Power = cellfun(@str2num,strsplit(md.TeensySLM1_SLM_Pattern,'-'),'UniformOutput',0);
-            laser2Power = cellfun(@str2num,strsplit(md.TeensySLM2_SLM_Pattern,'-'),'UniformOutput',0);
-            laser1Power = cell2mat(reshape(laser1Power(1:end-1),16,16));
-            laser2Power = cell2mat(reshape(laser2Power(1:end-1),16,16));
-            fovIndices = int32(round((positionUnstitched(1:2) ./ fovSize) * 15)) + 1;            
-            excitations(index + 1 - startIndex,:) = [laser1Power(fovIndices(1),fovIndices(2))  laser2Power(fovIndices(1),fovIndices(2))];
-            %store one copy of surface interpoaltion per a time point
-            if size(saveFile, 'surfInterpPoints', 1) < timeIndex + 1 || isempty(saveFile.surfInterpPoints(timeIndex+1,1))
-                interpPoints = md.DistanceFromFixedSurfacePoints;
-                saveFile.surfInterpPoints = cell2mat(cellfun(@(entry) cellfun(@str2num, strsplit(entry,'_')),interpPoints,'UniformOutput',0)');
+            try
+                mdString = char(md.toString);                
+                mdString(mdString == ' ') = '';
+                mdString(mdString == '#') = '';
+                mdString(mdString == ')') = '';
+                mdString(mdString == '(') = '';
+                md = JSON.parse(mdString);
+                laser1Power = cellfun(@str2num,strsplit(md.TeensySLM1_SLM_Pattern,'-'),'UniformOutput',0);
+                laser2Power = cellfun(@str2num,strsplit(md.TeensySLM2_SLM_Pattern,'-'),'UniformOutput',0);
+                laser1Power = cell2mat(reshape(laser1Power(1:end-1),16,16));
+                laser2Power = cell2mat(reshape(laser2Power(1:end-1),16,16));
+                fovIndices = int32(round((positionUnstitched(1:2) ./ fovSize) * 15)) + 1;
+                excitations(index + 1 - startIndex,:) = [laser1Power(fovIndices(1),fovIndices(2))  laser2Power(fovIndices(1),fovIndices(2))];
+                %store one copy of surface interpoaltion per a time point
+                if size(saveFile, 'surfInterpPoints', 1) < timeIndex + 1 || isempty(saveFile.surfInterpPoints(timeIndex+1,1))
+                    interpPoints = md.DistanceFromFixedSurfacePoints;
+                    saveFile.surfInterpPoints = cell2mat(cellfun(@(entry) cellfun(@str2num, strsplit(entry,'_')),interpPoints,'UniformOutput',0)');
+                end
+            catch
+                excitations(index + 1 - startIndex,:) = nan;
             end
         end
         
@@ -220,7 +228,7 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
         saveFile.stitchedXYZPositions(indicesInFile,1:3) = [stats(find(strcmp({stats.Name},'Stitched Position X'))).Values(startIndex+1:endIndex+1),...
             stats(find(strcmp({stats.Name},'Stitched Position Y'))).Values(startIndex+1:endIndex+1),...
             stats(find(strcmp({stats.Name},'Stitched Position Z'))).Values(startIndex+1:endIndex+1)];
-                
+        
         
         %store surface data in file
         saveFile.vertices(size(saveFile, 'vertices', 1)+1:size(saveFile, 'vertices', 1)+size(surfList.mVertices,1),1:3) = single(vertices);
@@ -267,13 +275,13 @@ xPosIdy = find(strcmp(featureNames,'Position Y'));
 inCenter = rawFeatures(:,xPosIdx) > distanceFromEdge & rawFeatures(:,xPosIdx) < (max(rawFeatures(:,xPosIdx)) - distanceFromEdge) &...
     rawFeatures(:,xPosIdy) > distanceFromEdge & rawFeatures(:,xPosIdy) < (max(rawFeatures(:,xPosIdy)) - distanceFromEdge);
 %use only central surfaces
-saveFile.imarisIndices = imarisIndices(inCenter); 
+saveFile.imarisIndices = imarisIndices(inCenter);
 excitations = saveFile.excitations;
 saveFile.excitations = excitations(inCenter,:);
-xyzPos = saveFile.stitchedXYZPositions; 
-saveFile.stitchedXYZPositions = xyzPos(inCenter,:); 
+xyzPos = saveFile.stitchedXYZPositions;
+saveFile.stitchedXYZPositions = xyzPos(inCenter,:);
 ti = saveFile.timeIndex;
-saveFile.designMatrixTimeIndices = ti(inCenter); 
+saveFile.designMatrixTimeIndices = ti(inCenter);
 
 saveFile.rawFeatures = rawFeatures(inCenter,:);
 saveFile.rawFeatureNames = featureNames;
