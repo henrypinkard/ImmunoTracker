@@ -75,6 +75,7 @@ surfaceClassicationIndex_ = -1;
 
 %train initial classifier
 classifier = retrain(3);
+%print instructions
 printManualSelectionInstructions();
 printAutomatedSelectionInstructions();
 
