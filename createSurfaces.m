@@ -39,7 +39,6 @@ function [] = createSurfaces(surfName,...
 
 %change to folder above
 cd(fileparts(mfilename('fullpath')))
-cd('.')
 
 %Parameters that can be tuned to optimize performance
 batchSize = 100;
