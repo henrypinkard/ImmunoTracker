@@ -1,6 +1,5 @@
-# Image files #
-###################
 *.png
 *.m~
 .DS_Store
-imagingNN/log/
+imagingNN/log/**
+**/workspace.xml
