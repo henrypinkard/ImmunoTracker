@@ -61,7 +61,7 @@ magellanDir = '/Users/henrypinkard/Desktop/2017-1-16_Lymphocyte_iLN_calibration/
 % if (magellanDir == 0)
 %     return; %canceled
 % end
-javaaddpath('./dataprocessing/xt/Magellan.jar');
+javaaddpath('./Magellan.jar');
 mmData = org.micromanager.plugins.magellan.acq.MultiResMultipageTiffStorage(magellanDir);
 
 summaryMD = JSON.parse(char(mmData.getSummaryMetadata.toString));
