@@ -41,6 +41,8 @@ shuffledIndices = np.random.permutation(np.arange(inputs.shape[0]))
 excite = excite[shuffledIndices]
 inputs = inputs[shuffledIndices]
 
+inputs = inputs[:,8:]
+
 #split into train/validation
 numTrain = int(np.floor(0.8 * inputs.shape[0]))
 numVal = inputs.shape[0] - numTrain

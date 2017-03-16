@@ -3,3 +3,4 @@
 .DS_Store
 imagingNN/log/**
 **/workspace.xml
+imagingNN/.idea/workspace.xml
