@@ -76,8 +76,7 @@ surfaceClassicationIndex_ = -1;
 %train initial classifier
 classifier = retrain(3);
 %print instructions
-printManualSelectionInstructions();
-printAutomatedSelectionInstructions();
+
 
     %Get indices of surfaces sorted by distance to point specified
     function [indices] = getsurfacesnearpoint(point)       
