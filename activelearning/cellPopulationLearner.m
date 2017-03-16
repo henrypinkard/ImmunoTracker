@@ -169,7 +169,7 @@ printAutomatedSelectionInstructions();
         fprintf('w: classify and visualize all surfaces at current TP \n');
         fprintf('e: classify and visualize all surfaces at all timepoints \n');        
     end
-
+  
 %Controls
     function [] = keyinput(~,~)
         key = get(gcf,'CurrentCharacter');
