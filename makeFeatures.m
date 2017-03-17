@@ -4,14 +4,12 @@ nnCalibrationChannel = 6; %1 indexed
 file = strcat('/Users/henrypinkard/Desktop/2017-1-16_Lymphocyte_iLN_calibration/C_600Rad_70MFP_25_BP_MT_600Rad',...
 '_30MFP_25BP(MT on this time)_1--Positions as time_333Filtered_e670Candidates.mat');
 
-%TODO: read channel ofsets from data
-
-channelOffsets = [8 11 15 10 11 9];
 dataFile = matfile(file,'Writable',true);
 summaryMD = dataFile.summaryMD;
 interpPoints = dataFile.surfInterpPoints;
 features = dataFile.rawFeatures;
 featureNames = dataFile.rawFeatureNames;
+channelOffsets = reshape(dataFile.channelOffsets,1,6);
 
 %%%%%%%%%%%%  Derived features from differences in COMs and Intensity weighted COMs
 fprintf('Calculating COM features...\n');

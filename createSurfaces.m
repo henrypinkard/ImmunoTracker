@@ -92,7 +92,6 @@ if (exist(saveName,'file') == 2)
     end
 end
 saveFile = matfile(saveName,'Writable',true);
-saveFile.summaryMD = summaryMD;
 if ~any(strcmp('vertices',who(saveFile)))
     %initialize fields
     saveFile.stitchedXYZPositions = single([]);
@@ -109,6 +108,13 @@ if ~any(strcmp('vertices',who(saveFile)))
     saveFile.numVertices = int32([]);
     saveFile.name = surfName;
     saveFile.surfInterpPoints = {};
+    saveFile.summaryMD = summaryMD;
+    %get channel offsets. this is stochastic so do it a few times and median
+    offsets = zeros(6,20);
+    for i  = 1:20
+        offsets(:,i) = mmData.readBackgroundPixelValues;
+    end
+    saveFile.channelOffests = median(offsets,2);
 else
     startIndex = saveFile.lastWrittenFrameIndex + 1;
 end
