@@ -1,5 +1,5 @@
 function [xSurfaces] = func_addsurfacestosurpass(xImarisApp, file, batchSize, xSurfaces, surfIndicesToAdd)
-%surfIndicesToAdd is Imaris indices, so 0 indexed
+%surfIndicesToAdd is 1 indexed into the surfaces stored in the file
 
 if (nargin == 3)
     addAll = true;
@@ -62,14 +62,14 @@ for i = 0:numBatches - 1
         for j = 1:surfacesInBatch
             surfIndex = surfIndicesToAdd(i * batchSize + j);
             
-            timeInd(j) = file.timeIndex(surfIndex + 1,:);
-            nTri(j) = numTriangles(surfIndex+1);
-            nVert(j) = numVertices(surfIndex+1);
-            vertOffset = getOffsetIndex(surfIndex + 1, numVertices);
-            triOffset = getOffsetIndex(surfIndex + 1, numTriangles);
-            norms{j} = file.normals( vertOffset + 1: vertOffset + numVertices(surfIndex+1) ,:);
-            verts{j} = file.vertices( vertOffset + 1: vertOffset + numVertices(surfIndex+1) ,:);
-            tris{j} = file.triangles( triOffset + 1: triOffset + numTriangles(surfIndex+1) ,:);
+            timeInd(j) = file.timeIndex(surfIndex,:);
+            nTri(j) = numTriangles(surfIndex);
+            nVert(j) = numVertices(surfIndex);
+            vertOffset = getOffsetIndex(surfIndex, numVertices);
+            triOffset = getOffsetIndex(surfIndex, numTriangles);
+            norms{j} = file.normals( vertOffset + 1: vertOffset + numVertices(surfIndex) ,:);
+            verts{j} = file.vertices( vertOffset + 1: vertOffset + numVertices(surfIndex) ,:);
+            tris{j} = file.triangles( triOffset + 1: triOffset + numTriangles(surfIndex) ,:);
         end
         
         verts = cell2mat(verts);

@@ -1,4 +1,4 @@
-function [ designMatrix ] = makeExcitationDesignMatrix( queryPoints, interpPoints, summaryMD, brightness, tilePosition )
+function [ designMatrix, output ] = makeExcitationDesignMatrix( queryPoints, interpPoints, summaryMD, brightness, tilePosition, excitations )
 %return a deisgn matrix with:
 %8 entries for position in FOV
 %1 entry for vertical distance
@@ -51,6 +51,7 @@ for pointIndex = 1: size(queryPoints,1)
     end
 end
 
+%normalize and format deisgn matrix
 %add tile position, brightness
 designMatrix = (designMatrix - 150) / 100;
 %scale tile positions between 0 and 1
@@ -58,6 +59,9 @@ tilePosition = tilePosition / (summaryMD.Width * summaryMD.PixelSize_um);
 brightness = (brightness - mean(brightness)) ./ std(brightness);
 designMatrix = [designMatrix tilePosition brightness];
 
+output = excitations;
+
+%%%%%functions%%%%%%%
     function [distance] = binarySearch(initialPoint, direction, minDistance, maxDistance)
 %         fprintf('min: %d\tmax: %d\n',minDistance,maxDistance);
         halfDistance = (minDistance + maxDistance) / 2.0;

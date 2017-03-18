@@ -1,10 +1,12 @@
 clear
 normalizedCutFeatures = 0;
 nnCalibrationChannel = 6; %1 indexed
-file = strcat('/Users/henrypinkard/Desktop/2017-1-16_Lymphocyte_iLN_calibration/C_600Rad_70MFP_25_BP_MT_600Rad',...
-'_30MFP_25BP(MT on this time)_1--Positions as time_333Filtered_e670Candidates.mat');
+[file, path] = uigetfile('*.mat','Select .mat data file');
+if (file == 0)
+    return; %canceled
+end
 
-dataFile = matfile(file,'Writable',true);
+dataFile = matfile(strcat(path,file),'Writable',true);
 summaryMD = dataFile.summaryMD;
 interpPoints = dataFile.surfInterpPoints;
 features = dataFile.rawFeatures;
@@ -31,10 +33,22 @@ if (nnCalibrationChannel ~= -1)
     tilePosition = dataFile.rawFeatures(:,[find(strcmp(dataFile.rawFeatureNames,'Position X')) find(strcmp(dataFile.rawFeatureNames,'Position Y'))]);
     brightness = dataFile.rawFeatures(:,find(strcmp(dataFile.rawFeatureNames,sprintf('Intensity Mean - Channel %i',nnCalibrationChannel))));
     positions = dataFile.stitchedXYZPositions;
-    load('e670CellIndices.mat')
-    designMat = makeExcitationDesignMatrix(positions(TCellIndices),interpPoints, summaryMD,...
-        brightness(TCellIndices), tilePosition(TCellIndices));
+    excitations = dataFile.excitations;
+    %use cells from population of interest
+    coiIndices = dataFile.coiIndicesPredicted;
+    positions = positions(coiIndices);
+    brightness = brightness(coiIndices);
+    tilePosition = tilePosition(coiIndices);
+    excitations = excitations(coiIndices,:);
+    %reomve NANs
+    nanIndices = find(isnan(dataFile.excitations(:,1)));
+    positions(nanIndices) = [];
+    brightness(nanIndices) = [];
+    tilePosition(nanIndices) = [];
+    excitations(nanIndices) = [];
+    [designMat, outputs] = makeExcitationDesignMatrix(positions, interpPoints, summaryMD, brightness, tilePosition, excitations);
     dataFile.nnDesignMatrix = designMat;
+    dataFile.nnOutputs = outputs;
 end
 
 %%%%%%%%%%%%%  Spectral features %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

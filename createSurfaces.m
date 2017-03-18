@@ -56,11 +56,10 @@ if (isempty(imaris))
 end
 
 %select magellan dataset for reading of metadata, etc
-magellanDir = '/Users/henrypinkard/Desktop/2017-1-16_Lymphocyte_iLN_calibration/C_600Rad_70MFP_25_BP_MT_600Rad_30MFP_25BP(MT on this time)_1';
-% magellanDir = uigetdir('','select Magellan dataset');
-% if (magellanDir == 0)
-%     return; %canceled
-% end
+magellanDir = uigetdir('','select Magellan dataset');
+if (magellanDir == 0)
+    return; %canceled
+end
 javaaddpath('./Magellan.jar');
 mmData = org.micromanager.plugins.magellan.acq.MultiResMultipageTiffStorage(magellanDir);
 
@@ -114,7 +113,7 @@ if ~any(strcmp('vertices',who(saveFile)))
     for i  = 1:20
         offsets(:,i) = mmData.readBackgroundPixelValues;
     end
-    saveFile.channelOffests = median(offsets,2);
+    saveFile.channelOffsets = median(offsets,2);
 else
     startIndex = saveFile.lastWrittenFrameIndex + 1;
 end
@@ -212,8 +211,8 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
                 laser2Power = cellfun(@str2num,strsplit(md.TeensySLM2_SLM_Pattern,'-'),'UniformOutput',0);
                 laser1Power = cell2mat(reshape(laser1Power(1:end-1),16,16));
                 laser2Power = cell2mat(reshape(laser2Power(1:end-1),16,16));
-                fovIndices = int32(round((positionUnstitched(1:2) ./ fovSize) * 15)) + 1;
-                excitations(index + 1 - startIndex,:) = [laser1Power(fovIndices(1),fovIndices(2))  laser2Power(fovIndices(1),fovIndices(2))];
+                fovIndices = int32(round((positionUnstitched(1:2) ./ fovSize) * 15)) + 1;                
+                excitations(index + 1 - startIndex,:) = [laser1Power(fovIndices(1),fovIndices(2))  laser2Power(fovIndices(1),fovIndices(2))];                
                 %store one copy of surface interpoaltion per a time point
                 if size(saveFile, 'surfInterpPoints', 1) < timeIndex + 1 || isempty(saveFile.surfInterpPoints(timeIndex+1,1))
                     interpPoints = md.DistanceFromFixedSurfacePoints;

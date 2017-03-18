@@ -1,14 +1,12 @@
 function [  ] = cellLearner(  )
-%start parallel pool for training NN
-parpool;
-
 %change to folder above
 cd(fileparts(mfilename('fullpath')))
-cd('..')
 
-file = strcat('/Users/henrypinkard/Desktop/2017-1-16_Lymphocyte_iLN_calibration/C_600Rad_70MFP_25_BP_MT_600Rad',...
-'_30MFP_25BP(MT on this time)_1--Positions as time_333Filtered_e670Candidates.mat');
-dataFile = matfile(file,'Writable',true);
+[file, path] = uigetfile('*.mat','Select .mat data file');
+if (file == 0)
+    return; %canceled
+end
+dataFile = matfile(strcat(path,file),'Writable',true);
 
 stats = dataFile.stats;
 xyzPositions = dataFile.stitchedXYZPositions;
@@ -20,7 +18,11 @@ if (~any(strcmp('coiIndices',who(dataFile))))
     dataFile.ncoiIndices = [];
 end
 %pull nxp feature matrix and imaris indices in memory
-features = dataFile.features;
+if any(strcmp('features',who(dataFile)))
+    features = dataFile.features;
+else
+   features = dataFile.rawFeatures; 
+end
 imarisIndices = dataFile.imarisIndices;
 
 %Connect to Imaris
@@ -66,13 +68,14 @@ printAutomatedSelectionInstructions();
     %Get indices of surfaces sorted by distance to point specified
     function [indices] = getsurfacesnearpoint(point)       
         %Get indices of surfaces in current TP 
-        currentTPIndices = find(xImarisApp.GetVisibleIndexT == dataFile.timeIndex); 
+        currentTPIndices = find(xImarisApp.GetVisibleIndexT == dataFile.designMatrixTimeIndices); 
         surfaceCentersCell = mat2cell(xyzPositions(currentTPIndices,:),ones(length(currentTPIndices),1),3);
         distances = cellfun(@(surfCenter) sum((surfCenter - point).^2) ,surfaceCentersCell);
         [~, closestIndices] = sort(distances,1,'ascend');
         %get indices corresponding to set of all surfaces, sorted by
         %distance to axis
-        indices = currentTPIndices(closestIndices);        
+        %don't take more than 1000
+        indices = currentTPIndices(closestIndices(1:1000));        
     end
 
     function [intersectionPoint] = getcrosshairintersectionpoint() 
@@ -176,8 +179,8 @@ printAutomatedSelectionInstructions();
         elseif strcmp(key,'3')  
              %find point at intersection of three positioned planes
              point = getcrosshairintersectionpoint();
-             closestSurfaceIndices = getsurfacesnearpoint(point);
-             manualPreviewIndex = 1; %start with closest
+             closestSurfaceIndices = getsurfacesnearpoint(point); %these are sorted design matrix indices
+             manualPreviewIndex = 1; %start with closest             
              updatepreviewsurface( );
              %hide crosshairs
              xClip1.SetVisible(false);
@@ -245,7 +248,7 @@ printAutomatedSelectionInstructions();
         pred = classify( classifier, features, ones(size(timeIndex),'logical'),...
             dataFile.coiIndices, dataFile.ncoiIndices);
         
-        func_addsurfacestosurpass(xImarisApp,dataFile,100, xPopulationSurface,imarisIndices(logical(pred)));
+        func_addsurfacestosurpass(xImarisApp,dataFile,100, xPopulationSurface,imarisIndices(logical(pred))+1);
   
     end
 
@@ -261,7 +264,7 @@ printAutomatedSelectionInstructions();
         currentTPIndices = find(currentTPMask);
         coiAtCurrentTPIndices = currentTPIndices(currentTPPred);
         %send to Imaris
-        func_addsurfacestosurpass(xImarisApp,dataFile,100, xPopulationSurface,imarisIndices(coiAtCurrentTPIndices));
+        func_addsurfacestosurpass(xImarisApp,dataFile,100, xPopulationSurface,imarisIndices(coiAtCurrentTPIndices)+1);
     end
 
     function [] = presentNextExample()

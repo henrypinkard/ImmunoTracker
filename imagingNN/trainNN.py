@@ -27,7 +27,7 @@ f = h5py.File(filepath)
 designMat = np.zeros(f['nnDesignMatrix'].shape)
 f['nnDesignMatrix'].read_direct(designMat)
 designMat = designMat.T
-excitations = np.zeros(f['excitations'].shape)
+excitations = np.zeros(f['nnOutput'].shape)
 f['excitations'].read_direct(excitations)
 excitations = excitations.T
 f.close()
