@@ -43,7 +43,6 @@ cd(fileparts(mfilename('fullpath')))
 %Parameters that can be tuned to optimize performance
 batchSize = 100;
 framesPerLoop = 8; %number of frames for which surfaces are created with each loop
-distanceFromEdge = 4; %remove data points within _ um of edges of tiles
 
 %connect to imaris?
 javaaddpath('./ImarisLib.jar');
@@ -72,6 +71,9 @@ yPixelOverlap  = summaryMD.GridPixelOverlapY;
 pixelSizeXY = summaryMD.PixelSize_um;
 pixelSizeZ = summaryMD.z_step_um;
 numTimePoints = mmData.getNumFrames;
+%remove data points within _ um of edges of tiles
+distanceFromEdge = summaryMD.PixelSize_um * summaryMD.GridPixelOverlapX * 0.5; 
+
 
 % Create matlab file to save surface data in
 filename = imaris.GetCurrentFileName;

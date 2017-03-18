@@ -161,8 +161,7 @@ printAutomatedSelectionInstructions();
 %Controls
     function [] = keyinput(~,~)
         key = get(gcf,'CurrentCharacter');
-        
-                    
+                           
         if strcmp(key,'1') %position crosshairs orthagonal to view
             xClip1.SetVisible(true);
             xClip2.SetVisible(true);
@@ -224,13 +223,16 @@ printAutomatedSelectionInstructions();
             %Yes the currently presented instance show be laballed as a T cell
             dataFile.coiIndices = unique([dataFile.coiIndices; surfaceClassicationIndex_]);
             classifier = retrain(3);
-            presentNextExample();
+            presentNextExample();            
+            fprintf('total selected cells of interest: %i\n',length(dataFile.coiIndices));            
+            fprintf('total selected not cells of interest: %i\n',length(dataFile.ncoiIndices));  
         elseif strcmp(key,'n')
             %Yes the currently presented instance show be laballed as a T cell
             dataFile.ncoiIndices = unique([dataFile.ncoiIndices; surfaceClassicationIndex_]);
-            fprintf('Total cells: %i\nTotal not cells: %i',length(dataFile.coiIndices),length(dataFile.ncoiIndices)); 
             classifier = retrain(3);
-            presentNextExample();
+            presentNextExample();            
+            fprintf('total selected cells of interest: %i\n',length(dataFile.coiIndices));            
+            fprintf('total selected not cells of interest: %i\n',length(dataFile.ncoiIndices));  
         end
     end
 

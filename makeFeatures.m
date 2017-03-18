@@ -1,6 +1,5 @@
 clear
 normalizedCutFeatures = 0;
-nnCalibrationChannel = 6; %1 indexed
 [file, path] = uigetfile('*.mat','Select .mat data file');
 if (file == 0)
     return; %canceled
@@ -26,30 +25,6 @@ fprintf('Calculating Interpolation features...\n');
 featureNames = {featureNames{:} 'Vertical distance below LN surface'...
     'Surface normal angle with vertical', 'Field of view excitation correction'}';
 features = [features vertDistBelowSurface normalAngleWithVertical normPorjection];
-
-%%%%%%%%%%%%  excitation NN design matrix %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-if (nnCalibrationChannel ~= -1)
-    fprintf('Calculating Excitation Neural Net design matrix...\n');
-    tilePosition = dataFile.rawFeatures(:,[find(strcmp(dataFile.rawFeatureNames,'Position X')) find(strcmp(dataFile.rawFeatureNames,'Position Y'))]);
-    brightness = dataFile.rawFeatures(:,find(strcmp(dataFile.rawFeatureNames,sprintf('Intensity Mean - Channel %i',nnCalibrationChannel))));
-    positions = dataFile.stitchedXYZPositions;
-    excitations = dataFile.excitations;
-    %use cells from population of interest
-    coiIndices = dataFile.coiIndicesPredicted;
-    positions = positions(coiIndices);
-    brightness = brightness(coiIndices);
-    tilePosition = tilePosition(coiIndices);
-    excitations = excitations(coiIndices,:);
-    %reomve NANs
-    nanIndices = find(isnan(dataFile.excitations(:,1)));
-    positions(nanIndices) = [];
-    brightness(nanIndices) = [];
-    tilePosition(nanIndices) = [];
-    excitations(nanIndices) = [];
-    [designMat, outputs] = makeExcitationDesignMatrix(positions, interpPoints, summaryMD, brightness, tilePosition, excitations);
-    dataFile.nnDesignMatrix = designMat;
-    dataFile.nnOutputs = outputs;
-end
 
 %%%%%%%%%%%%%  Spectral features %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fprintf('Calculating Speactral features...\n');
