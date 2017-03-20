@@ -16,17 +16,25 @@ brightness = dataFile.rawFeatures(:,find(strcmp(dataFile.rawFeatureNames,sprintf
 positions = dataFile.stitchedXYZPositions;
 excitations = dataFile.excitations;
 %use cells from population of interest
-coiIndices = dataFile.coiIndicesPredicted;
-positions = positions(coiIndices);
+coiIndices = dataFile.coiPred;
+positions = positions(coiIndices,:);
 brightness = brightness(coiIndices);
 tilePosition = tilePosition(coiIndices);
 excitations = excitations(coiIndices,:);
 %reomve NANs
 nanIndices = find(isnan(dataFile.excitations(:,1)));
-positions(nanIndices) = [];
+positions(nanIndices,:) = [];
 brightness(nanIndices) = [];
 tilePosition(nanIndices) = [];
-excitations(nanIndices) = [];
-[designMat, outputs] = makeExcitationDesignMatrix(positions, interpPoints, summaryMD, brightness, tilePosition, excitations);
-dataFile.nnDesignMatrix = designMat;
-dataFile.nnOutputs = outputs;
+excitations(nanIndices,:) = [];
+
+%assemble into one big struct and then make design matrix in python
+dataStruct = struct('normalizedTilePosition',[], 'normalizedBrightness', [], 'distancesToInterpolation', [],...
+    'excitations', []);
+dataStruct.normalizedTilePosition  = tilePosition / (summaryMD.Width * summaryMD.PixelSize_um);
+dataStruct.normalizedBrightness = (brightness - mean(brightness)) ./ std(brightness);
+[distancesToInterpolation, distancesToInterpolarionSP] = measureDistancesToInterpolation(positions, interpPoints, summaryMD);
+dataStruct.distancesToInterpolation = distancesToInterpolation;
+dataStruct.distancesToInterpolarionSP = distancesToInterpolarionSP;
+dataStruct.excitations = excitations;
+dataFile.exciationNNData = dataStruct;

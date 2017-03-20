@@ -1,65 +1,75 @@
-function [ designMatrix, output ] = makeExcitationDesignMatrix( queryPoints, interpPoints, summaryMD, brightness, tilePosition, excitations )
-%return a deisgn matrix with:
-%8 entries for position in FOV
-%1 entry for vertical distance
-%2 entries for position within tile
-%1 entry for brightness
+function [ distances, distancesStagePositioned ] = measureDistancesToInterpolation( queryPoints, interpPoints, summaryMD)
+%return an N x Theta samples x phi samples tensor of distances to
+%interpolation. entries for a given point with phi == 0 represent
+%vertical distance to surface and will be identical regardless
+%of theta
 
 SEARCH_START_DIST = 400.0;
 SEARCH_TOLERANCE = 2.0;
-N_SAMPLING_ANGLES = 8;
+N_SAMPLES_THETA = 12;
+N_SAMPLES_PHI = 6;
+
+thetas = linspace(0,2*pi, N_SAMPLES_THETA);
 %52 degrees is maximum angle of NA
-PHI = 40.0 / 360.0 * pi * 2.0;
+phis = linspace(0, 50.0 / 360.0 * pi * 2.0,N_SAMPLES_PHI);
 %convert from XY stage coordinates
 [interpPointsImageCoords_um, stagePositionImageCoords_um] = stageToPixelCoordinates();
 %calculate DT
 tris = num2cell(delaunay(interpPointsImageCoords_um(:,1),interpPointsImageCoords_um(:,2)),2);
 %sets of vertices for all DTs
 vertices =cellfun(@(vertexIndices) interpPointsImageCoords_um(vertexIndices,:), tris,'UniformOutput',0);
-dTheta = pi * 2.0 / N_SAMPLING_ANGLES;
 
 %add distances to interpolation into design matrix
-designMatrix = zeros(size(queryPoints,1),N_SAMPLING_ANGLES + 1);
+distances = zeros(size(queryPoints,1), N_SAMPLES_THETA, N_SAMPLES_PHI);
+distancesStagePositioned = zeros(size(queryPoints,1), N_SAMPLES_THETA, N_SAMPLES_PHI);
+
+[phiGrid, thetaGrid] = meshgrid(phis,thetas);
+directionVecs = arrayfun(@(theta,phi) -[cos(theta).*sin(phi), sin(theta).*sin(phi), cos(phi)],...
+    thetaGrid, phiGrid,'UniformOutput',0);
 for pointIndex = 1: size(queryPoints,1)
     fprintf('pointIndex %i of %i\n',pointIndex,size(queryPoints,1));
     initialPoint = queryPoints(pointIndex,:);
-    %replace x and y coordinates wth the center of the appropriate stage
-    %posiiton
+    %replace x and y coordinates wth the center of the appropriate stage posiiton
     distSq = sum((stagePositionImageCoords_um - repmat(initialPoint(1:2),size(stagePositionImageCoords_um,1),1)).^2,2);
     [~, argmin] = min(distSq);
-    initialPoint(1:2) = stagePositionImageCoords_um(argmin,:);
-    
-    directionVecs = cellfun(@(theta) -[cos(theta).*sin(PHI), sin(theta).*sin(PHI), cos(PHI)],...
-        num2cell((0:N_SAMPLING_ANGLES-1)*dTheta),'UniformOutput',0);        
-    for  angleIndex = 1:length(directionVecs)
-        directionUnitVec = directionVecs{angleIndex};
-        initialDist = SEARCH_START_DIST;
-        %start with a point outside and then binary line search for the distance
-        while (isWithinSurace(initialPoint + directionUnitVec*initialDist) )
-            initialDist = initialDist*2;
+    initialPointStagePositioned = queryPoints(pointIndex,:);
+    initialPointStagePositioned(1:2) = stagePositionImageCoords_um(argmin,:);
+
+    for angleIndex = 0:length(directionVecs(:))-1
+        thetaIndex = mod(angleIndex, N_SAMPLES_THETA) + 1;
+        phiIndex = floor(angleIndex / N_SAMPLES_THETA) + 1;
+        directionUnitVec = directionVecs{thetaIndex,phiIndex};
+        if phiIndex == 1
+            %phi = 0 so just get interpolation value from overhead
+            interpVal = getInterpolatedZVal(queryPoints(pointIndex,:));
+            if isempty(interpVal)
+                value = 0;
+                valueSP = 0;
+            else
+                value = queryPoints(pointIndex,3) - interpVal;
+                valueSP = queryPoints(pointIndex,3) - interpVal;
+            end
+        else
+            %binary line search to find distance to interpolation
+            initialDist = SEARCH_START_DIST;
+            %start with a point outside and then binary line search for the distance
+            while isWithinSurace(initialPoint + directionUnitVec*initialDist)
+                initialDist = initialDist*2;
+            end         
+            value =   binarySearch(initialPoint, directionUnitVec, 0, initialDist);
+            %%%
+            initialDist = SEARCH_START_DIST;
+            %start with a point outside and then binary line search for the distance
+            while isWithinSurace(initialPointStagePositioned + directionUnitVec*initialDist)
+                initialDist = initialDist*2;
+            end         
+            valueSP = binarySearch(initialPointStagePositioned, directionUnitVec, 0, initialDist);
         end
-        designMatrix(pointIndex,angleIndex) = binarySearch(initialPoint, directionUnitVec, 0, initialDist);
-    end
-    %last column, vertical distance below
-    %this one, unlike the others, is specific to the exact point rather
-    %than the stage position
-    interpVal = getInterpolatedZVal(queryPoints(pointIndex,:));
-    if isempty(interpVal)
-       designMatrix(pointIndex,end) = 0;
-    else        
-        designMatrix(pointIndex,end) = queryPoints(pointIndex,3) - interpVal;
+        distances(pointIndex,thetaIndex,phiIndex) = value;
+        distancesStagePositioned(pointIndex,thetaIndex,phiIndex) = valueSP;
     end
 end
 
-%normalize and format deisgn matrix
-%add tile position, brightness
-designMatrix = (designMatrix - 150) / 100;
-%scale tile positions between 0 and 1
-tilePosition = tilePosition / (summaryMD.Width * summaryMD.PixelSize_um);
-brightness = (brightness - mean(brightness)) ./ std(brightness);
-designMatrix = [designMatrix tilePosition brightness];
-
-output = excitations;
 
 %%%%%functions%%%%%%%
     function [distance] = binarySearch(initialPoint, direction, minDistance, maxDistance)
