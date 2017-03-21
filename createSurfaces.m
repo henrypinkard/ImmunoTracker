@@ -44,8 +44,11 @@ cd(fileparts(mfilename('fullpath')))
 batchSize = 100;
 framesPerLoop = 8; %number of frames for which surfaces are created with each loop
 
-%connect to imaris?
+%add java libraries to dynamic path
 javaaddpath('./ImarisLib.jar');
+javaaddpath('./Magellan.jar');
+
+%connect to imaris
 imarisIndex = 0;
 vImarisLib = ImarisLib;
 imaris = vImarisLib.GetApplication(imarisIndex);
@@ -59,7 +62,6 @@ magellanDir = uigetdir('','select Magellan dataset');
 if (magellanDir == 0)
     return; %canceled
 end
-javaaddpath('./Magellan.jar');
 mmData = org.micromanager.plugins.magellan.acq.MultiResMultipageTiffStorage(magellanDir);
 
 summaryMD = JSON.parse(char(mmData.getSummaryMetadata.toString));
