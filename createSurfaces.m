@@ -75,7 +75,7 @@ pixelSizeZ = summaryMD.z_step_um;
 numTimePoints = mmData.getNumFrames;
 %remove data points within _ um of edges of tiles
 distanceFromEdge = summaryMD.PixelSize_um * summaryMD.GridPixelOverlapX * 0.5; 
-
+% 
 
 % Create matlab file to save surface data in
 filename = imaris.GetCurrentFileName;
@@ -215,8 +215,17 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
                 laser2Power = cellfun(@str2num,strsplit(md.TeensySLM2_SLM_Pattern,'-'),'UniformOutput',0);
                 laser1Power = cell2mat(reshape(laser1Power(1:end-1),16,16));
                 laser2Power = cell2mat(reshape(laser2Power(1:end-1),16,16));
-                fovIndices = int32(round((positionUnstitched(1:2) ./ fovSize) * 15)) + 1;                
-                excitations(index + 1 - startIndex,:) = [laser1Power(fovIndices(1),fovIndices(2))  laser2Power(fovIndices(1),fovIndices(2))];                
+                %bilinear interpolation
+                indices = (positionUnstitched(1:2) ./ fovSize) * 15;
+                fractional = mod(indices,1.0);
+                lowerIndices = indices - fractional + 1;
+                lowerIndexWeight = 1 - fractional;
+                blinterp = @(grid, lowerInd, lowerWeight)...
+                    grid(lowerInd(1), lowerInd(2)) * lowerWeight(1) * lowerWeight(2) +...
+                    grid(lowerInd(1) + 1, lowerInd(2)) * (1- lowerWeight(1)) * lowerWeight(2) +...
+                    grid(lowerInd(1), lowerInd(2) + 1) * lowerWeight(1) * (1 - lowerWeight(2)) +...
+                    grid(lowerInd(1) + 1, lowerInd(2) + 1) * (1- lowerWeight(1)) * (1 - lowerWeight(2));                              
+                excitations(index + 1 - startIndex,:) = [blinterp(laser1Power, lowerIndices, lowerIndexWeight) blinterp(laser2Power, lowerIndices, lowerIndexWeight)];                
                 %store one copy of surface interpoaltion per a time point
                 if size(saveFile, 'surfInterpPoints', 1) < timeIndex + 1 || isempty(saveFile.surfInterpPoints(timeIndex+1,1))
                     interpPoints = md.DistanceFromFixedSurfacePoints;
