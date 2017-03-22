@@ -5,51 +5,64 @@ import shutil
 import h5py
 import matplotlib.pyplot as plt
 
-def weight_variable(shape,name):
-    initial = tf.truncated_normal(shape, stddev=0.01)
-    return tf.Variable(initial,name=name)
-
-def bias_variable(shape, value, name):
-    return tf.Variable(tf.constant(float(value), shape=[shape]),name=name)
-
-
-def makeFCLayer(inputlayer, n, bias, name, keep_prob):
-    with tf.name_scope(name):
-        weight = weight_variable([inputlayer.get_shape()[1].value, n],name+'_weight')
-        bias = bias_variable(n, bias, name+'_bias')
-        fc = tf.nn.relu(tf.matmul(inputlayer, weight) + bias)
-        dropout = tf.nn.dropout(fc, keep_prob)
-        return dropout, weight, bias
-
 #load data
+def readIntoArray(structgroup, name):
+    arr = np.zeros(structgroup[name].shape)
+    structgroup[name].read_direct(arr)
+    return arr.T
+
 filepath = '/Users/henrypinkard/Desktop/2017-1-16_Lymphocyte_iLN_calibration/C_600Rad_70MFP_25_BP_MT_600Rad_30MFP_25BP(MT on this time)_1--Positions as time_333Filtered_e670Candidates.mat'
 f = h5py.File(filepath)
-designMat = np.zeros(f['nnDesignMatrix'].shape)
-f['nnDesignMatrix'].read_direct(designMat)
-designMat = designMat.T
-excitations = np.zeros(f['nnOutput'].shape)
-f['excitations'].read_direct(excitations)
-excitations = excitations.T
+struct = f.get('excitationNNData')
+#read variables
+normalizedTilePosition  = readIntoArray(struct, 'normalizedTilePosition')
+normalizedBrightness = readIntoArray(struct, 'normalizedBrightness')
+distancesToInterpolation = readIntoArray(struct, 'distancesToInterpolation')
+distancesToInterpolarionSP = readIntoArray(struct, 'distancesToInterpolarionSP')
+excitations = readIntoArray(struct, 'excitations')
 f.close()
 
-#filter out abberrant exciations at extremes of distribution
-validIndices = np.abs(designMat[:,-1]) < 1.5
-excite = excitations[validIndices,0]
-inputs = designMat[validIndices]
-#shuffle
-shuffledIndices = np.random.permutation(np.arange(inputs.shape[0]))
-excite = excite[shuffledIndices]
-inputs = inputs[shuffledIndices]
 
-inputs = inputs[:,8:]
+#make design matrix for training
+#use single measure to calibrate vignetting
+distanceToFOVCenter = np.sqrt(np.sum(np.square(normalizedTilePosition - 0.5),axis=1))
+distanceToFOVCenterNormalized = np.reshape((distanceToFOVCenter - np.mean(distanceToFOVCenter)) / np.std(distanceToFOVCenter),(-1,1))
+#bin distances into histrograms
+#(cell, theta, phi) -- distributions hsould be invariant to theta but not phi
+def binsurfacedistance(dist):
+     BINSIZE = 20
+     BINMAX = 300
+     #TODO: try switching to log spacing to account for how intensity drops off
+     binedges = np.linspace(0, BINMAX, BINMAX/BINSIZE + 1)
+     numbins = binedges.shape[0] - 1
+     histdesignmat = np.zeros((dist.shape[0], numbins * (dist.shape[2] - 1) + 1))
+     #first one is vertical distance--all the same
+     histdesignmat[:, 0] = dist[:,0,0]
+     #bin remaining ones into histogram
+     for i in np.arange(1, stop = dist.shape[2]):
+        distancesforcurrentphi = dist[:, :, i]
+        counts = np.apply_along_axis(lambda x: np.histogram(x, binedges)[0], 1, distancesforcurrentphi)
+        histdesignmat[:, 1 + (i-1)*numbins: 1 + i*numbins] = counts
+     return histdesignmat
+
+distancefeatures = binsurfacedistance(distancesToInterpolation)
+distancefeaturesnormalized = (distancefeatures - np.mean(distancefeatures)) / np.std(distancefeatures)
+designmatrix = np.concatenate((distanceToFOVCenterNormalized, distancefeaturesnormalized, normalizedBrightness),axis=1 )
+
+#shuffle
+shuffledIndices = np.random.permutation(np.arange(designmatrix.shape[0]))
+designmatrix = designmatrix[shuffledIndices]
+excitations = excitations[shuffledIndices]
 
 #split into train/validation
-numTrain = int(np.floor(0.8 * inputs.shape[0]))
-numVal = inputs.shape[0] - numTrain
-trainset = inputs[:numTrain]
-valset = inputs[-numVal:]
-trainoutputs = excite[:numTrain]
-valoutputs = excite[-numVal:]
+excitations = excitations[:,1] #maitai laser
+
+numTrain = int(np.floor(0.8 * excitations.shape[0]))
+numVal = excitations.shape[0] - numTrain
+trainset = designmatrix[:numTrain]
+valset = designmatrix[-numVal:]
+trainoutputs = excitations[:numTrain]
+valoutputs = excitations[-numVal:]
 
 def readbatch(n, mode = 'train'):
     if mode == 'train':
@@ -59,12 +72,26 @@ def readbatch(n, mode = 'train'):
         set = valset
         outputs = valoutputs
     indices = np.random.choice(set.shape[0],size=n)
-    return (inputs[indices],np.reshape(outputs[indices],(indices.shape[0],1)))
+    return (set[indices],np.reshape(outputs[indices],(-1,1)))
 
+def weight_variable(shape,name):
+    initial = tf.truncated_normal(shape, stddev=0.01)
+    return tf.Variable(initial,name=name)
+
+def bias_variable(shape, value, name):
+    return tf.Variable(tf.constant(float(value), shape=[shape]),name=name)
+
+def makeFCLayer(inputlayer, n, bias, name, keep_prob):
+    with tf.name_scope(name):
+        weight = weight_variable([inputlayer.get_shape()[1].value, n],name+'_weight')
+        bias = bias_variable(n, bias, name+'_bias')
+        fc = tf.nn.relu(tf.matmul(inputlayer, weight) + bias)
+        dropout = tf.nn.dropout(fc, keep_prob)
+        return dropout, weight, bias
 
 # Here x and y_ aren't specific values. Rather, they are each a placeholder --
 # a value that we'll input when we ask TensorFlow to run a computation.
-x = tf.placeholder(tf.float32, shape=[None, inputs.shape[1]])
+x = tf.placeholder(tf.float32, shape=[None, trainset.shape[1]])
 y_ = tf.placeholder(tf.float32, shape=[None, 1])
 
 # We initialized the neuron biases in the second, fourth, and fifth convolutional layers,
@@ -140,13 +167,13 @@ with tf.Session() as sess:
                 break
 
     # export weights and biases
-    with open('model.csv','wb') as csvfile:
-        writer = csv.writer(csvfile, delimiter=',')
-        variables = [fc1Weight, fc1bias, fc2Weight, fc2bias]
-        for var in variables:
-            writer.writerow([var.name])
-            array = var.eval(sess)
-            if (len(array.shape) == 1):
-                array = np.reshape(array,(array.shape[0],1))
-            for i in np.arange(array.shape[0]):
-                writer.writerow(array[i].tolist())
+    # with open('model.csv','wb') as csvfile:
+    #     writer = csv.writer(csvfile, delimiter=',')
+    #     variables = [fc1Weight, fc1bias, fc2Weight, fc2bias]
+    #     for var in variables:
+    #         writer.writerow([var.name])
+    #         array = var.eval(sess)
+    #         if (len(array.shape) == 1):
+    #             array = np.reshape(array,(array.shape[0],1))
+    #         for i in np.arange(array.shape[0]):
+    #             writer.writerow(array[i].tolist())
