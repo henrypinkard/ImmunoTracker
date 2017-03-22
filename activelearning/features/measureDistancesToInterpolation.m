@@ -3,7 +3,6 @@ function [ distances, distancesStagePositioned ] = measureDistancesToInterpolati
 %interpolation. entries for a given point with phi == 0 represent
 %vertical distance to surface and will be identical regardless
 %of theta
-
 SEARCH_START_DIST = 400.0;
 SEARCH_TOLERANCE = 2.0;
 N_SAMPLES_THETA = 12;
@@ -34,7 +33,7 @@ for pointIndex = 1: size(queryPoints,1)
     [~, argmin] = min(distSq);
     initialPointStagePositioned = queryPoints(pointIndex,:);
     initialPointStagePositioned(1:2) = stagePositionImageCoords_um(argmin,:);
-
+    
     for angleIndex = 0:length(directionVecs(:))-1
         thetaIndex = mod(angleIndex, N_SAMPLES_THETA) + 1;
         phiIndex = floor(angleIndex / N_SAMPLES_THETA) + 1;
@@ -46,8 +45,8 @@ for pointIndex = 1: size(queryPoints,1)
                 value = 0;
                 valueSP = 0;
             else
-                value = queryPoints(pointIndex,3) - interpVal;
-                valueSP = queryPoints(pointIndex,3) - interpVal;
+                value = max(0,queryPoints(pointIndex,3) - interpVal);
+                valueSP = max(0,queryPoints(pointIndex,3) - interpVal);
             end
         else
             %binary line search to find distance to interpolation
@@ -55,14 +54,14 @@ for pointIndex = 1: size(queryPoints,1)
             %start with a point outside and then binary line search for the distance
             while isWithinSurace(initialPoint + directionUnitVec*initialDist)
                 initialDist = initialDist*2;
-            end         
+            end
             value =   binarySearch(initialPoint, directionUnitVec, 0, initialDist);
             %%%
             initialDist = SEARCH_START_DIST;
             %start with a point outside and then binary line search for the distance
             while isWithinSurace(initialPointStagePositioned + directionUnitVec*initialDist)
                 initialDist = initialDist*2;
-            end         
+            end
             valueSP = binarySearch(initialPointStagePositioned, directionUnitVec, 0, initialDist);
         end
         distances(pointIndex,thetaIndex,phiIndex) = value;
@@ -73,7 +72,7 @@ end
 
 %%%%%functions%%%%%%%
     function [distance] = binarySearch(initialPoint, direction, minDistance, maxDistance)
-%         fprintf('min: %d\tmax: %d\n',minDistance,maxDistance);
+        %         fprintf('min: %d\tmax: %d\n',minDistance,maxDistance);
         halfDistance = (minDistance + maxDistance) / 2.0;
         %if the distance has been narrowed to a sufficiently small interval, return
         if (maxDistance - minDistance < SEARCH_TOLERANCE)
@@ -82,7 +81,7 @@ end
         end
         %check if point is above surface in
         searchPoint = initialPoint + direction*halfDistance;
-%         fprintf('search distance: %.0f\n',halfDistance);
+        %         fprintf('search distance: %.0f\n',halfDistance);
         withinSurface = isWithinSurace(searchPoint);
         if (~withinSurface)
             distance = binarySearch(initialPoint, direction, minDistance, halfDistance);
@@ -114,10 +113,10 @@ end
         %figure out which triangle the point is in
         zVal = getInterpolatedZVal(point);
         if isempty(zVal)
-           return; %outside convex hull; 
+            return; %outside convex hull;
         end
         within = zVal < point(3);
-   end
+    end
 
     function [interpPointsImageCoords_um, stagePositionImageCoords_um] = stageToPixelCoordinates()
         posList = summaryMD.InitialPositionList;
@@ -136,7 +135,7 @@ end
         stagePixelPositions = (stagePositions / linearTransform );
         centerPixel = min(stagePixelPositions) + 0.5*range(stagePixelPositions);
         pixelOrigin = centerPixel - 0.5*stitchedImageSize;
-        interpPointsPixelCoords = interpPoints(:,1:2) / linearTransform - repmat(pixelOrigin,size(interpPoints,1),1);        
+        interpPointsPixelCoords = interpPoints(:,1:2) / linearTransform - repmat(pixelOrigin,size(interpPoints,1),1);
         interpPointsImageCoords_um = [interpPointsPixelCoords * summaryMD.PixelSize_um interpPoints(:,3)];
         stagePositionPixelCoordinates = stagePixelPositions- repmat(pixelOrigin,size(stagePixelPositions,1),1);
         stagePositionImageCoords_um = stagePositionPixelCoordinates * summaryMD.PixelSize_um;

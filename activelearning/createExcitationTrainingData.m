@@ -19,7 +19,7 @@ excitations = dataFile.excitations;
 coiIndices = dataFile.coiPred;
 positions = positions(coiIndices,:);
 brightness = brightness(coiIndices);
-tilePosition = tilePosition(coiIndices);
+tilePosition = tilePosition(coiIndices,:);
 excitations = excitations(coiIndices,:);
 %reomve NANs
 nanIndices = find(isnan(dataFile.excitations(:,1)));
@@ -37,4 +37,4 @@ dataStruct.normalizedBrightness = (brightness - mean(brightness)) ./ std(brightn
 dataStruct.distancesToInterpolation = distancesToInterpolation;
 dataStruct.distancesToInterpolarionSP = distancesToInterpolarionSP;
 dataStruct.excitations = excitations;
-dataFile.exciationNNData = dataStruct;
+dataFile.excitationNNData = dataStruct;

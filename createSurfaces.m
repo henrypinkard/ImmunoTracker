@@ -42,7 +42,7 @@ cd(fileparts(mfilename('fullpath')))
 
 %Parameters that can be tuned to optimize performance
 batchSize = 100;
-framesPerLoop = 8; %number of frames for which surfaces are created with each loop
+framesPerLoop = 2; %number of frames for which surfaces are created with each loop
 
 %add java libraries to dynamic path
 javaaddpath('./ImarisLib.jar');
