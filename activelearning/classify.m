@@ -23,5 +23,8 @@ end
 predictedValue = mean(predicitons,1);
 predictedLabel = predictedValue > 0.5;
 
+histogram(predictedValue,100);
+set(gca,'YScale','log')
+
 end
 

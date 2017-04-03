@@ -3,7 +3,15 @@ function [ classifier ] = trainClassifier( trainData, trainLabels, numLearners )
 % of classifier object that will later be passed to classify.m for
 % classificaiton
 
+%train ensemble
+classifier = cell(numLearners,1);
+for j = 1: numLearners
+    fprintf('Training classifier %i of %i\n',j,numLearners);
+    classifier{j} = trainNN();
+end
 
+
+function [singleNN] = trainNN()
 %Determine number of hiddens by cross validation
 % paramVals = [1 4 8 12 16 20 25 30 40 50 60 80 100];
 % numNetworks = 10;
@@ -35,10 +43,8 @@ function [ classifier ] = trainClassifier( trainData, trainLabels, numLearners )
 % plotroc(testT,testY)
 
 
-%train ensemble
-classifier = cell(numLearners,1);
-for j = 1: numLearners
-    %%train neural net on all data and predict unseens
+
+%%train neural net on all data and predict unseens
     %best number of hiddens = 20;
     net = patternnet(12,'trainscg','crossentropy' );
     net.divideParam.testRatio = 0;
@@ -49,9 +55,27 @@ for j = 1: numLearners
     % net.trainParam.mc = 1;
     net.trainParam.showWindow = false;
     net.trainParam.showCommandLine = false;
-    [c,tr] = train(net,trainData',trainLabels','useParallel','yes');
-    classifier{j} = c;
+    
+%     numZeros = sum(trainLabels == 0);
+%     numOnes = sum(trainLabels);
+%     if numOnes < numZeros
+%         %more 0s than 1s
+%         zeroIndices = find(trainLabels==0);
+%         indPerm = randperm(numZeros);
+%         toRemoveInd = zeroIndices(indPerm(1:numZeros-numOnes));
+%         trainLabels(toRemoveInd) = [];
+%         trainData(toRemoveInd,:) = [];
+%     else
+%         %more 1s than 0s
+%         oneIndices = find(trainLabels==0);
+%         indPerm = randperm(numOnes);
+%         toRemoveInd = oneIndices(indPerm(1:numOnes-numZeros));
+%         trainLabels(toRemoveInd) = [];
+%         trainData(toRemoveInd,:) = []; 
+%     end
+
+
+    [singleNN,tr] = train(net,trainData',trainLabels','useParallel','yes');
 end
 
 end
-

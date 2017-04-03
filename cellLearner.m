@@ -10,20 +10,21 @@ dataFile = matfile(strcat(path,file),'Writable',true);
 
 stats = dataFile.stats;
 xyzPositions = dataFile.stitchedXYZPositions;
-timeIndex = dataFile.designMatrixTimeIndices;  
-
 %createLabels for cells of interest
 if (~any(strcmp('coiIndices',who(dataFile))))
     dataFile.coiIndices = [];
     dataFile.ncoiIndices = [];
 end
-%pull nxp feature matrix and imaris indices in memory
+%cache values for performance
 if any(strcmp('features',who(dataFile)))
     features = dataFile.features;
 else
    features = dataFile.rawFeatures; 
 end
 imarisIndices = dataFile.imarisIndices;
+coiIndices = dataFile.coiIndices;
+ncoiIndices = dataFile.ncoiIndices;
+designMatrixTimeIndices = dataFile.designMatrixTimeIndices;
 
 %Connect to Imaris
 [ xImarisApp, xPopulationSurface, xSurfaceToClassify ] = xtSetupSurfaceTransfer(  );
@@ -57,18 +58,16 @@ planeConstants = zeros(3,1);
 figure(1);
 title('Imaris bridge');
 set(gcf,'KeyPressFcn',@keyinput);
-surfaceClassicationIndex_ = -1;
+surfaceClassicationIndex_ = 0;
 
-%train initial classifier
-classifier = retrain(3);
-%print instructions
-printManualSelectionInstructions();
-printAutomatedSelectionInstructions();
+%Init so it has global scope
+classifier = [];
+printSelectionInstructions();
 
     %Get indices of surfaces sorted by distance to point specified
     function [indices] = getsurfacesnearpoint(point)       
         %Get indices of surfaces in current TP 
-        currentTPIndices = find(xImarisApp.GetVisibleIndexT == dataFile.designMatrixTimeIndices); 
+        currentTPIndices = find(xImarisApp.GetVisibleIndexT == designMatrixTimeIndices); 
         surfaceCentersCell = mat2cell(xyzPositions(currentTPIndices,:),ones(length(currentTPIndices),1),3);
         distances = cellfun(@(surfCenter) sum((surfCenter - point).^2) ,surfaceCentersCell);
         [~, closestIndices] = sort(distances,1,'ascend');
@@ -134,39 +133,35 @@ printAutomatedSelectionInstructions();
         %instance into deisgn matrix
         index = closestSurfaceIndices(manualPreviewIndex);
         xSurfaceToClassify.RemoveAllSurfaces; %clear old ones
-        func_addsurfacestosurpass(xImarisApp,dataFile,1,xSurfaceToClassify,...
-            find(imarisIndices(index) == stats(1).Ids));
+        func_addsurfacestosurpass(xImarisApp,dataFile,1,xSurfaceToClassify,imarisIndices(index));
     end
 
-    function [] = printManualSelectionInstructions()
+    function [] = printSelectionInstructions()
        fprintf('Manual selection mode: \n');
        fprintf('1: position first 2 crosshairs \n');
        fprintf('2: position 3rd crosshair \n');
        fprintf('3: position 3rd crosshair \n');
-       fprintf('4: Yes, this is a cell of interest \n');
-       fprintf('5: No, this is not a cell of interest \n');
-       fprintf('6: Step backwards through preview \n');
-       fprintf('7: Step forwards through preview \n');        
+       fprintf('4: Step backwards through preview \n');
+       fprintf('5: Step forwards through preview \n');
+       fprintf('Interactive Learning selection mode: \n');
+       fprintf('q: label next example at current timepoint \n');
+       fprintf('w: classify and visualize all surfaces at current TP \n');
+       fprintf('e: classify and visualize all surfaces at all timepoints \n');
+       fprintf('Controls for selecting preview cell (both modes): \n');
+       fprintf('y: Yes, this is a cell of interest \n');
+       fprintf('n: No, this is not a cell of interest \n');
     end
 
-    function [] = printAutomatedSelectionInstructions()
-        fprintf('Interactive Learning selection mode: \n');
-        fprintf('q: label next example at current timepoint \n');
-        fprintf('y: yes, the currently presented example is a cell of interest \n');
-        fprintf('n: no, the currently presented example is not a cell of interest \n');
-        fprintf('w: classify and visualize all surfaces at current TP \n');
-        fprintf('e: classify and visualize all surfaces at all timepoints \n');        
-    end
-  
 %Controls
     function [] = keyinput(~,~)
-        key = get(gcf,'CurrentCharacter');
-                           
-        if strcmp(key,'1') %position crosshairs orthagonal to view
+        key = get(gcf,'CurrentCharacter');                        
+        if strcmp(key,'1') %position crosshairs orthagonal to view            
+            %disable active learning mode
+            surfaceClassicationIndex_ = 0;
             xClip1.SetVisible(true);
             xClip2.SetVisible(true);
             positioncrosshairs();
-            printManualSelectionInstructions();
+            printSelectionInstructions();
         elseif strcmp(key,'2')
             %store planes from positioning of first two crosshiars
             storecrosshairplanes();
@@ -186,71 +181,77 @@ printAutomatedSelectionInstructions();
              xClip2.SetVisible(false);
              %show preview
              xSurfaceToClassify.SetVisible(true);
-        elseif strcmp(key,'4') %add previewed surface to persistent set
-            %Select in file (so saves as you go)
-            indices = unique([dataFile.coiIndices; closestSurfaceIndices(manualPreviewIndex)]);
-            dataFile.coiIndices = indices;
-            fprintf('total selected cells of interest: %i\n',length(indices));            
-        elseif strcmp(key,'5') %previewd is not a cell of interest
-            indices = unique([dataFile.ncoiIndices; closestSurfaceIndices(manualPreviewIndex)]);
-            dataFile.ncoiIndices = indices;
-            fprintf('total selected not cells of interest: %i\n',length(indices));    
-        elseif strcmp(key,'6') %preview previous surface
+        elseif strcmp(key,'4') %preview previous surface
             manualPreviewIndex = max(1,manualPreviewIndex - 1);
             updatepreviewsurface();
-        elseif strcmp(key,'7') %preview next surface
+        elseif strcmp(key,'5') %preview next surface
             manualPreviewIndex = min(length(closestSurfaceIndices),manualPreviewIndex+1);
             updatepreviewsurface();   
         %%%%%%%%% Active Learning %%%%%%%%%
         elseif strcmp(key,'q')
-            if (isempty(dataFile.coiIndices) || isempty(dataFile.ncoiIndices))
+            if (isempty(coiIndices) || isempty(ncoiIndices))
                error('Must manually select 2 small populations of cells to train classifier'); 
             end
-            printAutomatedSelectionInstructions();
+            %disable manual selection mode
+            manualPreviewIndex = 0;
             % Enter active learning mode: begin presenting unlabelled examples at current time point            
-            classifier = retrain(3);
+            classifier = retrain(1);
             presentNextExample();
-        elseif strcmp(key,'w')
-            % Classify and visualize all instances at current time point
+        elseif strcmp(key,'w') % Classify and visualize all instances at current time point
             fprintf('Classifying all surfaces at current time point...\n');
             predictCurrentTP();
-        elseif strcmp(key,'e')
-            % Classify all
+        elseif strcmp(key,'e') % Classify all    
             fprintf('Classifying all surfaces...\n');
             predictAll();
-            %TODO: prompt for filename and export
+        %%%%%%% Add preview surface to cells of interest or not cells of interest %%%%%%%%%
         elseif strcmp(key,'y')
-            %Yes the currently presented instance show be laballed as a T cell
-            dataFile.coiIndices = unique([dataFile.coiIndices; surfaceClassicationIndex_]);
-            classifier = retrain(3);
-            presentNextExample();            
-            fprintf('total selected cells of interest: %i\n',length(dataFile.coiIndices));            
-            fprintf('total selected not cells of interest: %i\n',length(dataFile.ncoiIndices));  
+            if surfaceClassicationIndex_ ~= 0 && manualPreviewIndex == 0
+                %Yes the currently presented instance show be laballed as a T cell
+                coiIndices = unique([coiIndices; surfaceClassicationIndex_]);
+                dataFile.coiIndices = coiIndices;
+                classifier = retrain(1);
+                presentNextExample();
+            elseif surfaceClassicationIndex_ == 0 && manualPreviewIndex ~= 0
+                coiIndices = unique([coiIndices; closestSurfaceIndices(manualPreviewIndex)]);
+                dataFile.coiIndices = coiIndices;
+            else
+                error('Inconsistent manual selection vs active learning internal state');
+            end            
+            fprintf('total selected cells of interest: %i\n',length(coiIndices));
+            fprintf('total selected not cells of interest: %i\n',length(ncoiIndices));
         elseif strcmp(key,'n')
             %Yes the currently presented instance show be laballed as a T cell
-            dataFile.ncoiIndices = unique([dataFile.ncoiIndices; surfaceClassicationIndex_]);
-            classifier = retrain(3);
-            presentNextExample();            
-            fprintf('total selected cells of interest: %i\n',length(dataFile.coiIndices));            
-            fprintf('total selected not cells of interest: %i\n',length(dataFile.ncoiIndices));  
-        end
+            if surfaceClassicationIndex_ ~= 0 && manualPreviewIndex == 0
+                ncoiIndices = unique([ncoiIndices; surfaceClassicationIndex_]);
+                dataFile.ncoiIndices = ncoiIndices;
+                classifier = retrain(1);
+                presentNextExample();
+            elseif surfaceClassicationIndex_ == 0 && manualPreviewIndex ~= 0
+                ncoiIndices = unique([ncoiIndices; closestSurfaceIndices(manualPreviewIndex)]);
+                dataFile.ncoiIndices = ncoiIndices;               
+            else
+                error('Inconsistent manual selection vs active learning internal state');
+            end 
+            fprintf('total selected cells of interest: %i\n',length(coiIndices));
+            fprintf('total selected not cells of interest: %i\n',length(ncoiIndices));
+        end      
     end
 
     function [cls] = retrain(numLearners)
         %train classifier
-        cls = trainClassifier([features(dataFile.coiIndices,:); features(dataFile.ncoiIndices,:)],...
-            [ones(length(dataFile.coiIndices),1); zeros(length(dataFile.ncoiIndices),1)],numLearners);
+        cls = trainClassifier([features(coiIndices,:); features(ncoiIndices,:)],...
+            [ones(length(coiIndices),1); zeros(length(ncoiIndices),1)],numLearners);
     end
 
     function [] = predictAll()
-        classifier = retrain(50);
+        classifier = retrain(100);
         %delete all predeicted surfaces from imaris
         xPopulationSurface.RemoveAllSurfaces;
         %run classifier on instances at current TP
-        pred = classify( classifier, features, ones(size(timeIndex),'logical'),...
-            dataFile.coiIndices, dataFile.ncoiIndices);
-        
-        func_addsurfacestosurpass(xImarisApp,dataFile,100, xPopulationSurface,imarisIndices(logical(pred))+1);
+        pred = classify( classifier, features, ones(size(designMatrixTimeIndices),'logical'),...
+            coiIndices, ncoiIndices);
+        dataFile.coiPred = find(pred);
+        func_addsurfacestosurpass(xImarisApp,dataFile,40, xPopulationSurface,imarisIndices(logical(pred)));
   
     end
 
@@ -259,22 +260,22 @@ printAutomatedSelectionInstructions();
         %delete all predeicted surfaces from imaris
         xPopulationSurface.RemoveAllSurfaces;
         %run classifier on instances at current TP
-        currentTPMask = xImarisApp.GetVisibleIndexT == timeIndex;
-        currentTPPred = classify( classifier, features, currentTPMask, dataFile.coiIndices, dataFile.ncoiIndices);
+        currentTPMask = xImarisApp.GetVisibleIndexT == designMatrixTimeIndices;
+        currentTPPred = classify( classifier, features, currentTPMask, coiIndices, ncoiIndices);
         
         %generate mask for predicted cells of interest at current TP
         currentTPIndices = find(currentTPMask);
         coiAtCurrentTPIndices = currentTPIndices(currentTPPred);
         %send to Imaris
-        func_addsurfacestosurpass(xImarisApp,dataFile,100, xPopulationSurface,imarisIndices(coiAtCurrentTPIndices)+1);
+        func_addsurfacestosurpass(xImarisApp,dataFile,100, xPopulationSurface,imarisIndices(coiAtCurrentTPIndices));
     end
 
     function [] = presentNextExample()
         %find most informative example at this time point (that arent
         %already labelled)
-        unlabelledAtCurrentTP = xImarisApp.GetVisibleIndexT == timeIndex;
-        unlabelledAtCurrentTP([dataFile.coiIndices; dataFile.ncoiIndices]) = 0;
-        [~, currentTPPredValue] = classify( classifier, features, unlabelledAtCurrentTP, dataFile.coiIndices, dataFile.ncoiIndices);
+        unlabelledAtCurrentTP = xImarisApp.GetVisibleIndexT == designMatrixTimeIndices;
+        unlabelledAtCurrentTP([coiIndices; ncoiIndices]) = 0;
+        [~, currentTPPredValue] = classify( classifier, features, unlabelledAtCurrentTP,coiIndices,ncoiIndices);
         
         surfaceClassicationIndex_ = nextSampleToClassify( currentTPPredValue, unlabelledAtCurrentTP );
         %remove exisiting surfaces to classify

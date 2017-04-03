@@ -1,5 +1,6 @@
 *.png
 *.m~
+*.asv
 .DS_Store
 imagingNN/log/**
 **/workspace.xml

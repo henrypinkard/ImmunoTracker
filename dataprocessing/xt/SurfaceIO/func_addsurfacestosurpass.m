@@ -1,5 +1,6 @@
 function [xSurfaces] = func_addsurfacestosurpass(xImarisApp, file, batchSize, xSurfaces, surfIndicesToAdd)
-%surfIndicesToAdd is 1 indexed into the surfaces stored in the file
+%surfIndicesToAdd is 0 index imarisIndices
+surfIndicesToAdd = surfIndicesToAdd + 1;
 
 if (nargin == 3)
     addAll = true;
@@ -19,6 +20,16 @@ else
     numBatches = ceil(length(surfIndicesToAdd) / batchSize); 
     numVertices = file.numVertices;
     numTriangles = file.numTriangles;
+    timeIndices = file.timeIndex;
+    if length(surfIndicesToAdd) > 100 %cache for fast adding
+        normals = file.normals;
+        vertices = file.vertices;
+        triangles = file.triangles;
+    else
+        normals = [];
+        vertices = [];
+        triangles = [];
+    end
     getOffsetIndex = @(surfIndex, countVec) sum(countVec(1:surfIndex-1));
 end
 
@@ -62,21 +73,25 @@ for i = 0:numBatches - 1
         for j = 1:surfacesInBatch
             surfIndex = surfIndicesToAdd(i * batchSize + j);
             
-            timeInd(j) = file.timeIndex(surfIndex,:);
+            timeInd(j) = timeIndices(surfIndex);
             nTri(j) = numTriangles(surfIndex);
             nVert(j) = numVertices(surfIndex);
             vertOffset = getOffsetIndex(surfIndex, numVertices);
             triOffset = getOffsetIndex(surfIndex, numTriangles);
-            norms{j} = file.normals( vertOffset + 1: vertOffset + numVertices(surfIndex) ,:);
-            verts{j} = file.vertices( vertOffset + 1: vertOffset + numVertices(surfIndex) ,:);
-            tris{j} = file.triangles( triOffset + 1: triOffset + numTriangles(surfIndex) ,:);
+            if ~isempty(normals)
+                norms{j} = normals( vertOffset + 1: vertOffset + numVertices(surfIndex) ,:);
+                verts{j} = vertices( vertOffset + 1: vertOffset + numVertices(surfIndex) ,:);
+                tris{j} = triangles( triOffset + 1: triOffset + numTriangles(surfIndex) ,:);
+            else
+                norms{j} = file.normals( vertOffset + 1: vertOffset + numVertices(surfIndex) ,:);
+                verts{j} = file.vertices( vertOffset + 1: vertOffset + numVertices(surfIndex) ,:);
+                tris{j} = file.triangles( triOffset + 1: triOffset + numTriangles(surfIndex) ,:);
+            end
         end
-        
         verts = cell2mat(verts);
         tris = cell2mat(tris);
         norms = cell2mat(norms);
     end
-    
     xSurfaces.AddSurfacesList(verts,nVert,tris,nTri,norms,timeInd);
 end
 

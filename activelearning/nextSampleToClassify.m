@@ -9,15 +9,16 @@ function [ index ] = nextSampleToClassify( currentTPPredValue, mask )
 %displayed at current TP)
 
 designMatrixIndices = find(mask);
-
+certaintyThreshold = 0.05; %pick random sample within certainty bounds
 certainty = abs(currentTPPredValue - 0.5);
 [~,sortedIndices] = sort(certainty);
+numInRange = min(1,sum(certainty < certaintyThreshold));
 
+
+dmIndex = sortedIndices(randi(numInRange));
 %index should be 1-based
-index = designMatrixIndices(sortedIndices(1));
+index = designMatrixIndices(dmIndex);
 
-histogram(currentTPPredValue,100);
-set(gca,'YScale','log')
 end
 
 
