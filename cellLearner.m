@@ -195,7 +195,7 @@ printSelectionInstructions();
             %disable manual selection mode
             manualPreviewIndex = 0;
             % Enter active learning mode: begin presenting unlabelled examples at current time point            
-            classifier = retrain(1);
+            classifier = retrain(5);
             presentNextExample();
         elseif strcmp(key,'w') % Classify and visualize all instances at current time point
             fprintf('Classifying all surfaces at current time point...\n');
@@ -209,7 +209,7 @@ printSelectionInstructions();
                 %Yes the currently presented instance show be laballed as a T cell
                 coiIndices = unique([coiIndices; surfaceClassicationIndex_]);
                 dataFile.coiIndices = coiIndices;
-                classifier = retrain(1);
+                classifier = retrain(5);
                 presentNextExample();
             elseif surfaceClassicationIndex_ == 0 && manualPreviewIndex ~= 0
                 coiIndices = unique([coiIndices; closestSurfaceIndices(manualPreviewIndex)]);
@@ -224,7 +224,7 @@ printSelectionInstructions();
             if surfaceClassicationIndex_ ~= 0 && manualPreviewIndex == 0
                 ncoiIndices = unique([ncoiIndices; surfaceClassicationIndex_]);
                 dataFile.ncoiIndices = ncoiIndices;
-                classifier = retrain(1);
+                classifier = retrain(5);
                 presentNextExample();
             elseif surfaceClassicationIndex_ == 0 && manualPreviewIndex ~= 0
                 ncoiIndices = unique([ncoiIndices; closestSurfaceIndices(manualPreviewIndex)]);

@@ -7,6 +7,35 @@ function [] = createSurfaces(surfName,...
 % channelIndex is 0 based, but shows up in Imaris as 1 based
 %creates and saves surfaces and statistics, reads image data and masks
 
+%rank filtered low res (for NN training data
+%GFP
+%     channelIndex = 2;
+%     smoothFilter = 1.5;
+%     localContrast = 8;
+%     backgroundSub = 10;
+%     seedDiam = 7;
+%   quality = 1
+%number of voxels = 150
+
+%e670
+%     channelIndex = 2;
+%     smoothFilter = 1.5;
+%     localContrast = 10;
+%     backgroundSub = 10;
+%     seedDiam = 12;
+%   quality = 1
+%number of voxels = 150
+
+%non rank filtered
+%3x3x3 median filter
+%e670 ltmphocytes on lo res gen3
+%     channelIndex = 5;
+%     smoothFilter = 1.5;
+%     localContrast = 20;
+%     backgroundSub = 1.8;
+%     seedDiam = 15;
+%   quality = 0.1
+%number of voxels = 100
 
 %GFP DCs on high res Gen3
 %     channelIndex = 2;
@@ -25,17 +54,6 @@ function [] = createSurfaces(surfName,...
 %     seedDiam = 15;
 %   quality = 0.5
 %number of voxels = 120
-
-%non rank filtered
-%3x3x3 median filter
-%e670 ltmphocytes on lo res gen3
-%     channelIndex = 5;
-%     smoothFilter = 1.5;
-%     localContrast = 20;
-%     backgroundSub = 1.8;
-%     seedDiam = 15;
-%   quality = 0.1
-%number of voxels = 100
 
 %change to folder above
 cd(fileparts(mfilename('fullpath')))
