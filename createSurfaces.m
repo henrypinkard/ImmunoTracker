@@ -18,7 +18,7 @@ function [] = createSurfaces(surfName,...
 %number of voxels = 150
 
 %e670
-%     channelIndex = 2;
+%     channelIndex = 5;
 %     smoothFilter = 1.5;
 %     localContrast = 10;
 %     backgroundSub = 10;
