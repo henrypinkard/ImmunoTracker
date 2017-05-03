@@ -39,9 +39,9 @@ dataStruct = struct('normalizedTilePosition',[], 'normalizedBrightness', [], 'di
     'excitations', []);
 dataStruct.normalizedTilePosition  = tilePosition / (summaryMD.Width * summaryMD.PixelSize_um) - 0.5;
 dataStruct.normalizedBrightness = (brightness - mean(brightness)) ./ std(brightness);
-dataStruct.normalizedBrightnessMedian = (brightnessMedian - mean(brightnessMedian)) ./ std(brightnessMedian);cle
+dataStruct.normalizedBrightnessMedian = (brightnessMedian - mean(brightnessMedian)) ./ std(brightnessMedian);
 dataStruct.timeIndices = timeIndices;
-% [distancesToInterpolation, distancesToInterpolarionSP] = measureDistancesToInterpolation(positions, interpPoints, summaryMD);
+[distancesToInterpolation, distancesToInterpolarionSP] = measureDistancesToInterpolation(positions, interpPoints, summaryMD);
 dataStruct.distancesToInterpolation = distancesToInterpolation;
 dataStruct.distancesToInterpolarionSP = distancesToInterpolarionSP;
 dataStruct.excitations = excitations;

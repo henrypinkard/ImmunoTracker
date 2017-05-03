@@ -4,7 +4,7 @@ function [ distances, distancesStagePositioned ] = measureDistancesToInterpolati
 %vertical distance to surface and will be identical regardless
 %of theta
 SEARCH_START_DIST = 400.0;
-SEARCH_TOLERANCE = 2.0;
+SEARCH_TOLERANCE = 0.1;
 N_SAMPLES_THETA = 12;
 N_SAMPLES_PHI = 6;
 
@@ -25,6 +25,35 @@ distancesStagePositioned = zeros(size(queryPoints,1), N_SAMPLES_THETA, N_SAMPLES
 [phiGrid, thetaGrid] = meshgrid(phis,thetas);
 directionVecs = arrayfun(@(theta,phi) -[cos(theta).*sin(phi), sin(theta).*sin(phi), cos(phi)],...
     thetaGrid, phiGrid,'UniformOutput',0);
+
+%plot the results of one search together with interpolation
+%use maitain calibration data for this
+% plotInterpolatedSurface(interpPointsImageCoords_um, [400 900; 1150 2000]);
+plotInterpolatedSurface(interpPointsImageCoords_um, [100 1400; 650 2400]);
+
+
+hold on
+initialPoint = queryPoints(2810,:);
+initialPoint = [initialPoint(1:2) 300];
+scatter3(initialPoint(1),initialPoint(2),-initialPoint(3),200, 'filled');
+distVals = [];
+for thetaIndex = 1:N_SAMPLES_THETA
+    directionUnitVec = directionVecs{thetaIndex,5};
+    dist = computeDistToInterp(initialPoint, directionUnitVec, initialPoint);
+    endPoint = initialPoint + dist*directionUnitVec;
+    plot3([initialPoint(1) endPoint(1)],[initialPoint(2) endPoint(2)],-[initialPoint(3) endPoint(3)],'k-','LineWidth',2)
+    distVals = [distVals dist];
+end
+hold off
+figure(2)
+binedges = linspace(0, 1, 13) .^ 1.5 * 350;
+histogram(distVals,binedges);
+
+% print('interpolated LN with search distance','-dtiff')
+
+
+
+
 for pointIndex = 1: size(queryPoints,1)
     fprintf('pointIndex %i of %i\n',pointIndex,size(queryPoints,1));
     initialPoint = queryPoints(pointIndex,:);
@@ -49,20 +78,7 @@ for pointIndex = 1: size(queryPoints,1)
                 valueSP = max(0,queryPoints(pointIndex,3) - interpVal);
             end
         else
-            %binary line search to find distance to interpolation
-            initialDist = SEARCH_START_DIST;
-            %start with a point outside and then binary line search for the distance
-            while isWithinSurace(initialPoint + directionUnitVec*initialDist)
-                initialDist = initialDist*2;
-            end
-            value =   binarySearch(initialPoint, directionUnitVec, 0, initialDist);
-            %%%
-            initialDist = SEARCH_START_DIST;
-            %start with a point outside and then binary line search for the distance
-            while isWithinSurace(initialPointStagePositioned + directionUnitVec*initialDist)
-                initialDist = initialDist*2;
-            end
-            valueSP = binarySearch(initialPointStagePositioned, directionUnitVec, 0, initialDist);
+            [value, valueSP] = computeDistToInterp(initialPoint, directionUnitVec, initialPointStagePositioned);
         end
         distances(pointIndex,thetaIndex,phiIndex) = value;
         distancesStagePositioned(pointIndex,thetaIndex,phiIndex) = valueSP;
@@ -71,6 +87,26 @@ end
 
 
 %%%%%functions%%%%%%%
+
+    function [val, valSP] = computeDistToInterp(initialPoint, directionUnitVec,initialPointStagePositioned)
+        
+        %binary line search to find distance to interpolation
+        initialDist = SEARCH_START_DIST;
+        %start with a point outside and then binary line search for the distance
+        while isWithinSurace(initialPoint + directionUnitVec*initialDist)
+            initialDist = initialDist*2;
+        end
+        val =   binarySearch(initialPoint, directionUnitVec, 0, initialDist);
+        %%%
+        initialDist = SEARCH_START_DIST;
+        %start with a point outside and then binary line search for the distance
+        while isWithinSurace(initialPointStagePositioned + directionUnitVec*initialDist)
+            initialDist = initialDist*2;
+        end
+        valSP = binarySearch(initialPointStagePositioned, directionUnitVec, 0, initialDist);
+        
+    end
+
     function [distance] = binarySearch(initialPoint, direction, minDistance, maxDistance)
         %         fprintf('min: %d\tmax: %d\n',minDistance,maxDistance);
         halfDistance = (minDistance + maxDistance) / 2.0;

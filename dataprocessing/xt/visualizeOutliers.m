@@ -4,11 +4,11 @@ clear
 xtIndex = 0;
 javaaddpath ImarisLib.jar
 
-vImarisLib = ImarisLib;
-xImarisApp = vImarisLib.GetApplication(xtIndex);
-if (isempty(xImarisApp))
-    error('Wrong imaris index');
-end
+% vImarisLib = ImarisLib;
+% xImarisApp = vImarisLib.GetApplication(xtIndex);
+% if (isempty(xImarisApp))
+%     error('Wrong imaris index');
+% end
 %get file
 filename = '/Users/henrypinkard/Desktop/LNData/CMTMRCandidates.mat';
 
