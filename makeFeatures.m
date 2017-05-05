@@ -68,7 +68,12 @@ featuresToRemove = {'Area','BoundingBoxAA Length X','BoundingBoxAA Length Y','Bo
     'Intensity StdDev - Channel 6','Intensity Sum - Channel 1','Intensity Sum - Channel 2',...
     'Intensity Sum - Channel 3','Intensity Sum - Channel 4','Intensity Sum - Channel 5','Intensity Sum - Channel 6'};
 
-indicesOf2Remove = cellfun(@(toRemove) find(strcmp(featureNames,toRemove)),featuresToRemove);
+indicesOf2Remove = cellfun(@(toRemove) find(strcmp(featureNames,toRemove)),featuresToRemove, 'UniformOutput', false);
+if any(cellfun(@isempty,indicesOf2Remove))
+    warning(strcat('Missing statistics: ', strcat(featuresToRemove{find(cellfun(@isempty,indicesOf2Remove))})));
+    indicesOf2Remove = indicesOf2Remove(~cellfun(@isempty,indicesOf2Remove));
+end
+indicesOf2Remove = cell2mat(indicesOf2Remove);
 features(:,indicesOf2Remove) = [];
 featureNames(indicesOf2Remove) = [];
 
