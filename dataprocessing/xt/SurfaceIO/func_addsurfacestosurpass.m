@@ -18,18 +18,13 @@ if (addAll)
     verticesAdded = 0;
 else
     numBatches = ceil(length(surfIndicesToAdd) / batchSize); 
-    numVertices = file.numVertices;
-    numTriangles = file.numTriangles;
-    timeIndices = file.timeIndex;
-    if length(surfIndicesToAdd) > 100 %cache for fast adding
-        normals = file.normals;
-        vertices = file.vertices;
-        triangles = file.triangles;
-    else
-        normals = [];
-        vertices = [];
-        triangles = [];
-    end
+    h = figure(1);
+    numVertices = getappdata(h,'numVertices');
+    numTriangles = getappdata(h,'numTriangles');
+    timeIndices = getappdata(h,'timeIndices');
+    normals = getappdata(h,'normals');
+    vertices = getappdata(h,'vertices');
+    triangles = getappdata(h,'triangles');
     getOffsetIndex = @(surfIndex, countVec) sum(countVec(1:surfIndex-1));
 end
 

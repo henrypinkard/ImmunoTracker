@@ -25,6 +25,17 @@ imarisIndices = dataFile.imarisIndices;
 coiIndices = dataFile.coiIndices;
 ncoiIndices = dataFile.ncoiIndices;
 designMatrixTimeIndices = dataFile.designMatrixTimeIndices;
+%create figure for key listening
+h = figure(1);
+title('Imaris bridge');
+set(gcf,'KeyPressFcn',@keyinput);
+%cache values used by addsurfacestosurpass
+setappdata(h,'numVertices',dataFile.numVertices);
+setappdata(h,'numTriangles',dataFile.numTriangles);
+setappdata(h,'timeIndices',dataFile.timeIndex);
+setappdata(h,'normals',dataFile.normals);
+setappdata(h,'vertices',dataFile.vertices);
+setappdata(h,'triangles',dataFile.triangles);
 
 %Connect to Imaris
 [ xImarisApp, xPopulationSurface, xSurfaceToClassify ] = xtSetupSurfaceTransfer(  );
@@ -54,10 +65,7 @@ planeConstants = zeros(3,1);
 
 
 
-%create figure for key listening
-figure(1);
-title('Imaris bridge');
-set(gcf,'KeyPressFcn',@keyinput);
+
 surfaceClassicationIndex_ = 0;
 
 %Init so it has global scope
@@ -195,7 +203,7 @@ printSelectionInstructions();
             %disable manual selection mode
             manualPreviewIndex = 0;
             % Enter active learning mode: begin presenting unlabelled examples at current time point            
-            classifier = retrain(5);
+            classifier = retrain(3);
             presentNextExample();
         elseif strcmp(key,'w') % Classify and visualize all instances at current time point
             fprintf('Classifying all surfaces at current time point...\n');
@@ -209,7 +217,7 @@ printSelectionInstructions();
                 %Yes the currently presented instance show be laballed as a T cell
                 coiIndices = unique([coiIndices; surfaceClassicationIndex_]);
                 dataFile.coiIndices = coiIndices;
-                classifier = retrain(5);
+                classifier = retrain(3);
                 presentNextExample();
             elseif surfaceClassicationIndex_ == 0 && manualPreviewIndex ~= 0
                 coiIndices = unique([coiIndices; closestSurfaceIndices(manualPreviewIndex)]);
@@ -224,7 +232,7 @@ printSelectionInstructions();
             if surfaceClassicationIndex_ ~= 0 && manualPreviewIndex == 0
                 ncoiIndices = unique([ncoiIndices; surfaceClassicationIndex_]);
                 dataFile.ncoiIndices = ncoiIndices;
-                classifier = retrain(5);
+                classifier = retrain(3);
                 presentNextExample();
             elseif surfaceClassicationIndex_ == 0 && manualPreviewIndex ~= 0
                 ncoiIndices = unique([ncoiIndices; closestSurfaceIndices(manualPreviewIndex)]);
