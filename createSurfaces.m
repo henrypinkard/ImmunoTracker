@@ -357,12 +357,12 @@ clear mmData;
         cols = cellfun(@(index) posList.get(index).getInt('GridColumnIndex'),posIndicesCell);
         %calculate offset to translate from individual field of view to proper
         %position in stitched image
-        offsets = [(cols * (imageWidth - xPixelOverlap)) * pixelSizeXY, (rows * (imageHeight - yPixelOverlap)) * pixelSizeXY];
+        translation = [(cols * (imageWidth - xPixelOverlap)) * pixelSizeXY, (rows * (imageHeight - yPixelOverlap)) * pixelSizeXY];
         
         singlestruct = @(name, values) struct('Ids',newStats(1).Ids,'Name',name,'Values',values,'Units','');
         
-        newStats(length(newStats) + 1) = singlestruct('Stitched Position X',newStats(pxIdx).Values + offsets(:,1));
-        newStats(length(newStats) + 1) = singlestruct('Stitched Position Y',newStats(pyIdx).Values + offsets(:,2));
+        newStats(length(newStats) + 1) = singlestruct('Stitched Position X',newStats(pxIdx).Values + translation(:,1));
+        newStats(length(newStats) + 1) = singlestruct('Stitched Position Y',newStats(pyIdx).Values + translation(:,2));
         newStats(length(newStats) + 1) = singlestruct('Stitched Position Z',newStats(pzIdx).Values );
         
         %sort into alphabetical order

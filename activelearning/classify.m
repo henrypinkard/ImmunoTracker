@@ -1,4 +1,4 @@
-function [ predictedLabel, predictedValue ] = classify( classifier, features, mask, coiIndices, ncoiIndices )
+function [ predictedLabel, predictedValue ] = classify( classifier, features, mask, coiIndices, ncoiIndices, supressHist )
 %CLASSIFY use previsouly trained classifier to make predictions of the
 %instances specified by mask
 %classfiier -- the classfier object created by trainClassfier.m
@@ -23,8 +23,10 @@ end
 predictedValue = mean(predicitons,1);
 predictedLabel = predictedValue > 0.5;
 
-histogram(predictedValue,100);
-set(gca,'YScale','log')
+if(~supressHist)
+    histogram(predictedValue,100);
+    set(gca,'YScale','log')
+end
 
 end
 

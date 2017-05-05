@@ -16,6 +16,8 @@ function [ totalProjNormedIntesnity, totalProjUnnormedIntesnity, avgProjNormedIn
 
 %TODO: which of these need to be changed with new data with new piel sizes
 %etc
+
+%TODO: remove reverse rank filtering?
 maxEclideanDistance = 10;
 numSlices2Use = 6; %window size of slices used for ROI calculation
 pixelsPerCluster = 250; %approximate size of T cell
@@ -31,7 +33,7 @@ channelOffsets = reshape(channelOffsets,1,1,1,6);
 pixels = pixels - repmat(channelOffsets,size(pixels,1),size(pixels,2),size(pixels,3),1);
 
 %reverse rank filter
-% pixels = reverseRankFilter(pixels);
+pixels = reverseRankFilter(pixels);
 
 %remove border to limit filtering artifacts
 pixels = pixels(2:end-1,2:end-1,:,:);
@@ -63,6 +65,7 @@ for sliceIndex = 1:numSlices
     sliceMask = sliceMasks{sliceIndex};
     maskIndices = sliceMaskIndices{sliceIndex};
     maskSize = size(sliceMask);
+    %TODO: read from metadata
     pixelSizeXY = 0.363;
     pixelSizeZ = 4.5;
     %each pixel is a vertex
@@ -171,21 +174,21 @@ for sliceIndex = 1:numSlices
     unnormProjectedIntenistyAvg{sliceIndex} = unnormalizedProjIntenstySum ./ numPixelsByCluster;
 
     % Visualize
-%     figure(1)
-%     subplot(3,1,1)
-%     imshow(imfuse(pixels(:,:,sliceIndex,3),pixels(:,:,sliceIndex,5)),[])
-%     %show segmented regions
-%     subplot(3,1,2)
-%     imshow(clusterImg,[])
-%     %Hightlight sorted regions
-%     subplot(3,1,3)
-%     clusterImg2 = zeros(size(clusterImg));
-%     avg = normalizedProjectedIntenistySum ./ numPixelsByCluster;
-%     [asd,I] = sort(avg,'descend');
-%     clusterImg2(clusterImg == I(1)) = 100;
-%     imshow(imfuse(clusterImg2,pixels(:,:,sliceIndex,5)),[])
-%     colormap viridis
-%     bleh = 123;
+    figure(1)
+    subplot(3,1,1)
+    imshow(imfuse(pixels(:,:,sliceIndex,3),pixels(:,:,sliceIndex,5)),[])
+    %show segmented regions
+    subplot(3,1,2)
+    imshow(clusterImg,[])
+    %Hightlight sorted regions
+    subplot(3,1,3)
+    clusterImg2 = zeros(size(clusterImg));
+    avg = normalizedProjectedIntenistySum ./ numPixelsByCluster;
+    [asd,I] = sort(avg,'descend');
+    clusterImg2(clusterImg == I(1)) = 100;
+    imshow(imfuse(clusterImg2,pixels(:,:,sliceIndex,5)),[])
+    colormap viridis
+    bleh = 123;
 end
 
 %Sort by average projected intensity

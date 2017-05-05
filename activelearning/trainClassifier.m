@@ -1,4 +1,4 @@
-function [ classifier ] = trainClassifier( trainData, trainLabels, numLearners )
+function [ classifier ] = trainClassifier( trainData, trainLabels, numLearners, equalizeclasses )
 % train a classifier using given training data and labels. Return some kind
 % of classifier object that will later be passed to classify.m for
 % classificaiton
@@ -55,25 +55,27 @@ function [singleNN] = trainNN()
     % net.trainParam.mc = 1;
     net.trainParam.showWindow = false;
     net.trainParam.showCommandLine = false;
-    
-%     numZeros = sum(trainLabels == 0);
-%     numOnes = sum(trainLabels);
-%     if numOnes < numZeros
-%         %more 0s than 1s
-%         zeroIndices = find(trainLabels==0);
-%         indPerm = randperm(numZeros);
-%         toRemoveInd = zeroIndices(indPerm(1:numZeros-numOnes));
-%         trainLabels(toRemoveInd) = [];
-%         trainData(toRemoveInd,:) = [];
-%     else
-%         %more 1s than 0s
-%         oneIndices = find(trainLabels==0);
-%         indPerm = randperm(numOnes);
-%         toRemoveInd = oneIndices(indPerm(1:numOnes-numZeros));
-%         trainLabels(toRemoveInd) = [];
-%         trainData(toRemoveInd,:) = []; 
-%     end
 
+    if (equalizeclasses)
+        %equalize number of examples from two classes
+        numZeros = sum(trainLabels == 0);
+        numOnes = sum(trainLabels);
+        if numOnes < numZeros
+            %more 0s than 1s
+            zeroIndices = find(trainLabels==0);
+            indPerm = randperm(numZeros);
+            toRemoveInd = zeroIndices(indPerm(1:numZeros-numOnes));
+            trainLabels(toRemoveInd) = [];
+            trainData(toRemoveInd,:) = [];
+        else
+            %more 1s than 0s
+            oneIndices = find(trainLabels==0);
+            indPerm = randperm(numOnes);
+            toRemoveInd = oneIndices(indPerm(1:numOnes-numZeros));
+            trainLabels(toRemoveInd) = [];
+            trainData(toRemoveInd,:) = [];
+        end
+    end
 
     [singleNN,tr] = train(net,trainData',trainLabels','useParallel','yes');
 end
