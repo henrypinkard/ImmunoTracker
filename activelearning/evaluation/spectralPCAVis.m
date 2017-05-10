@@ -42,11 +42,11 @@ unlabelledScores = unlabelledSpecMetric*coeff;
 
 scatter(nonTCellScores(:,1),nonTCellScores(:,2),[25],[0 0.5 0.5],'filled','MarkerEdgeColor','none')
 colormap inferno
-alpha(0.1)
+alpha(0.3)
 hold on
 scatter(tCellScores(:,1),tCellScores(:,2),[150],tCellColors,'filled','MarkerEdgeColor',[0 0 0])
 hold off
-% legend('Not T Cell','T Cell')
+legend('Not T Cell','T Cell')
 xlabel('Spectral PC1')
 ylabel('Spectral PC2')
 % setFontsAndLines()
@@ -60,8 +60,8 @@ quiver( 0.6,0.6,arrowCoeff(4,1),arrowCoeff(4,2),0,'color',[1 1 0],'linewidth', 3
 quiver( 0.6,0.6,arrowCoeff(5,1),arrowCoeff(5,2),0,'color',[1 0 0],'linewidth', 3)
 quiver( 0.6,0.6,arrowCoeff(6,1),arrowCoeff(6,2),0,'color',[1 0 0.5],'linewidth', 3)
 hold off
-h = colorbar;
-ylabel(h,'Probability of misclassification')
+% h = colorbar;
+% ylabel(h,'Probability of misclassification')
 
 end
 

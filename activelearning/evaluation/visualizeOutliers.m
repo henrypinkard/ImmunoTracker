@@ -11,7 +11,7 @@ if (isempty(xImarisApp))
 end
 %get file
 filename = '/Users/henrypinkard/Google Drive/Research/BIDC/LNImagingProject/activelearningdevelopmentdata/CMTMRCandidates.mat';
-189619
+
 surfFile = matfile(filename,'Writable',true);
 stats = surfFile.stats;
 %get positions of each surface

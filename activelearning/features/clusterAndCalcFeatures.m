@@ -105,7 +105,8 @@ for sliceIndex = 1:numSlices
     intensityDist = sqrt(intensityDist); %equalize histogram
     specDist = rawSpecDist;
     specDist(rawSpecDist < 0) = 0;
-    specDist = sqrt(specDist);  %equalize histogram
+%     specDist = sqrt(specDist);  %equalize histogram
+
     %transform to equalize histograms
     % figure(1)
     % hist(spaceDist( ~isinf(spaceDist) & spaceDist ~=0),30)
@@ -173,22 +174,43 @@ for sliceIndex = 1:numSlices
     unnormProjectedIntenistySum{sliceIndex} = unnormalizedProjIntenstySum;
     unnormProjectedIntenistyAvg{sliceIndex} = unnormalizedProjIntenstySum ./ numPixelsByCluster;
 
-    % Visualize
-    figure(1)
-    subplot(3,1,1)
-    imshow(imfuse(pixels(:,:,sliceIndex,3),pixels(:,:,sliceIndex,5)),[])
-    %show segmented regions
-    subplot(3,1,2)
-    imshow(clusterImg,[])
-    %Hightlight sorted regions
-    subplot(3,1,3)
-    clusterImg2 = zeros(size(clusterImg));
-    avg = normalizedProjectedIntenistySum ./ numPixelsByCluster;
-    [asd,I] = sort(avg,'descend');
-    clusterImg2(clusterImg == I(1)) = 100;
-    imshow(imfuse(clusterImg2,pixels(:,:,sliceIndex,5)),[])
-    colormap viridis
-    bleh = 123;
+%     % Visualize
+%     figure(1)
+%     imshow(imfuse(pixels(:,:,sliceIndex,3),10*pixels(:,:,sliceIndex,5)),[])
+%     %green image
+%     figure(2)
+%     imshow(pixels(:,:,sliceIndex,3),[])
+%     colormap([zeros(256,1) linspace(0,1,256)' zeros(256,1)])
+%     %red image
+%     figure(3)
+%     redImg = pixels(:,:,sliceIndex,5);
+%     imshow(redImg,[min(redImg(:)) max(redImg(:))*0.5])
+%     colormap([linspace(0,1,256)' zeros(256,1) linspace(0,1,256)'])
+%     %show mask
+%     figure(4)
+%     imshow(clusterImg > 0)
+%     colormap([0 0 0; 1 0 0])
+% 
+%     
+%     %show segmented regions
+%     % contrast modification so regions are distinct form background
+%     clusterImgForDisplay = clusterImg;
+%     clusterImgForDisplay(clusterImg ~= 0) = clusterImgForDisplay(clusterImg ~= 0);
+%     figure(5)
+%     imshow(clusterImgForDisplay,[])
+%     %Hightlight sorted regions
+%     
+%     colormap ([inferno; viridis])
+%     figure(6)
+%     clusterImg2 = zeros(size(clusterImg));
+%     avg = normalizedProjectedIntenistySum ./ numPixelsByCluster;
+%     [asd,I] = sort(avg,'descend');
+%     clusterImg2(clusterImg == I(1)) = 100;
+%     imshow(clusterImg2,[])
+%     colormap([0 0 0; 1 0 0])
+%     if sliceIndex == 7 || sliceIndex == 8
+%        bleh = 5; 
+%     end
 end
 
 %Sort by average projected intensity
@@ -229,7 +251,7 @@ avgProjNormedIntensity = sum(roiProjectedIntensityAvgNormed(slices2Use) .*...
 roiProjectedIntensityAvgUnnormed = extractROIs(unnormProjectedIntenistyAvgSorted);
 avgProjUnnormedIntensity = mean(roiProjectedIntensityAvgUnnormed(slices2Use));
 
-%totl number of pixels
+%total number of pixels
 roiTotalPixels = sum(numPixelsInROIs(slices2Use));
 
 %compute correlation matrix for all pixel values
