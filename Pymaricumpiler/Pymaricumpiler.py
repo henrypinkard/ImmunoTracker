@@ -82,7 +82,7 @@ def read_raw_data(magellan, metadata, reverse_rank_filter=False):
         time_series.append((raw_stacks, nonempty_pixels, elapsed_time_ms))
     return time_series
 
-def phase_correlate(src_image, target_image, use_unnormalized=True):
+def phase_correlate(src_image, target_image, use_unnormalized=True, max_shift=None):
     """
     Compute ND registration between two images
     :param src_image:
@@ -98,45 +98,14 @@ def phase_correlate(src_image, target_image, use_unnormalized=True):
         normalized_cross_corr = np.fft.ifftn(normalized_cross_power_spectrum)
         cross_corr = normalized_cross_corr
     cross_corr_mag = np.abs(np.fft.fftshift(cross_corr))
-    shifts = np.array(np.unravel_index(np.argmax(cross_corr_mag), cross_corr.shape))
+    if max_shift == None:
+        np.min(np.array(cross_corr.shape)) // 2
+    search_offset = (np.array(cross_corr.shape) // 2 - int(max_shift)).astype(np.int)
+    shifts = np.array(np.unravel_index(np.argmax(
+            cross_corr_mag[search_offset[0]:search_offset[0] + 2 * int(max_shift),
+                            search_offset[1]:search_offset[1] + 2 * int(max_shift)]), (2 *int(max_shift), 2 *int(max_shift)) ))
+    shifts += search_offset
     return shifts.astype(np.float) - np.array(cross_corr.shape) / 2
-
-def smooth_and_register(stack, z_index, channel_index, sigma=6, use_unnormalized=True):
-    """
-    gaussian smooth, then compute pairwise registration
-    :param stack:
-    :param z_index:
-    :param channel_index:
-    :param sigma:
-    :return:
-    """
-    current_img = stack[channel_index][z_index]
-    prev_img = stack[channel_index][z_index - 1]
-    filt1 = filters.gaussian_filter(current_img.astype(np.float), sigma)
-    filt2 = filters.gaussian_filter(prev_img.astype(np.float), sigma)
-    offset = phase_correlate(filt1, filt2, use_unnormalized=use_unnormalized)
-    return offset
-
-def compute_registrations(stack, nonempty, use_unnormalized=True):
-    #tuple with shifts for optimal registartion
-    regs = []
-    #compute registrations for each valid set of consecutive slices
-    for channel_index in range(len(list(stack.keys()))):
-        regs.append([])
-        for z_index in range(len(stack[channel_index])):
-            if z_index == 0:
-                # take first one as origin
-                regs[channel_index].append((0, 0))
-            elif (not nonempty[z_index - 1]) or (not nonempty[z_index]):
-                #only compute registration if data was acquired at both
-                regs[channel_index].append((0, 0))
-            else:
-                offset = smooth_and_register(stack, z_index, channel_index, use_unnormalized=use_unnormalized)
-                regs[channel_index].append(offset)
-    abs_regs = []
-    for channel_reg in regs:
-        abs_regs.append(np.cumsum(channel_reg, axis=0))
-    return abs_regs
 
 def register_z_stack(channel_stack, registrations, background=0):
     """
@@ -155,6 +124,121 @@ def register_z_stack(channel_stack, registrations, background=0):
             one_channel_registered_stack[one_channel_registered_stack < background] = background
         registered_stacks.append(one_channel_registered_stack)
     return registered_stacks
+
+def intra_stack_registrations(channel_stack, nonempty_pixels, max_shift=20, background=10, use_channels=[1, 2, 3, 4, 5],
+                              agreement_k=3, likelihood_agreement_threshold=7e-3, sigma_noise=2):
+    """
+    Compute registrations for each z slice within a stack using method based on cross correaltion followed by gaussian
+    filtering and MLE fitting
+    :param channel_stack:
+    :param nonempty_pixels:
+    :param max_shift:
+    :param background:
+    :param use_channels:
+    :param agreement_k:
+    :param likelihood_agreement_threshold:
+    :param sigma_noise:
+    :return:
+    """
+
+    def intra_stack_x_corr_regs(stack, nonempty, use_unnormalized=True, sigma=6, max_shift=None):
+        """
+        Smooth and cross correlate successive slices then take cumulative sum to figure out relative registrations for all
+        channels within a stack
+        """
+
+        def smooth_and_register(stack, z_index, channel_index, sigma=6, use_unnormalized=True, max_shift=None):
+            """
+            gaussian smooth, then compute pairwise registration
+            """
+            current_img = stack[channel_index][z_index]
+            prev_img = stack[channel_index][z_index - 1]
+            filt1 = filters.gaussian_filter(current_img.astype(np.float), sigma)
+            filt2 = filters.gaussian_filter(prev_img.astype(np.float), sigma)
+            offset = phase_correlate(filt1, filt2, use_unnormalized=use_unnormalized, max_shift=max_shift)
+            return offset
+
+        # tuple with shifts for optimal registartion
+        regs = []
+        # compute registrations for each valid set of consecutive slices
+        for channel_index in range(len(list(stack.keys()))):
+            regs.append([])
+            for z_index in range(len(stack[channel_index])):
+                if z_index == 0:
+                    # take first one as origin
+                    regs[channel_index].append((0, 0))
+                elif (not nonempty[z_index - 1]) or (not nonempty[z_index]):
+                    # only compute registration if data was acquired at both
+                    regs[channel_index].append((0, 0))
+                else:
+                    offset = smooth_and_register(stack, z_index, channel_index, use_unnormalized=use_unnormalized,
+                                                 sigma=sigma, max_shift=max_shift)
+                    regs[channel_index].append(offset)
+        abs_regs = []
+        for channel_reg in regs:
+            abs_regs.append(np.cumsum(channel_reg, axis=0))
+        return abs_regs
+
+    # make a copy and set background
+    channel_stack = {key: channel_stack[key].copy() for key in channel_stack.keys()}
+    for channel in channel_stack.values():
+        channel[channel < background] = background
+    absolute_registrations = intra_stack_x_corr_regs(channel_stack, nonempty_pixels, sigma=2, max_shift=max_shift)
+    zero_centered_regs = []
+
+    registration_background_subtract_sigma = 2.5
+    for channel_reg in absolute_registrations:
+        background_shift = np.array([
+                ndi.filters.gaussian_filter1d(channel_reg[:, 0], sigma=registration_background_subtract_sigma),
+                ndi.filters.gaussian_filter1d(channel_reg[:, 1], sigma=registration_background_subtract_sigma)]).T
+        zero_centered_regs.append(channel_reg - background_shift)
+    # plt.figure(); plt.plot(np.array(absolute_registrations)[1:,:, 0], '.-')
+    # plt.figure(); plt.plot(np.array(zero_centered_regs)[1:,:, 0].T); plt.ylim([-24, 24]); plt.legend([str(i) for i in range(5)])
+
+    #ignore empty slices
+    regs_to_use = np.array([zero_centered_regs[channel] for channel in use_channels])[..., nonempty_pixels, :]
+
+    ####### compute per-chanel likelihoods #########
+    x = np.linspace(-max_shift, max_shift, 500)
+    #(channels) x (z slice) x (2 dims of registration) x (parameter space)
+    likelihoods = np.zeros((regs_to_use.shape[:2]) + (2, x.size))
+    for channel_index in range(regs_to_use.shape[0]):
+        for z_index in range(regs_to_use.shape[1]):
+            registration = regs_to_use[channel_index, z_index]
+            likelihoods[channel_index, z_index, :, :] = (1 / (np.sqrt(2*np.pi) * sigma_noise) *
+                np.exp(-((np.stack(2*[x]) - np.expand_dims(registration, axis=1)) ** 2) / (2 * sigma_noise ** 2)))
+
+    ##### Look for different channels that have similar likelihoods ######
+    #figure out if at least k channels agree on a registration
+    channel_comb_indices = [np.array(comb) for comb in combinations(range(regs_to_use.shape[0]), agreement_k)]
+    channel_comb_mls = np.zeros((len(channel_comb_indices), *likelihoods.shape[1:-1]))
+    for cc_index, channel_comb in enumerate(channel_comb_indices):
+        channel_comb_mls[cc_index, :, :] = np.max(np.prod(likelihoods[channel_comb, :, :, :], axis=0), axis=2)
+    best_k_channel_likelihood = np.max(channel_comb_mls, axis=0)
+    best_k_channel_index = np.argmax(channel_comb_mls, axis=0)
+    #just use the best channel trio from one channel arbitrarily
+    likelihood_agreement_channels = np.array(channel_comb_indices)[best_k_channel_index][:, 0, :]
+    likelihood_agreement_valid_slices = ndi.gaussian_filter1d(np.mean(best_k_channel_likelihood, axis=1), 2) > likelihood_agreement_threshold
+    # plt.figure(); plt.semilogy(ndi.gaussian_filter1d(np.mean(best_k_channel_likelihood, axis=1), 2), '.-')
+
+    ##### Compute MLE over only the best slices
+    mles = np.zeros(likelihoods.shape[1:3])
+    for z_index in range(likelihoods.shape[1]):
+        if not likelihood_agreement_valid_slices[z_index]:
+            #skip over slices where not enough channels predict roughly the same thing
+            continue #keep estimates at 0
+        else:
+            likelihood_prod_best_channels = np.prod(likelihoods[likelihood_agreement_channels[z_index], z_index, :, :], axis=0)
+            # likelihood_prod_all_channels = np.prod(likelihoods[:, z_index, :, :], axis=0)
+            #MLE
+            # mles[z_index] = x[np.argmax(likelihood_prod_all_channels, axis=1)]
+            mles[z_index] = x[np.argmax(likelihood_prod_best_channels, axis=1)]
+    # plt.figure(); plt.plot(mles, '.-')
+
+    registrations = np.zeros(absolute_registrations[0].shape)
+    registrations[nonempty_pixels] = mles
+    # registered_stacks = register_z_stack(channel_stack, -registrations)
+    return registrations
 
 def exporttiffstack(datacube, name='export'):
     '''
@@ -197,7 +281,56 @@ def write_imaris(directory, name, time_series, metadata):
                     writer.write_z_slice(image, z_index, channel_index, time_index, elapsed_time_ms)
     print('Finshed!')
 
-def compute_stack_registrations(stacks, channel_index, sigma=3):
+def stitch_image(raw_stacks, translations, registrations, metadata, row_col_coords, background=None):
+    """
+    Stitch raw stacks into
+    :param raw_data: dict with positions as keys containing list with 1 3d numpy array of pixels for each channel
+    :param params:
+    :return:
+    """
+    tile_shape = np.array([metadata['tile_height'], metadata['tile_width']])
+    tile_overlap = np.array([metadata['overlap_y'], metadata['overlap_x']])
+    registrations = np.round(registrations).astype(np.int)
+    # translate image so top left corner doesn't have excess space
+    #TODO: make sure z coordinates are done correctly, and that minium z offset is 0 so extra padding doesn't get added
+    z_global_translation_offset = -np.min(translations[:, 0])
+    # Figure out size of stitched image
+    # image size is range between biggest and smallest translation + 1/2 tile size on either side
+    stitched_image_size = [np.ptp(translations[:, 0]) + metadata['max_z_index'] - metadata['min_z_index'] + 1,
+                           (1 + np.ptp(row_col_coords[:, 0], axis=0)) * (tile_shape[0] - tile_overlap[0]),
+                           (1 + np.ptp(row_col_coords[:, 1], axis=0)) * (tile_shape[1] - tile_overlap[1])]
+    stitched = []
+    for channel_index in range(len(raw_stacks[0])):
+        if background is not None:
+            stitched.append(background * np.ones(stitched_image_size,
+                           dtype=np.uint8 if metadata['byte_depth'] == 1 else np.uint16))
+        else:
+            stitched.append(np.zeros(stitched_image_size, dtype=np.uint8 if metadata['byte_depth'] == 1 else np.uint16))
+
+    for z in np.arange(stitched[0].shape[0]):
+        print('stitching slice {}'.format(z))
+        transformed_zs = z + translations[:, 0]
+        slice_regs = registrations[range(translations.shape[0]), transformed_zs[range(translations.shape[0])], :]
+        tile_centers = translations[:, 1:]
+
+        #add in each tile to appropriate place in stitched image
+        for p_index in range(len(tile_centers)):
+            #compute destination coordinates, and coordinates in tile to extact
+            #destination coordinates are fixed
+            destination_corners = np.array([row_col_coords[p_index] * (tile_shape - tile_overlap),
+                (row_col_coords[p_index] + 1) * (tile_shape - tile_overlap) ])
+            destination_size = tile_shape - tile_overlap
+            #TODO: add in global translation? and check that it doesnt exceed overlap over 2 with the slice registration
+            border_size = tile_overlap // 2 + slice_regs[p_index]
+            for channel_index in range(len(raw_stacks[0])):
+                stitched[channel_index][z, destination_corners[0, 0]:destination_corners[1, 0],
+                                           destination_corners[0, 1]:destination_corners[1, 1]] = \
+                                            raw_stacks[p_index][channel_index][transformed_zs[p_index],
+                                            border_size[0]:border_size[0] + destination_size[0],
+                                            border_size[1]:border_size[1] + destination_size[1]]
+    return stitched
+
+def compute_inter_stack_registrations(stacks, channel_index, sigma=3):
     """
     Register stacks to one another using phase correlation and a least squares fit
     :param stacks:
@@ -264,67 +397,7 @@ def compute_stack_registrations(stacks, channel_index, sigma=3):
 
     return least_squares_traslations(two_tile_registrations, metadata)
 
-def stitch_image(raw_stacks, params, metadata, background=None):
-    """
-    Stitch raw stacks into
-    :param raw_data: dict with positions as keys containing list with 1 3d numpy array of pixels for each channel
-    :param params:
-    :return:
-    """
-    all_yx_translations = np.concatenate(list(zip(*params))[1], axis=0)
-    all_z_tranlations = np.array(list(zip(*params))[0])
-
-    # translate image so top left corner doesn't have excess space
-    yx_global_translation_offset = -np.min(all_yx_translations, axis=0) + np.array(
-                            [metadata['tile_height'] // 2, metadata['tile_width'] // 2])
-    z_global_translation_offset = -np.min(all_z_tranlations)
-    # Figure out size of stitched image
-    # image size is range between biggest and smallest translation + 1/2 tile size on either side
-    stitched_image_size = [np.ptp(all_z_tranlations) + metadata['max_z_index'] - metadata['min_z_index'] + 1,
-                     np.ptp(all_yx_translations, axis=0)[0] + metadata['tile_height'],
-                     np.ptp(all_yx_translations, axis=0)[1] + metadata['tile_width']]
-    stitched_all_channels = []
-    for channel_index in range(len(raw_stacks[0])):
-        if background is not None:
-            stitched = background * np.ones(stitched_image_size,
-                           dtype=np.uint8 if metadata['byte_depth'] == 1 else np.uint16)
-        else:
-            stitched = np.zeros(stitched_image_size, dtype=np.uint8 if metadata['byte_depth'] == 1 else np.uint16)
-        # go through each tile and add into the appropriate place
-        for position_index in raw_stacks.keys():
-            stack = raw_stacks[position_index][channel_index]
-            z_offset = params[position_index][0] + z_global_translation_offset
-            # TODO: maybe be smarter about picking valid parts of images
-            for z_index in range(stack.shape[0]):
-                yx_offset = params[position_index][1][z_index] + yx_global_translation_offset
-                image = stack[z_index]
-                if background is not None:
-                    image[image < background] = background
-                stitched[z_offset + z_index,
-                    yx_offset[0] - metadata['tile_height'] // 2:yx_offset[0] + metadata['tile_height'] // 2,
-                    yx_offset[1] - metadata['tile_height'] // 2:yx_offset[1] + metadata['tile_height'] // 2] = stack[z_index]
-        stitched_all_channels.append(stitched)
-    return stitched_all_channels
-
-def initialize_optimization_params():
-    """
-    Create initial parameters to be optimized
-    :return: list of lengtht num_positions, where each entry is a tuple with
-    (zyx offset of stack, individual tile xy_offsets)
-    """
-    params = []
-    for position_index in range(metadata['num_positions']):
-        row, col = magellan.row_col_tuples[position_index]
-        stack_offset = np.array([0,
-                        metadata['tile_height'] // 2 + row * (metadata['tile_height'] - metadata['overlap_y']),
-                        metadata['tile_width'] // 2 + col * (metadata['tile_width'] - metadata['overlap_x'])])
-        # within_stack_params = np.array(raw_stacks[position_index][0].shape[0] * [(0, 0)])
-        # amplitude, period, phase, direction,
-        within_stack_params = np.array([15, 2.1, 0, np.pi / 4])
-        params.append([stack_offset, within_stack_params])
-    return params
-
-def compute_alignment_cost_correlation(stacks, nonempty_pixels, params):
+def inter_stack_correlation_cost(stacks, nonempty_pixels, params):
 
     def compute_cost(stack1, stack2, yx_offset, z_index):
         img1 = stack1[z_index]
@@ -374,208 +447,6 @@ def compute_alignment_cost_correlation(stacks, nonempty_pixels, params):
                         continue  # nonadjacent tiles
     return cost
 
-def compute_axial_fourier_cost(volume, rho_cutoff=0.2, sigma=6):
-    """
-    Compute a cost metric based on high frequency information along the z axis
-    """
-    volume_smoothed = np.zeros(volume.shape)
-    for i in range(volume.shape[0]):
-        volume_smoothed[i, :, :] = ndi.gaussian_filter(volume[i,:,:], sigma=sigma)
-    #take central part only so empty space doesnt affect measurements
-    volume_smoothed = volume_smoothed[:, 60:-60, 60:-60]
-    ft = np.fft.fftshift(np.fft.fftn(volume_smoothed))
-    absft = np.abs(ft)
-    normed = absft / np.linalg.norm(np.ravel(absft))
-    #make a mask that weights vertical frequncies most healivy
-    y, x = np.meshgrid(np.linspace(-1, 1, normed.shape[1]), np.linspace(-1, 1, normed.shape[2]))
-    y = np.expand_dims(y, 0)
-    x = np.expand_dims(x, 0)
-    z = np.expand_dims(np.expand_dims(np.linspace(-1, 1, normed.shape[0]), 1), 1)
-    r = np.sqrt(x ** 2 + y ** 2)
-    rho = np.sqrt(r ** 2 + z ** 2)
-    phi = np.arctan(r / rho)
-    weight = 1 / ((0.5 + phi) ** 2)
-    weight[rho_cutoff < 0.2] = 0
-    return np.sum(weight * normed)
-
-def compute_xy_offsets_for_stack(channel_stack, nonempty_pixels, max_shift=20, background=10,
-                        use_channels=[1, 2, 3, 4, 5], agreement_k=3, sigma_noise = 2):
-    # make a copy and set background
-    channel_stack = {key: channel_stack[key].copy() for key in channel_stack.keys()}
-    for channel in channel_stack.values():
-        channel[channel < background] = background
-    absolute_registrations = compute_registrations(channel_stack, nonempty_pixels)
-    zero_centered_regs = []
-
-    registration_background_subtract_sigma = 1.5
-    for channel_reg in [absolute_registrations[index] for index in range(len(absolute_registrations))]:
-        background_shift = np.array([
-                ndi.filters.gaussian_filter1d(channel_reg[:, 0], sigma=registration_background_subtract_sigma),
-                ndi.filters.gaussian_filter1d(channel_reg[:, 1], sigma=registration_background_subtract_sigma)]).T
-        zero_centered_regs.append(channel_reg - background_shift)
-
-    #ignore empty slices
-    regs_to_use = np.array([zero_centered_regs[channel] for channel in use_channels])[..., nonempty_pixels, :]
-
-    ####### compute per-chanel likelihoods #########
-    x = np.linspace(-max_shift, max_shift, 200)
-    #(channels) x (z slice) x (2 dims of registration) x (parameter space)
-    likelihoods = np.zeros((regs_to_use.shape[:2]) + (2, x.size))
-    for channel_index in range(regs_to_use.shape[0]):
-        for z_index in range(regs_to_use.shape[1]):
-            registration = regs_to_use[channel_index, z_index]
-            likelihoods[channel_index, z_index, :, :] = (1 / (np.sqrt(2*np.pi) * sigma_noise) *
-                np.exp(-((np.stack(2*[x]) - np.expand_dims(registration, axis=1)) ** 2) / (2 * sigma_noise ** 2)))
-
-    #get maximum likelihood indices and estimates (channels) x (z slice) x (2 dims of registration) x (parameter space)
-    # ml_indices = np.argmax(likelihoods, axis=3)
-    # ml_likelihood = np.max(likelihoods, axis=3)
-    # channel_specific_mles = x[ml_indices]
-
-    ##### Look for different channels that have similar likelihoods ######
-    agreement_k = 3
-    #figure out if at least k channels agree on a registration
-    channel_comb_indices = [np.array(comb) for comb in combinations(range(regs_to_use.shape[0]), agreement_k)]
-    channel_comb_mls = np.zeros((len(channel_comb_indices), *likelihoods.shape[1:-1]))
-    for cc_index, channel_comb in enumerate(channel_comb_indices):
-        channel_comb_mls[cc_index, :, :] = np.max(np.prod(likelihoods[channel_comb, :, :, :], axis=0), axis=2)
-    best_k_channel_likelihood = np.max(channel_comb_mls, axis=0)
-    best_k_channel_index = np.argmax(channel_comb_mls, axis=0)
-    #just use the best channel trio from one channel arbitrarily
-    likelihood_agreement_channels = np.array(channel_comb_indices)[best_k_channel_index][:, 0, :]
-    likelihood_agreement_threshold = 1e-3
-    likelihood_agreement_valid_slices = np.sum(best_k_channel_likelihood > likelihood_agreement_threshold, axis=1) == 2
-    # plt.figure(); plt.semilogy(best_k_channel_likelihood, '.-')
-
-    def prior_and_regularization():
-        all_channel_likelihood = np.prod(likelihoods, axis=0)
-        all_channel_ml_indices = np.argmax(all_channel_likelihood, axis=2)
-        all_channel_ml_likelihood = np.max(all_channel_likelihood, axis=2)
-        all_channel_mle = x[all_channel_ml_indices]
-        #### Regularization #######
-        #regularization is based on a model that cosine transforms a uniform distribution over the expected amplitudes of
-        #the movements. the amplitude of the movements
-        #to get the regularization term, first need to solve estiamte the hyperparameter that quantifies movement amplitude
-        #usign MLE
-        #estimate the paramters of the regularization directly from data (i.e. the amplitude of the movement)
-        regis_axis_0_mles = []
-        regis_axis_1_mles = []
-        for z_index in range(likelihood_agreement_valid_slices.size):
-            if likelihood_agreement_valid_slices[z_index]:
-                # for channel_index in likelihood_agreement_channels[z_index]:
-                regis_axis_0_mles.append(x[np.argmax(np.prod(likelihoods[:, z_index, 0, :], axis=0))])
-                regis_axis_1_mles.append(x[np.argmax(np.prod(likelihoods[:, z_index, 1, :], axis=0))])
-        plt.figure(); plt.hist(regis_axis_0_mles, 40)
-
-        #TODO: estimate amplitude over all stacks at once?
-        counts0, bins0 = np.histogram(all_channel_mle[:, 0], 100, range=[-max_shift, max_shift])
-        counts1, bins1 = np.histogram(all_channel_mle[:, 1], 100, range=[-max_shift, max_shift])
-        plt.figure(); plt.hist(all_channel_mle[:, 1], 40)
-        bin_width = bins0[1] - bins0[0]
-        #exclude edge bins which are artificaially full due to clipping
-        #TODO: might want to increase amplitude by a multipicative factor since all channels used to estimate it,
-        #TODO: and not all channels have data which might bias it towards 0
-        amplitude = np.abs(np.array([bins0[1:-1][np.argmax(counts0[1:-1])],
-                                     bins0[1:-1][np.argmax(counts1[1:-1])]])) + bin_width / 2
-
-        with np.warnings.catch_warnings():  #ignore the nan warning because it gets fixed
-            np.warnings.filterwarnings('ignore', 'invalid value encountered in sqrt')
-            regularization_term = 1 / np.expand_dims(amplitude, 1) / (np.pi * np.sqrt(
-                                             1 - (np.stack(2*[x]) / np.expand_dims(amplitude, 1)) ** 2) )
-        regularization_term[np.isnan(regularization_term)] = 0
-        #estiamte sigma of the smoothing kernel from the amplitude of the movements
-        regularization_term_smoothed = np.zeros(regularization_term.shape)
-        regularization_term_smoothed[0, :] = ndi.gaussian_filter1d(regularization_term[0, :],
-                            amplitude[0] / 5 / (x[1] - x[0]), truncate=x.size / (amplitude[0] / 5 / (x[1] - x[0])))
-        regularization_term_smoothed[1, :] = ndi.gaussian_filter1d(regularization_term[1, :],
-                            amplitude[1] / 5 / (x[1] - x[0]), truncate=x.size / (amplitude[0] / 5 / (x[1] - x[0])))
-        #make sure its non-zero everywhere
-        regularization_term_smoothed[regularization_term_smoothed == 0] = np.finfo(float).tiny
-
-        #look at disagreement between prior and likelihood to determine which channels have possible useful data
-        prior_likelihood_agreement = np.sum(likelihoods * regularization_term_smoothed, axis=3)
-
-        prior_likelihood_exclusion_cutoff = 0.1
-        #Set cutoff for prior likehood difference and use only good channels
-        #use only ones where both x and y registrations have reasonable likelihoods
-        valid_likelihoods = np.sum(prior_likelihood_agreement > prior_likelihood_exclusion_cutoff, axis=2) == 2
-        # plt.figure(); plt.hist(np.ravel(prior_likelihood_agreement[:, :, 0]), 40)
-        # plt.figure(); plt.semilogy(prior_likelihood_agreement[:, :, 0].T , '.-')
-        # plt.figure(); plt.semilogy(prior_likelihood_agreement[:, :, 0].T , '.-'); plt.ylim([0.01, 1.1])
-        # plt.figure(); plt.plot(mles[:, :, 0].T, '.-')
-
-    mles = np.zeros(likelihoods.shape[1:3])
-    mles_likelihood = np.zeros(likelihoods.shape[1:3])
-    maps = np.zeros(likelihoods.shape[1:3])
-    posterior_means = np.zeros(likelihoods.shape[1:3])
-    for z_index in range(likelihoods.shape[1]):
-        #TODO: skip over slices where some combination of agreement between likelihoods and prior is not met
-        #TODO: use information from all channels that agree with the best three and for which exclusion criteria is not met
-        channel_mask = valid_likelihoods[:, z_index]
-        # print('z {}, channels {}'.format(z_index, np.where(channel_mask)))
-        if np.sum(channel_mask) <= 2:
-            pass #keep estimates at 0
-        else:
-            likelihood_prod = np.prod(likelihoods[channel_mask, z_index, :, :], axis=0)
-            #use map, mle, or posterior mean?
-            #MLE
-            mles[z_index] = x[np.argmax(likelihood_prod, axis=1)]
-            mles_likelihood[z_index] = x[np.argmax(likelihood_prod, axis=1)]
-            #MAP
-            posterior = regularization_term_smoothed * likelihood_prod
-            maps[z_index] = x[np.argmax(posterior, axis=1)]
-            #posterior mean
-            #integrate over posterior
-            normalizing_constant = np.sum(posterior, axis=1)
-            normalizing_constant[normalizing_constant==0] = 1 #doesn't matter, since posterior is undefined
-            normalized_posterior = posterior / np.expand_dims(normalizing_constant, axis=1)
-            posterior_means[z_index] = np.sum(x * normalized_posterior, axis=1)
-
-    #TODO: figure out which estimator to use by looking at stacks, maybe
-    plt.figure()
-    axis_index = 0
-    plt.plot(mles[:, axis_index], '.-')
-    plt.plot(maps[:, axis_index], '.-')
-    plt.plot(posterior_means[:, axis_index], '.-')
-
-    plt.figure()
-    plt.plot(np.log(ml_likelihood))
-
-    channel = 5
-    exporttiffstack(channel_stack[channel][nonempty_pixels,:,:].astype(np.uint16), 'original_ch{}'.format(channel))
-
-    # #dims are z, xy, registration_domain
-    # data_term = np.stack(sum_likelihood)
-    #
-    # ml_vals = np.max(all_likelihoods, axis=2)
-    # ml_regs = x[ml_indices]
-
-
-        # #take median of all remaining channels
-        # consensus_regs.append(np.median(np.array(regs), axis=0) if len(regs) > 0 else np.array([0, 0]))
-
-    # plt.figure()
-    # plt.plot(np.std(np.stack([np.array(reg[:, 1]) for reg in zero_centered_regs]), axis=0))
-    #
-    # plt.plot(np.array(consensus_regs)[:, 0])
-    # plt.figure()
-    # plt.plot(np.array(zero_centered_regs[3])[:, 0])
-    # plt.plot(np.array(zero_centered_regs[1])[:, 0])
-    # corr = np.array(zero_centered_regs[1])[:, 0] * np.array(zero_centered_regs[4])[:, 0]
-    # plt.figure()
-    # plt.plot(corr)
-
-
-    plt.plot(np.array(channel_reg)[:, 0])
-
-    registered_stacks = register_z_stack(channel_stack, -np.array(consensus_regs))
-    channel = 5
-    exporttiffstack(channel_stack[channel].astype(np.uint16), 'original_ch{}'.format(channel))
-    exporttiffstack(registered_stacks[channel].astype(np.uint16), 'registered_ch'.format(channel))
-
-
-
-
 def compute_fourier_cost_xy(stitched, hi_freq_cutoff=0.0002):
     """
     Compute cost based on relative amount of high frequency information in 2D stitched image
@@ -596,7 +467,7 @@ def compute_fourier_cost_xy(stitched, hi_freq_cutoff=0.0002):
     normed = absft / np.linalg.norm(np.ravel(absft))
     return np.sum(normed[mask])
 
-def optimize_z_params(raw_stacks, params, metadata, channel=0, search_range=10):
+def optimize_z_translations(raw_stacks, params, metadata, channel=0, search_range=10):
     """
     Add positions in 1 at a time, computing best offset
     """
@@ -628,15 +499,25 @@ metadata['num_frames'] = 1
 raw_data = read_raw_data(magellan, metadata, reverse_rank_filter=True)
 time_series = []
 for raw_stacks, nonempty_pixels, elapsed_time_ms in raw_data:
-    params = initialize_optimization_params()
+    translation_params = np.zeros((metadata['num_positions'], 3), dtype=np.int)
+    registration_params = []
     #estimate z offsets for each channel
     # optimize_z_params(raw_stacks, params, metadata)
+    registered_stacks = {}
+    #TODO: improve stitching so valid part of each image gets taken
+    for position_index in raw_stacks.keys():
+        print('Registering stack slices for position {}'.format(position_index))
+        registration_params.append(intra_stack_registrations(raw_stacks[position_index],
+                                                             nonempty_pixels[position_index], max_shift=max(metadata['overlap_x'], metadata['overlap_y'])))
+    stitched = stitch_image(raw_stacks, translation_params, registration_params, metadata, np.array(magellan.row_col_tuples))
+    time_series.append((stitched, elapsed_time_ms))
 
-    compute_xy_offsets_for_stack(raw_stacks[0], nonempty_pixels[0], metadata['overlap_x'] / 2)
 
+write_imaris(imaris_dir, imaris_name + '_tiles_registered', time_series, metadata)
 
-
-    # time_series.append((stitch_image(raw_stacks, params, metadata), elapsed_time_ms))
+    # Write out a single position to Imaris
+    # write_imaris(imaris_dir, imaris_name + '_single_pos_registered', [(registered_stacks[0], elapsed_time_ms)], metadata)
+    # write_imaris(imaris_dir, imaris_name + '_single_pos_unregistered', [(raw_stacks[0], elapsed_time_ms)], metadata)
 
 
 # def fourier_experiement():
@@ -725,18 +606,6 @@ for raw_stacks, nonempty_pixels, elapsed_time_ms in raw_data:
 #     plt.plot(cost)
 #     plt.show()
 
-
-
-
-#TODO: write regularizer
-#TODO: write optimization routine (could maybe write out intermediate stitched images as optimization proceeds
-
-# write_imaris(imaris_dir, imaris_name + '_no_pos_reg_stitched_no_registration', time_series, metadata)
-
-
-#Write out a single position to Imaris
-# write_imaris(imaris_dir, imaris_name + '_single_pos_registered', [(registered_stacks[0], elapsed_time_ms)], metadata)
-# write_imaris(imaris_dir, imaris_name + '_single_pos_unregistered', [(raw_stacks[0], elapsed_time_ms)], metadata)
 
 
 
