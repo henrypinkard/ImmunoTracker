@@ -8,7 +8,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from PIL import Image
 from scipy import ndimage as ndi
-from scipy import signal
+from scipy import signal, optimize
 from itertools import combinations
 import warnings
 
@@ -21,7 +21,6 @@ def open_magellan(path):
     """
     magellan = MagellanDataset(path)
     metadata = {}
-    #read metadata
     if magellan.summary_metadata['PixelType'] == 'GRAY8':
         metadata['byte_depth'] = 1
     else:
@@ -82,32 +81,7 @@ def read_raw_data(magellan, metadata, reverse_rank_filter=False):
         time_series.append((raw_stacks, nonempty_pixels, elapsed_time_ms))
     return time_series
 
-def phase_correlate(src_image, target_image, use_unnormalized=True, max_shift=None):
-    """
-    Compute ND registration between two images
-    :param src_image:
-    :param target_image:
-    :return:
-    """
-    src_ft = np.fft.fftn(src_image)
-    target_ft = np.fft.fftn(target_image)
-    if use_unnormalized == True:
-        cross_corr = np.fft.ifftn((src_ft * target_ft.conj()))
-    else:
-        normalized_cross_power_spectrum = (src_ft * target_ft.conj()) / np.abs(src_ft * target_ft.conj())
-        normalized_cross_corr = np.fft.ifftn(normalized_cross_power_spectrum)
-        cross_corr = normalized_cross_corr
-    cross_corr_mag = np.abs(np.fft.fftshift(cross_corr))
-    if max_shift == None:
-        max_shift = np.min(np.array(cross_corr.shape)) // 2
-    search_offset = (np.array(cross_corr.shape) // 2 - int(max_shift)).astype(np.int)
-    shifts = np.array(np.unravel_index(np.argmax(
-            cross_corr_mag[search_offset[0]:search_offset[0] + 2 * int(max_shift),
-                            search_offset[1]:search_offset[1] + 2 * int(max_shift)]), (2 *int(max_shift), 2 *int(max_shift)) ))
-    shifts += search_offset
-    return shifts.astype(np.float) - np.array(cross_corr.shape) / 2
-
-def intra_stack_registration(single_channel_stack, registrations, background=0, mode='integer'):
+def apply_intra_stack_registration(single_channel_stack, registrations, background=0, mode='integer'):
     """
     Apply the computed within z-stack registrations to all channels
     :param stack: dict with channel indices as keys and 3D numpy arrays specific to a single stack in a single channel
@@ -167,6 +141,31 @@ def intra_stack_registrations(channel_stack, nonempty_pixels, max_shift=20, back
         channels within a stack
         """
 
+        def phase_correlate(src_image, target_image, use_unnormalized=True, max_shift=None):
+            """
+            Compute ND registration between two images
+            :param src_image:
+            :param target_image:
+            :return:
+            """
+            src_ft = np.fft.fftn(src_image)
+            target_ft = np.fft.fftn(target_image)
+            if use_unnormalized == True:
+                cross_corr = np.fft.ifftn((src_ft * target_ft.conj()))
+            else:
+                normalized_cross_power_spectrum = (src_ft * target_ft.conj()) / np.abs(src_ft * target_ft.conj())
+                normalized_cross_corr = np.fft.ifftn(normalized_cross_power_spectrum)
+                cross_corr = normalized_cross_corr
+            cross_corr_mag = np.abs(np.fft.fftshift(cross_corr))
+            if max_shift == None:
+                max_shift = np.min(np.array(cross_corr.shape)) // 2
+            search_offset = (np.array(cross_corr.shape) // 2 - int(max_shift)).astype(np.int)
+            shifts = np.array(np.unravel_index(np.argmax(
+                cross_corr_mag[search_offset[0]:search_offset[0] + 2 * int(max_shift),
+                search_offset[1]:search_offset[1] + 2 * int(max_shift)]), (2 * int(max_shift), 2 * int(max_shift))))
+            shifts += search_offset
+            return shifts.astype(np.float) - np.array(cross_corr.shape) / 2
+
         def smooth_and_register(stack, z_index, channel_index, sigma=6, use_unnormalized=True, max_shift=None):
             """
             gaussian smooth, then compute pairwise registration
@@ -212,11 +211,38 @@ def intra_stack_registrations(channel_stack, nonempty_pixels, max_shift=20, back
                 ndi.filters.gaussian_filter1d(channel_reg[:, 0], sigma=registration_background_subtract_sigma),
                 ndi.filters.gaussian_filter1d(channel_reg[:, 1], sigma=registration_background_subtract_sigma)]).T
         zero_centered_regs.append(channel_reg - background_shift)
-    # plt.figure(); plt.plot(np.array(absolute_registrations)[1:,:, 0], '.-')
+    # plt.figure(); plt.plot(np.array(absolute_registrations)[1:,:, 0].T, '.-')
     # plt.figure(); plt.plot(np.array(zero_centered_regs)[1:,:, 0].T); plt.ylim([-24, 24]); plt.legend([str(i) for i in range(5)])
 
     #ignore empty slices
     regs_to_use = np.array([zero_centered_regs[channel] for channel in use_channels])[..., nonempty_pixels, :]
+    # plt.figure(); plt.plot(regs_to_use[:,:, 0].T); plt.ylim([-24, 24]); plt.legend([str(i) for i in range(5)])
+    data = regs_to_use[-1, 40:80, 0]
+    x = np.arange(data.size)
+
+
+    # phase_possiblities = np.linspace(0, 2*np.pi, 500)
+    # amp_possibilities = np.linspace(0, np.max(np.abs(data)), 500)
+    # period_possibilities = np.linspace(0.5, 6, 500)
+    #
+    # predict_fn = lambda amp, phase, period, x: amp * np.sin(2*np.pi / period * x + phase)
+    # loss_fn = lambda data, pred: np.mean((data - pred) ** 2, axis=-1)
+    #
+    # predictions = predict_fn(np.reshape(amp_possibilities, [-1, 1, 1, 1]), np.reshape(phase_possiblities, [1, -1, 1, 1]),
+    #            np.reshape(period_possibilities, [1, 1, -1, 1]), np.reshape(x, [1, 1, 1, -1]))
+    #
+    # error = loss_fn(data, predictions)
+    # best_indices = np.unravel_index(np.argmin(error), error.shape)
+    # amp_fit = amp_possibilities[best_indices[0]]
+    # phase_fit = phase_possiblities[best_indices[1]]
+    # period_fit = period_possibilities[best_indices[2]]
+    #
+    # plt.figure(); plt.plot(data, '.-'); plt.plot(predict_fn(amp_fit, phase_fit, period_fit, x))
+
+
+
+
+
 
     ####### compute per-chanel likelihoods #########
     x = np.linspace(-max_shift, max_shift, 500)
@@ -274,7 +300,7 @@ def exporttiffstack(datacube, name='export'):
     path = "/Users/henrypinkard/Desktop/{}.tif".format(name)
     imlist[0].save(path, compression="tiff_deflate", save_all=True, append_images=imlist[1:])
 
-def write_imaris(directory, name, time_series, pixel_size_xy_um, pixel_size_z):
+def write_imaris(directory, name, time_series, pixel_size_xy_um, pixel_size_z_um):
     timepoint0 = time_series[0][0]
     num_channels = len(timepoint0)
     t0c0 = timepoint0[0]
@@ -351,7 +377,7 @@ def stitch_image(stacks, translations, registrations, tile_overlap, row_col_coor
                                             border_size[1]:border_size[1] + destination_size[1]]
     return stitched
 
-def compute_inter_stack_registrations(stacks, metadata, registrations, nonempty_pixels,
+def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, row_col_coords, tile_overlaps,
                                       channel_index=0, sigma=2):
     """
     Register stacks to one another using phase correlation and a least squares fit
@@ -362,15 +388,15 @@ def compute_inter_stack_registrations(stacks, metadata, registrations, nonempty_
     #Calculate pairwise correspondences by phase correlation for all adjacent tiles
     two_tile_registrations = []
     for position_index1 in range(len(stacks)):
-        row1, col1 = magellan.row_col_tuples[position_index1]
-        stack1_reg_channel = intra_stack_registration(stacks[position_index1][channel_index],
-                                                      registrations[position_index1], background=10)
+        row1, col1 = row_col_coords[position_index1]
+        stack1_reg_channel = apply_intra_stack_registration(stacks[position_index1][channel_index],
+                                                            registrations[position_index1], background=10)
         for position_index2 in range(position_index1):
-            row2, col2 = magellan.row_col_tuples[position_index2]
+            row2, col2 = row_col_coords[position_index2]
             if not ((row1 == row2 + 1 and col1 == col2) or (row1 == row2 and col1 == col2 + 1)):
                 continue #non adjacent tiles
-            stack2_reg_channel = intra_stack_registration(stacks[position_index2][channel_index],
-                                                          registrations[position_index2], background=10)
+            stack2_reg_channel = apply_intra_stack_registration(stacks[position_index2][channel_index],
+                                                                registrations[position_index2], background=10)
             #smooth each slice individually
             for i, img in enumerate(stack1_reg_channel):
                 stack1_reg_channel[i, ...] = ndi.gaussian_filter(img, sigma=sigma)
@@ -397,28 +423,23 @@ def compute_inter_stack_registrations(stacks, metadata, registrations, nonempty_
                 shifts -= np.array(search_volume.shape) // 2
                 return shifts
 
-                # z_shift_curve = np.abs(cross_corr_mag[:, cross_corr_mag.shape[1] // 2, cross_corr_mag.shape[2] // 2])
-                # plt.figure(); plt.plot(z_shift_curve)
-                # search_offset = np.array(cross_corr_mag.shape[0]) // 2
-                # z_shift = np.argmax(z_shift_curve) - search_offset
-                # return z_shift
 
-            max_shift = np.array([12, metadata['overlap_y']//2, metadata['overlap_x']//2]).astype(np.int)
+            max_shift = np.array([12, tile_overlaps[0]//2, tile_overlaps[1]//2]).astype(np.int)
             #TODO: exclude tiles that don't seem to register correctly, maybe by comparing average and max displacement
             if row1 == row2 + 1 and col1 == col2:
-                overlap1 = stack1_valid[:, :metadata['overlap_y'], :]
-                overlap2 = stack2_valid[:, -metadata['overlap_y']:, :]
+                overlap1 = stack1_valid[:, :tile_overlaps[0], :]
+                overlap2 = stack2_valid[:, -tile_overlaps[0]:, :]
                 offset = x_corr_register(overlap1, overlap2, max_shift)
                 # offset = shift + np.array([0, metadata['tile_height'] - metadata['overlap_y'], 0])
             elif row1 == row2 and col1 == col2 + 1:
-                overlap1 = stack1_valid[:, :, :metadata['overlap_x']]
-                overlap2 = stack2_valid[:, :, -metadata['overlap_x']:]
+                overlap1 = stack1_valid[:, :, :tile_overlaps[1]]
+                overlap2 = stack2_valid[:, :, -tile_overlaps[1]:]
                 offset = x_corr_register(overlap1, overlap2, max_shift)
                 # offset = shift + np.array([0, 0, metadata['tile_width'] - metadata['overlap_x']])
             two_tile_registrations.append((offset, position_index2, position_index1))
             print('{},{}   to   {},{}:   {}'.format(row1, col1, row2, col2, offset))
 
-    def least_squares_traslations(two_tile_registrations, metadata):
+    def least_squares_traslations(two_tile_registrations):
         #Put into least squares matrix to solve for tile translations up to additive constant
         # set absolute translations for position 0 equal to zero to define absolut coordiante system
         A = np.zeros((3, 3 * len(stacks)))
@@ -447,7 +468,7 @@ def compute_inter_stack_registrations(stacks, metadata, registrations, nonempty_
         global_translations -= np.min(global_translations, axis=0)
         return global_translations
 
-    ls_traslations = least_squares_traslations(two_tile_registrations, metadata)
+    ls_traslations = least_squares_traslations(two_tile_registrations)
     # zero center translation params, since offset is arbitrary
     ls_traslations[:, 1:] -= np.round(np.mean(ls_traslations[:, 1:], axis=0)).astype(np.int)
     return ls_traslations
@@ -482,13 +503,12 @@ def convert(magellan_dir, do_registrations=True, do_translations=True, output_di
             if do_registrations:
                 registration_params.append(intra_stack_registrations(raw_stacks[position_index],
                                                                      nonempty_pixels[position_index],
-                                                                     max_shift=max(metadata['overlap_x'],
-                                                                                   metadata['overlap_y'])))
+                                                                     max_shift=np.max(tile_overlap)))
             else:
                 registration_params.append(np.zeros((raw_stacks[0][0].shape[0], 2)))
         if do_translations:
-            translation_params = compute_inter_stack_registrations(raw_stacks, metadata, registration_params,
-                                                                   nonempty_pixels)
+            translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
+                                                                   row_col_coords, tile_overlap)
         else:
             translation_params = np.zeros((num_positions, 3), dtype=np.int)
         stitched = stitch_image(raw_stacks, translation_params, registration_params, tile_overlap, row_col_coords)
