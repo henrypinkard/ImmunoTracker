@@ -3,9 +3,9 @@ from imariswriter import ImarisJavaWrapper
 import numpy as np
 from scipy.ndimage import filters
 import os
-import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
+# import matplotlib
+# matplotlib.use('TkAgg')
+# import matplotlib.pyplot as plt
 from PIL import Image
 from scipy import ndimage as ndi
 from scipy import signal, optimize
@@ -633,11 +633,6 @@ def convert(magellan_dir, do_registrations=True, do_translations=True, output_di
         output_basename = magellan_dir.split(os.sep)[-1]  # same name as magellan acquisition
 
     magellan, metadata = open_magellan(magellan_dir)
-
-    # #TODO remove later
-    metadata['num_frames'] = 1
-    ####
-
     #iterate through all time points to compute all needed stitching and registration params
     all_params = []
     previous_stitched = None
@@ -691,10 +686,7 @@ def convert(magellan_dir, do_registrations=True, do_translations=True, output_di
                                                abs_timepoint_registrations, background=0)
 
 
-# write_imaris(output_dir, output_basename + 'no_correction', time_series,
-    #           metadata['pixel_size_xy_um'], metadata['pixel_size_z_um'])
-
-magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
-
-convert(magellan_dir, do_registrations=True, do_translations=True, output_basename='neighbortilehelp',
-        background=10, inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8)
+# magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
+#
+# convert(magellan_dir, do_registrations=True, do_translations=True, output_basename='negative tp reg',
+#         background=10, inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8)
