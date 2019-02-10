@@ -26,8 +26,8 @@ for index in range(82):
     magellan = MagellanDataset(magellan_dir)
     #find indices for the first image to read time metadata
     channel = 0
-    position = 0
-    z = list(magellan.p_t_z_c_tree[0][0].keys())[0]
+    position = list(magellan.p_t_z_c_tree.keys())[0]
+    z = list(magellan.p_t_z_c_tree[position][channel].keys())[0]
     frame = 0
     image, metadata =magellan.read_image(channel_index=channel, z_index=z,
                                          t_index=frame, pos_index=position, read_metadata=True)
