@@ -117,9 +117,9 @@ def apply_intra_stack_registration(single_channel_stack, registrations, backgrou
             reg_slice[:] = orig_slice[:]
         return stack_copy
 
-def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift=20, background=10,
-            use_channels=[1, 2, 3, 4, 5], sigma_noise=2, likelihood_smoothing_sigma=1, valid_likelihood_threshold=-18,
-                    image_smooth_sigma=2):
+def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, backgrounds,
+            use_channels=[1, 2, 3, 4, 5], sigma_noise=2, abs_reg_bkgd_subtract_sigma=3,
+                                      likelihood_threshold_smooth_sigma=1, valid_likelihood_threshold=-18):
     """
     Compute registrations for each z slice within a stack using method based on cross correaltion followed by gaussian
     filtering and MLE fitting
@@ -134,7 +134,7 @@ def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift=20,
     :return:
     """
 
-    def intra_stack_x_corr_regs(stack, nonempty, sigma=6, max_shift=None):
+    def intra_stack_x_corr_regs(stack, nonempty, max_shift=None):
         """
         Smooth and cross correlate successive slices then take cumulative sum to figure out relative registrations for all
         channels within a stack
@@ -166,31 +166,30 @@ def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift=20,
             shifts += search_offset
             return shifts.astype(np.float) - np.array(cross_corr.shape) / 2
 
-        def smooth_and_register(current_img, prev_img, sigma=6, max_shift=None, mode='xcorr'):
+        def register(current_img, prev_img, max_shift=None, mode='xcorr'):
             """
             gaussian smooth, then compute pairwise registration
             """
 
-            filt1 = filters.gaussian_filter(current_img.astype(np.float), sigma)
-            filt2 = filters.gaussian_filter(prev_img.astype(np.float), sigma)
+            img1 = current_img.astype(np.float)
+            img2 = prev_img.astype(np.float)
             if mode == 'xcorr':
-                offset = cross_correlation(filt1, filt2, dont_whiten=True, max_shift=max_shift)
+                offset = cross_correlation(img1, img2, dont_whiten=True, max_shift=max_shift)
             elif mode == 'phase':
-                offset = cross_correlation(filt1, filt2, dont_whiten=False, max_shift=max_shift)
+                offset = cross_correlation(img1, img2, dont_whiten=False, max_shift=max_shift)
             return offset
 
         # compute registrations for each valid set of consecutive slices
-        def register_consecutives_slices(z_index, stack, nonempty, channel_index, sigma):
+        def register_consecutives_slices(z_index, stack, nonempty, channel_index):
             if z_index == 0 or ((not nonempty[z_index - 1]) or (not nonempty[z_index])):
                 # take first one as origin and only compute registration if data was acquired at both
                 return (0, 0)
             else:
                 current_img = stack[channel_index][z_index]
                 prev_img = stack[channel_index][z_index - 1]
-                return smooth_and_register(current_img, prev_img, sigma=sigma,
-                                             max_shift=max_shift, mode='xcorr')
+                return register(current_img, prev_img, max_shift=max_shift, mode='xcorr')
 
-        regs = [ [register_consecutives_slices(z_index, stack, nonempty, channel_index, sigma) for z_index in
+        regs = [[register_consecutives_slices(z_index, stack, nonempty, channel_index) for z_index in
                   range(len(stack[channel_index]))] for  channel_index in range(len(list(stack.keys())))]
         abs_regs = []
         for channel_reg in regs:
@@ -204,19 +203,18 @@ def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift=20,
 
         # make a copy and set background
         channel_stack = {key: channel_stack[key].copy() for key in channel_stack.keys()}
-        for channel in channel_stack.values():
-            channel[channel < background] = background
-        absolute_registrations = intra_stack_x_corr_regs(channel_stack, nonempty_pixels[position_index],
-                                                         sigma=image_smooth_sigma, max_shift=max_shift)
+        for channel_index in range(len(channel_stack)):
+            channel_stack[channel_index][channel_stack[channel_index] < backgrounds[channel_index]] = backgrounds[channel_index]
+        absolute_registrations = intra_stack_x_corr_regs(
+                                        channel_stack, nonempty_pixels[position_index], max_shift=max_shift)
         zero_centered_regs = []
-
-        registration_background_subtract_sigma = 2.5
         for channel_reg in absolute_registrations:
             background_shift = np.array([
-                    ndi.filters.gaussian_filter1d(channel_reg[:, 0], sigma=registration_background_subtract_sigma),
-                    ndi.filters.gaussian_filter1d(channel_reg[:, 1], sigma=registration_background_subtract_sigma)]).T
+                    ndi.filters.gaussian_filter1d(channel_reg[:, 0], sigma=abs_reg_bkgd_subtract_sigma),
+                    ndi.filters.gaussian_filter1d(channel_reg[:, 1], sigma=abs_reg_bkgd_subtract_sigma)]).T
             zero_centered_regs.append(channel_reg - background_shift)
         # plt.figure(); plt.plot(np.array(absolute_registrations)[1:,:, 0].T, '.-')
+        # plt.figure(); plt.plot(background_shift[:,0]); plt.show()
         # plt.figure(); plt.plot(np.array(zero_centered_regs)[1:,:, 0].T,'.-'); plt.ylim([-24, 24]); plt.legend([str(i) for i in range(5)])
 
         #ignore empty slices
@@ -244,7 +242,7 @@ def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift=20,
             mles_all_channels[z_index] = x[np.argmax(likelihood_prod_all_channels, axis=1)]
             mls_all_channels[z_index] = np.max(likelihood_prod_all_channels, axis=1)
         composite_log_likelihood = np.log(np.prod(mls_all_channels, axis=1))
-        smoothed_log_likeliood = ndi.gaussian_filter1d(composite_log_likelihood, likelihood_smoothing_sigma)
+        smoothed_log_likeliood = ndi.gaussian_filter1d(composite_log_likelihood, likelihood_threshold_smooth_sigma)
         # plt.figure(); plt.plot(smoothed_log_likeliood, '.-')
         valid_mles = smoothed_log_likeliood > valid_likelihood_threshold
 
@@ -301,7 +299,7 @@ def write_imaris(directory, name, time_series, pixel_size_xy_um, pixel_size_z_um
     print('Finshed!')
 
 def stitch_single_channel(stacks, translations, registrations, tile_overlap, row_col_coords, channel_index,
-                          background=None):
+                          backgrounds=None):
     """
     Stitch raw stacks into single volume
     :param raw_data: dict with positions as keys containing list with 1 3d numpy array of pixels for each channel
@@ -319,8 +317,8 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
     stitched_image_size = [np.ptp(translations[:, 0]) + stack_shape[0],
                    (1 + np.ptp(row_col_coords[:, 0], axis=0)) * (stack_shape[1] - tile_overlap[0]),
                    (1 + np.ptp(row_col_coords[:, 1], axis=0)) * (stack_shape[2] - tile_overlap[1])]
-    if background is not None:
-        stitched = background * np.ones(stitched_image_size, dtype=np.uint8 if byte_depth == 1 else np.uint16)
+    if backgrounds is not None:
+        stitched = backgrounds[channel_index] * np.ones(stitched_image_size, dtype=np.uint8 if byte_depth == 1 else np.uint16)
     else:
         stitched = np.zeros(stitched_image_size, dtype=np.uint8 if byte_depth == 1 else np.uint16)
 
@@ -493,7 +491,7 @@ def normalized_x_corr_register_3D(volume1, volume2, max_shift):
     return shifts
 
 def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, metadata,
-                                      max_shift_z, channel_index, n_cores=8):
+                                      max_shift_z, channel_index, backgrounds, n_cores=8):
     """
     Register stacks to one another using phase correlation and a least squares fit
     :param stacks:
@@ -510,19 +508,13 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
     for position_index1 in range(len(stacks)):
         row1, col1 = row_col_coords[position_index1]
         stack1_reg_channel = apply_intra_stack_registration(stacks[position_index1][channel_index],
-                                                            registrations[position_index1], background=10)
+                                                registrations[position_index1], background=backgrounds[channel_index])
         for position_index2 in range(position_index1):
             row2, col2 = row_col_coords[position_index2]
             if not ((row1 == row2 + 1 and col1 == col2) or (row1 == row2 and col1 == col2 + 1)):
                 continue #non adjacent tiles
             stack2_reg_channel = apply_intra_stack_registration(stacks[position_index2][channel_index],
-                                                                registrations[position_index2], background=10)
-            #smooth each slice individually
-            sigma = 2.5
-            for i, img in enumerate(stack1_reg_channel):
-                stack1_reg_channel[i, ...] = ndi.gaussian_filter(img, sigma=sigma)
-            for i, img in enumerate(stack2_reg_channel):
-                stack2_reg_channel[i, ...] = ndi.gaussian_filter(img, sigma=sigma)
+                                                registrations[position_index2], background=backgrounds[channel_index])
 
             #use only areas that are valid for both
             both_nonempty = np.logical_and(nonempty_pixels[position_index1], nonempty_pixels[position_index2])
@@ -583,6 +575,24 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
     ls_traslations[:, 1:] *= -1
     return ls_traslations
 
+def estimate_background(raw_stacks, nonempty_pixels):
+    """
+    Estiamte a background pixel value for every channel in raw_stacks
+    :param raw_stack:
+    :return:
+    """
+    print('Computing background')
+    all_pix = {}
+    for position_index in range(len(raw_stacks)):
+        for channel_index in range(len(raw_stacks[position_index])):
+            if channel_index not in all_pix:
+                all_pix[channel_index] = np.ravel(raw_stacks[position_index][channel_index][nonempty_pixels[position_index]])
+            else:
+                all_pix[channel_index] = np.concatenate((all_pix[channel_index],
+                    np.ravel(raw_stacks[position_index][channel_index][nonempty_pixels[position_index]])))
+    return np.median(np.stack(all_pix.values()), axis=1)
+
+
 def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata,
                     registration_series, translation_series, abs_timepoint_registrations, background):
     num_channels = metadata['num_channels']
@@ -613,20 +623,37 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
                     writer.write_z_slice(image, z_index, channel_index, time_index, timestamp)
     print('Finshed!')
 
-def convert(magellan_dir, do_registrations=True, do_translations=True, output_dir=None, output_basename=None,
-            background=10, inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8):
+def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
+            output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
+            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
+            intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
+            inter_stack_registration_channel=0, inter_stack_max_z=7, timepoint_registration_channel=0, n_cores=8):
     """
-    do all registration corrections and conver to imaris
-    :param magellan_dir:
-    :param do_registrations: correct breathing artifact within tiles
-    :param do_translations: register tiles to one another within their overlap
-    :param output_dir:
-    :param output_basename:
-    :param background:
-    :param timepoint_registration_channel:
+
+    :param magellan_dir: directory of magellan data to be converted
+    :param do_intra_stack: True if within z-stack corrections for intravital should be applied
+    :param do_inter_stack: True if registration to align different xy tiles to one another should be applied
+    :param do_timepoints: True if 3D volumes at each time point should be registered to one another
+    :param output_dir: Where Imaris file should be written (defaults to parent of magellan folder
+    :param output_basename: Name of imaris file to be written (defaults to same as magellan dataset)
+    :param intra_stack_registration_channels: List of channel indices (0-based) to use for correcting shaking artifacts.
+     Best to use all channels that have data spanning multiple z slices
+    :param intra_stack_noise_model_sigma: sigma of a gaussian noise model for the likelihood of different alignments.
+     should be on the order of the noise in the accuracy of the cross correlation (2 pixels?)
+    :param intra_stack_zero_center_sigma: for smoothing background noise in absolute drift. Set to something slightly
+     larger than the period of the movements in units of z-pixels
+    :param intra_stack_likelihood_threshold_smooth: Used for selecting which slices have good signal for smoothing.
+     Probably dotn need to edit this one
+    :param intra_stack_likelihood_threshold: cutoff for what defines a good signal to compute registration. Probably
+      needs to be empirically tested
+    :param inter_stack_registration_channel: Channel to use for registering different z stacks together
+    :param inter_stack_max_z: Maximum z shift among different stacks. Set smaller to speed up computations
+    :param timepoint_registration_channel: Channel to use for registering different timepoints to one another
+    :param n_cores: number of CPU cores to use when parallelizing inter-stack registrations.
     :return:
     """
-    #autogenerate imaris name if undefined
+
+    #autogenerate imaris name if undefined--same as
     if output_dir is None:
         output_dir = os.sep.join(magellan_dir.split(os.sep)[:-1])  # parent directory of magellan
     if output_basename is None:
@@ -636,39 +663,49 @@ def convert(magellan_dir, do_registrations=True, do_translations=True, output_di
     #iterate through all time points to compute all needed stitching and registration params
     all_params = []
     previous_stitched = None
+    backgrounds=None
     for frame_index in range(metadata['num_frames']):
         raw_stacks, nonempty_pixels, timestamp = read_raw_data(
                             magellan, metadata, time_index=frame_index, reverse_rank_filter=True)
+        if backgrounds is None:
+            #get backgrounds from first time point
+            backgrounds = estimate_background(raw_stacks, nonempty_pixels)
+
         #compute within stack (registrations) and between stack (translations)
-        if do_registrations:
+        if do_intra_stack:
             registration_params = compute_intra_stack_registrations(raw_stacks, nonempty_pixels,
-                                                                    np.max(metadata['tile_overlaps']))
+               np.max(metadata['tile_overlaps']), backgrounds=backgrounds, use_channels=intra_stack_registration_channels,
+                 sigma_noise=intra_stack_noise_model_sigma, abs_reg_bkgd_subtract_sigma=intra_stack_zero_center_sigma,
+                                        likelihood_threshold_smooth_sigma=intra_stack_likelihood_threshold_smooth,
+                                                        valid_likelihood_threshold=intra_stack_likelihood_threshold)
         else:
             registration_params = [np.zeros((raw_stacks[position_index][0].shape[0], 2))
                                             for position_index in raw_stacks.keys()]
-        if do_translations:
+        if do_inter_stack:
             translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
-                            metadata, max_shift_z=7, channel_index=inter_stack_registration_channel, n_cores=n_cores)
+                            metadata, max_shift_z=inter_stack_max_z, channel_index=inter_stack_registration_channel,
+                                                                   n_cores=n_cores)
         else:
             translation_params = np.zeros((metadata['num_positions'], 3), dtype=np.int)
-        #create a stitched version for doing timepoint to timepoint registrations
-        stitched = stitch_single_channel(raw_stacks, translation_params, registration_params, metadata['tile_overlaps'],
-                    metadata['row_col_coords'], channel_index=timepoint_registration_channel, background=background)
-        if previous_stitched is not None:
+        if previous_stitched is not None and do_timepoints:
+
+            #create a stitched version for doing timepoint to timepoint registrations
+            stitched = stitch_single_channel(raw_stacks, translation_params, registration_params, metadata['tile_overlaps'],
+                        metadata['row_col_coords'], channel_index=timepoint_registration_channel, backgrounds=backgrounds)
             #expand the size of the shorter one to match the bigger one
             if previous_stitched.shape[0] < stitched.shape[0]:
-                previous_stitched_padded = np.ones(stitched.shape)*background
+                previous_stitched_padded = np.ones(stitched.shape)*backgrounds[timepoint_registration_channel]
                 previous_stitched_padded[:previous_stitched.shape[0]] = previous_stitched
                 previous_stitched = previous_stitched_padded
             elif previous_stitched.shape[0] > stitched.shape[0]:
-                stitched_padded = np.ones(previous_stitched.shape)*background
+                stitched_padded = np.ones(previous_stitched.shape)*backgrounds[timepoint_registration_channel]
                 stitched_padded[:stitched.shape[0]] = stitched
                 stitched = stitched_padded
             timepoint_registration = x_corr_register_3D(
                             previous_stitched, stitched, max_shift=np.array([10, *(np.array(raw_stacks[0][0].shape[1:]) // 2)]) )
+            previous_stitched = stitched
         else:
             timepoint_registration = np.zeros(3)
-        previous_stitched = stitched
         all_params.append((registration_params, translation_params, timepoint_registration))
 
     registration_series = np.stack([p[0] for p in all_params])
@@ -688,5 +725,5 @@ def convert(magellan_dir, do_registrations=True, do_translations=True, output_di
 
 # magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
 #
-# convert(magellan_dir, do_registrations=True, do_translations=True, output_basename='negative tp reg',
-#         background=10, inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8)
+# convert(magellan_dir, do_intra_stack=True, do_inter_stack=True,
+#         inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8)
