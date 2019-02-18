@@ -594,7 +594,7 @@ def estimate_background(raw_stacks, nonempty_pixels):
 
 
 def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata,
-                    registration_series, translation_series, abs_timepoint_registrations, background):
+                    registration_series, translation_series, abs_timepoint_registrations):
     num_channels = metadata['num_channels']
     num_frames = metadata['num_frames']
     byte_depth = metadata['byte_depth']
@@ -608,7 +608,7 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
             for channel_index in range(num_channels):
                 stitched = stitch_single_channel(raw_stacks, translations=translation_series[time_index],
                         registrations=registration_series[time_index], tile_overlap=metadata['tile_overlaps'],
-                        row_col_coords=metadata['row_col_coords'], channel_index=channel_index, background=background)
+                        row_col_coords=metadata['row_col_coords'], channel_index=channel_index)
                 #fit into the larger image to account for timepoint registrations
                 tp_registered = np.zeros(imaris_size)
                 tp_registered[abs_timepoint_registrations[time_index, 0]:abs_timepoint_registrations[time_index, 0] + stitched.shape[0],
@@ -680,8 +680,8 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
                                         likelihood_threshold_smooth_sigma=intra_stack_likelihood_threshold_smooth,
                                                         valid_likelihood_threshold=intra_stack_likelihood_threshold)
         else:
-            registration_params = [np.zeros((raw_stacks[position_index][0].shape[0], 2))
-                                            for position_index in raw_stacks.keys()]
+            registration_params = [np.zeros((metadata['max_z_index'] - metadata['min_z_index'] + 1, 2))
+                                    for position_index in range(metadata['num_positions'])]
         if do_inter_stack:
             translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
                             metadata, max_shift_z=inter_stack_max_z, channel_index=inter_stack_registration_channel,
@@ -717,11 +717,16 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
     #make all positive
     abs_timepoint_registrations -= np.min(abs_timepoint_registrations)
     #add in extra space for timepoint registrations
-    imaris_size = np.array(stitched.shape) + np.max(abs_timepoint_registrations, axis=0).astype(np.int)
+    if not do_timepoints and not do_inter_stack and not do_intra_stack:
+        imaris_size = np.array([metadata['max_z_index'] - metadata['min_z_index'] + 1,
+                   (1 + np.ptp(metadata['row_col_coords'][:, 0], axis=0)) * (metadata['tile_shape'][0] - metadata['tile_overlaps'][0]),
+                   (1 + np.ptp(metadata['row_col_coords'][:, 1], axis=0)) * (metadata['tile_shape'][1] - metadata['tile_overlaps'][1])]).astype(np.int)
+    else:
+        imaris_size = np.array(stitched.shape) + np.max(abs_timepoint_registrations, axis=0).astype(np.int)
 
     ram_efficient_stitch_register_imaris_write(output_dir, output_basename, imaris_size,
                                                magellan, metadata, registration_series, translation_series,
-                                               abs_timepoint_registrations, background=0)
+                                               abs_timepoint_registrations)
 
 
 # magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
