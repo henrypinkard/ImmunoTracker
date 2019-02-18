@@ -618,8 +618,8 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
                 for z_index, image in enumerate(tp_registered):
                     image = image.astype(np.uint8 if byte_depth == 1 else np.uint16)
                     # add image to imaris writer
-                    print('Frame: {} of {}, Channel: {} of {}, Slice: {} of {}'.format(
-                        time_index + 1, num_frames, channel_index + 1, num_channels, z_index, imaris_size[0]))
+                    # print('Frame: {} of {}, Channel: {} of {}, Slice: {} of {}'.format(
+                    #     time_index + 1, num_frames, channel_index + 1, num_channels, z_index, imaris_size[0]))
                     writer.write_z_slice(image, z_index, channel_index, time_index, timestamp)
     print('Finshed!')
 
