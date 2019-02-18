@@ -665,11 +665,12 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
     previous_stitched = None
     backgrounds=None
     for frame_index in range(metadata['num_frames']):
-        raw_stacks, nonempty_pixels, timestamp = read_raw_data(
-                            magellan, metadata, time_index=frame_index, reverse_rank_filter=True)
-        if backgrounds is None:
-            #get backgrounds from first time point
-            backgrounds = estimate_background(raw_stacks, nonempty_pixels)
+        if do_intra_stack or do_inter_stack or do_timepoints:
+            raw_stacks, nonempty_pixels, timestamp = read_raw_data(
+                                magellan, metadata, time_index=frame_index, reverse_rank_filter=True)
+            if backgrounds is None:
+                #get backgrounds from first time point
+                backgrounds = estimate_background(raw_stacks, nonempty_pixels)
 
         #compute within stack (registrations) and between stack (translations)
         if do_intra_stack:
