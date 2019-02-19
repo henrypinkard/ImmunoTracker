@@ -698,7 +698,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
                    (1 + np.ptp(metadata['row_col_coords'][:, 1], axis=0)) * (metadata['tile_shape'][1] - metadata['tile_overlaps'][1])]
         else:
             #expand stitched image size if stack registrations have made it bigger at this TP
-            stitched_image_size[0] = max(stitched_image_size[0], np.ptp(translation_params[:, 0]) + stacks[0][0].shape[0])
+            stitched_image_size[0] = max(stitched_image_size[0], np.ptp(translation_params[:, 0]) + metadata['max_z_index'] - metadata['min_z_index'] + 1)
 
         #Register 3D volumes of successive timepoints to one another
         if do_timepoints:
@@ -717,6 +717,8 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
                     stitched = stitched_padded
                 timepoint_registration = x_corr_register_3D(
                                 previous_stitched, stitched, max_shift=np.array([10, *(np.array(raw_stacks[0][0].shape[1:]) // 2)]) )
+            else: 
+                timepoint_registration = np.zeros(3) #first one is 0
             previous_stitched = stitched
         else:
             timepoint_registration = np.zeros(3)
