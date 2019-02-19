@@ -21,7 +21,15 @@ def get_dataset_path(index):
     path = '{} {}{}{}'.format(date, experiment, os.sep, dataset)
     return path
 
-#list metadata
+def get_dataset_name_string(index):
+    dat_list_index = int((data_indices == index).nonzero()[0])
+    date = str_array[dat_list_index, 1]
+    experiment = str_array[dat_list_index, 2]
+    dataset = str_array[dat_list_index, 3]
+    path = '{}_{}{}{}'.format(date, experiment, '_', dataset)
+    return path
+
+#Print metadata for pupulating google doc
 # for index in data_indices:
 #     try:
 #         magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + get_dataset_path(index)
@@ -43,12 +51,27 @@ def get_dataset_path(index):
 #         print('error')
 
 
+
 magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + get_dataset_path(36)
 imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files'
-imaris_name = 'no correction conversion test'
+imaris_name = 'with_correction'
 
-convert(magellan_dir, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
+convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
             output_dir=imaris_dir, output_basename=imaris_name, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
             intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
             inter_stack_registration_channel=0, inter_stack_max_z=7, timepoint_registration_channel=0, n_cores=24)
+
+
+# #convert all with no corrections
+# imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files/'
+# for index in data_indices:
+#     data_path = get_dataset_path(index)
+#     namestring = get_dataset_name_string(index) + '_uncorrected'
+#     magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + data_path
+#     convert(magellan_dir, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
+#                 output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
+#                 intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
+#                 intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
+#                 inter_stack_registration_channel=0, inter_stack_max_z=7, timepoint_registration_channel=0, n_cores=24)
+

@@ -598,7 +598,8 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
     num_channels = metadata['num_channels']
     num_frames = metadata['num_frames']
     byte_depth = metadata['byte_depth']
-
+    print('Imaris file: {}'.format(name))
+    print('Imaris directory {}'.format(directory))
     with ImarisJavaWrapper(directory, name, (int(imaris_size[2]), int(imaris_size[1]), int(imaris_size[0])), byte_depth,
                 num_channels, num_frames, metadata['pixel_size_xy_um'], float(metadata['pixel_size_z_um'])) as writer:
         for time_index in range(num_frames):
@@ -664,6 +665,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
     all_params = []
     previous_stitched = None
     backgrounds=None
+    stitched_image_size=None
     for frame_index in range(metadata['num_frames']):
         if do_intra_stack or do_inter_stack or do_timepoints:
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(
@@ -672,7 +674,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
                 #get backgrounds from first time point
                 backgrounds = estimate_background(raw_stacks, nonempty_pixels)
 
-        #compute within stack (registrations) and between stack (translations)
+        # Intravatal breathing artifact correcttions within stack
         if do_intra_stack:
             registration_params = compute_intra_stack_registrations(raw_stacks, nonempty_pixels,
                np.max(metadata['tile_overlaps']), backgrounds=backgrounds, use_channels=intra_stack_registration_channels,
@@ -682,28 +684,39 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
         else:
             registration_params = [np.zeros((metadata['max_z_index'] - metadata['min_z_index'] + 1, 2))
                                     for position_index in range(metadata['num_positions'])]
+        # XYZ stack misalignments
         if do_inter_stack:
             translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
                             metadata, max_shift_z=inter_stack_max_z, channel_index=inter_stack_registration_channel,
-                                                                   n_cores=n_cores)
+                                                                   backgrounds=backgrounds, n_cores=n_cores)
         else:
             translation_params = np.zeros((metadata['num_positions'], 3), dtype=np.int)
-        if previous_stitched is not None and do_timepoints:
+        # Update the size of stitched image based on XYZ translations
+        if stitched_image_size is None:
+            stitched_image_size = [np.ptp(translation_params[:, 0]) + metadata['max_z_index'] - metadata['min_z_index'] + 1,
+                   (1 + np.ptp(metadata['row_col_coords'][:, 0], axis=0)) * (metadata['tile_shape'][0] - metadata['tile_overlaps'][0]),
+                   (1 + np.ptp(metadata['row_col_coords'][:, 1], axis=0)) * (metadata['tile_shape'][1] - metadata['tile_overlaps'][1])]
+        else:
+            #expand stitched image size if stack registrations have made it bigger at this TP
+            stitched_image_size[0] = max(stitched_image_size[0], np.ptp(translation_params[:, 0]) + stacks[0][0].shape[0])
 
+        #Register 3D volumes of successive timepoints to one another
+        if do_timepoints:
             #create a stitched version for doing timepoint to timepoint registrations
             stitched = stitch_single_channel(raw_stacks, translation_params, registration_params, metadata['tile_overlaps'],
                         metadata['row_col_coords'], channel_index=timepoint_registration_channel, backgrounds=backgrounds)
-            #expand the size of the shorter one to match the bigger one
-            if previous_stitched.shape[0] < stitched.shape[0]:
-                previous_stitched_padded = np.ones(stitched.shape)*backgrounds[timepoint_registration_channel]
-                previous_stitched_padded[:previous_stitched.shape[0]] = previous_stitched
-                previous_stitched = previous_stitched_padded
-            elif previous_stitched.shape[0] > stitched.shape[0]:
-                stitched_padded = np.ones(previous_stitched.shape)*backgrounds[timepoint_registration_channel]
-                stitched_padded[:stitched.shape[0]] = stitched
-                stitched = stitched_padded
-            timepoint_registration = x_corr_register_3D(
-                            previous_stitched, stitched, max_shift=np.array([10, *(np.array(raw_stacks[0][0].shape[1:]) // 2)]) )
+            if previous_stitched is not None:
+                #expand the size of the shorter one to match the bigger one
+                if previous_stitched.shape[0] < stitched.shape[0]:
+                    previous_stitched_padded = np.ones(stitched.shape)*backgrounds[timepoint_registration_channel]
+                    previous_stitched_padded[:previous_stitched.shape[0]] = previous_stitched
+                    previous_stitched = previous_stitched_padded
+                elif previous_stitched.shape[0] > stitched.shape[0]:
+                    stitched_padded = np.ones(previous_stitched.shape)*backgrounds[timepoint_registration_channel]
+                    stitched_padded[:stitched.shape[0]] = stitched
+                    stitched = stitched_padded
+                timepoint_registration = x_corr_register_3D(
+                                previous_stitched, stitched, max_shift=np.array([10, *(np.array(raw_stacks[0][0].shape[1:]) // 2)]) )
             previous_stitched = stitched
         else:
             timepoint_registration = np.zeros(3)
@@ -717,12 +730,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
     #make all positive
     abs_timepoint_registrations -= np.min(abs_timepoint_registrations)
     #add in extra space for timepoint registrations
-    if not do_timepoints and not do_inter_stack and not do_intra_stack:
-        imaris_size = np.array([metadata['max_z_index'] - metadata['min_z_index'] + 1,
-                   (1 + np.ptp(metadata['row_col_coords'][:, 0], axis=0)) * (metadata['tile_shape'][0] - metadata['tile_overlaps'][0]),
-                   (1 + np.ptp(metadata['row_col_coords'][:, 1], axis=0)) * (metadata['tile_shape'][1] - metadata['tile_overlaps'][1])]).astype(np.int)
-    else:
-        imaris_size = np.array(stitched.shape) + np.max(abs_timepoint_registrations, axis=0).astype(np.int)
+    imaris_size = np.array(stitched_image_size) + np.max(abs_timepoint_registrations, axis=0).astype(np.int)
 
     ram_efficient_stitch_register_imaris_write(output_dir, output_basename, imaris_size,
                                                magellan, metadata, registration_series, translation_series,
