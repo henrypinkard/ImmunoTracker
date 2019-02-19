@@ -336,6 +336,14 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
         return stack_z, destination_corners, destination_size, border_size
 
     def pad_from_neighbor_tile(p_index, axis, border_size, inserted_tile):
+        """
+        If registration pushes this tile out of bounds, add in pixels from a neighboring tile
+        :param p_index: poistion index
+        :param axis: 0 or 1 for vertical or horizontal
+        :param border_size: the border offset used to place the tile in its spot
+        :param inserted_tile: the cropped tile to be inserted, which will be modified to have pieces of the neighbor tile
+        :return:
+        """
         # take from row above or row below
         row_col = row_col_coords[p_index].copy()
         if border_size[axis] < 0:
@@ -348,7 +356,7 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
         extra_strip = np.zeros((strip_width_or_height, inserted_tile.shape[1]) if
                                axis == 0 else (inserted_tile.shape[0], strip_width_or_height))
         # check if bordering tile exists
-        if np.any(np.logical_and(row_col_coords[:, 0] == row_col[0], row_col_coords[:, 1] == row_col[0])):
+        if np.any(np.logical_and(row_col_coords[:, 0] == row_col[0], row_col_coords[:, 1] == row_col[1])):
             neighbor_p_index = int(np.logical_and(row_col_coords[:, 0] == row_col[0],
                                                   row_col_coords[:, 1] == row_col[1]).nonzero()[0])
             neighbor_stack_z, neighbor_dest_corners, neighbor_dest_size, neighbor_border_size = get_stitch_coords(
@@ -682,8 +690,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
                                         likelihood_threshold_smooth_sigma=intra_stack_likelihood_threshold_smooth,
                                                         valid_likelihood_threshold=intra_stack_likelihood_threshold)
         else:
-            registration_params = [np.zeros((metadata['max_z_index'] - metadata['min_z_index'] + 1, 2))
-                                    for position_index in range(metadata['num_positions'])]
+            registration_params = metadata['num_positions'] * [np.zeros((metadata['max_z_index'] - metadata['min_z_index'] + 1, 2))]
         # XYZ stack misalignments
         if do_inter_stack:
             translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
@@ -698,7 +705,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
                    (1 + np.ptp(metadata['row_col_coords'][:, 1], axis=0)) * (metadata['tile_shape'][1] - metadata['tile_overlaps'][1])]
         else:
             #expand stitched image size if stack registrations have made it bigger at this TP
-            stitched_image_size[0] = max(stitched_image_size[0], np.ptp(translation_params[:, 0]) + stacks[0][0].shape[0])
+            stitched_image_size[0] = max(stitched_image_size[0], np.ptp(translation_params[:, 0]) + metadata['max_z_index'] - metadata['min_z_index'] + 1)
 
         #Register 3D volumes of successive timepoints to one another
         if do_timepoints:
@@ -737,7 +744,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
                                                abs_timepoint_registrations)
 
 
-# magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
-#
-# convert(magellan_dir, do_intra_stack=True, do_inter_stack=True,
-#         inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8)
+magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
+
+convert(magellan_dir, do_intra_stack=True, do_inter_stack=True,
+        inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8)
