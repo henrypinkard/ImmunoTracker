@@ -306,7 +306,6 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
     :param params:
     :return:
     """
-    #TODO: check row_col_coords
     stack_shape = stacks[0][0].shape
     byte_depth = 1 if stacks[0][0].dtype == np.uint8 else 2
     registrations = np.round(registrations).astype(np.int)
@@ -400,7 +399,7 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
                     strip_destination = strip_destination[:, -(axis1_neighbor_tile_coords[1] - axis1_neighbor_tile_coords[0]):]
                 if axis1_neighbor_tile_coords[0] < 0:
                     axis1_neighbor_tile_coords[axis1_neighbor_tile_coords[0] < 0] = 0
-                    strip_destination = strip_destination[:, (axis1_neighbor_tile_coords[1] - axis1_neighbor_tile_coords[0])]
+                    strip_destination = strip_destination[:, :(axis1_neighbor_tile_coords[1] - axis1_neighbor_tile_coords[0])]
 
                 strip_destination[:, :] = stacks[neighbor_p_index][channel_index][neighbor_stack_z,
                                         axis0_neighbor_tile_coords[0]:axis0_neighbor_tile_coords[1],
@@ -607,7 +606,7 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
     num_frames = metadata['num_frames']
     byte_depth = metadata['byte_depth']
     print('Imaris file: {}'.format(name))
-    print('Imaris directory {}'.format(directory))
+    print('Imaris directory: {}'.format(directory))
     with ImarisJavaWrapper(directory, name, (int(imaris_size[2]), int(imaris_size[1]), int(imaris_size[0])), byte_depth,
                 num_channels, num_frames, metadata['pixel_size_xy_um'], float(metadata['pixel_size_z_um'])) as writer:
         for time_index in range(num_frames):
@@ -722,6 +721,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
                     stitched_padded = np.ones(previous_stitched.shape)*backgrounds[timepoint_registration_channel]
                     stitched_padded[:stitched.shape[0]] = stitched
                     stitched = stitched_padded
+                print('Registering timepoints')
                 timepoint_registration = x_corr_register_3D(
                                 previous_stitched, stitched, max_shift=np.array([10, *(np.array(raw_stacks[0][0].shape[1:]) // 2)]) )
             else: 
@@ -746,7 +746,6 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
                                                abs_timepoint_registrations)
 
 
-magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
-
-convert(magellan_dir, do_intra_stack=True, do_inter_stack=True,
-        inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8)
+# magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
+# convert(magellan_dir, do_intra_stack=True, do_inter_stack=True,
+#         inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8)
