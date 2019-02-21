@@ -30,10 +30,8 @@ def get_dataset_name_string(index):
     return path
 
 
-imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files_uncorrected'
-
 #convert all with no corrections
-imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files/'
+imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files_uncorrected'
 for index in data_indices[data_indices >= 9]:
     data_path = get_dataset_path(index)
     namestring = get_dataset_name_string(index) + '_uncorrected'

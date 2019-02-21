@@ -389,17 +389,18 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
 
                 #check if neighboring strip is out of bounds and adjust if so
                 if axis0_neighbor_tile_coords[1] > stack_shape[1]:
-                    axis0_neighbor_tile_coords[axis0_neighbor_tile_coords[1] > stack_shape[1]] = stack_shape[1]
+                    axis0_neighbor_tile_coords[axis0_neighbor_tile_coords > stack_shape[1]] = stack_shape[1]
                     strip_destination = strip_destination[-(axis0_neighbor_tile_coords[1] - axis0_neighbor_tile_coords[0]):, :]
                 if axis0_neighbor_tile_coords[0] < 0:
-                    axis0_neighbor_tile_coords[axis0_neighbor_tile_coords[0] < 0] = 0
+                    axis0_neighbor_tile_coords[axis0_neighbor_tile_coords < 0] = 0
                     strip_destination = strip_destination[:(axis0_neighbor_tile_coords[1] - axis0_neighbor_tile_coords[0]), :]
                 if axis1_neighbor_tile_coords[1] > stack_shape[2]:
-                    axis1_neighbor_tile_coords[axis1_neighbor_tile_coords[1] > stack_shape[2]] = stack_shape[2]
+                    axis1_neighbor_tile_coords[axis1_neighbor_tile_coords > stack_shape[2]] = stack_shape[2]
                     strip_destination = strip_destination[:, -(axis1_neighbor_tile_coords[1] - axis1_neighbor_tile_coords[0]):]
                 if axis1_neighbor_tile_coords[0] < 0:
-                    axis1_neighbor_tile_coords[axis1_neighbor_tile_coords[0] < 0] = 0
+                    axis1_neighbor_tile_coords[axis1_neighbor_tile_coords < 0] = 0
                     strip_destination = strip_destination[:, :(axis1_neighbor_tile_coords[1] - axis1_neighbor_tile_coords[0])]
+
 
                 strip_destination[:, :] = stacks[neighbor_p_index][channel_index][neighbor_stack_z,
                                         axis0_neighbor_tile_coords[0]:axis0_neighbor_tile_coords[1],
