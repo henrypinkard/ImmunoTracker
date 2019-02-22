@@ -32,7 +32,7 @@ def get_dataset_name_string(index):
 
 #convert all with no corrections
 imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files_uncorrected'
-for index in data_indices[data_indices >= 9]:
+for index in data_indices[data_indices > 6]:
     data_path = get_dataset_path(index)
     namestring = get_dataset_name_string(index) + '_uncorrected'
     magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + data_path
@@ -41,5 +41,5 @@ for index in data_indices[data_indices >= 9]:
                 output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
                 intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
                 intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-                inter_stack_registration_channel=0, inter_stack_max_z=7, timepoint_registration_channel=0, n_cores=24)
+                inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=24)
 

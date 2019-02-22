@@ -524,7 +524,7 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
     """
     row_col_coords = metadata['row_col_coords']
     tile_overlaps = metadata['tile_overlaps']
-    max_shift = np.array([max_shift_z, int(0.8 * tile_overlaps[0]), int(0.8 * tile_overlaps[1])]).astype(np.int)
+    max_shift = np.array([max_shift_z, int(0.9 * tile_overlaps[0]), int(0.9 * tile_overlaps[1])]).astype(np.int)
 
     #Calculate pairwise correspondences by phase correlation for all adjacent tiles
     volumes_to_register = []
@@ -558,6 +558,7 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
     with Parallel(n_jobs=n_cores) as parallel:
         pairwise_registrations_and_weights = parallel(delayed(normalized_x_corr_register_3D)(overlaps[0], overlaps[1], max_shift) for
                                                   overlaps in volumes_to_register)
+
         #non parallel implementation for debuggin
         # pairwise_registrations_and_weights = [normalized_x_corr_register_3D(overlap1, overlap2, max_shift) for
         #                                       overlap1, overlap2 in volumes_to_register]
@@ -666,7 +667,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
             intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channels=[0], inter_stack_max_z=7, timepoint_registration_channel=0, n_cores=8):
+            inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8):
     """
 
     :param magellan_dir: directory of magellan data to be converted
@@ -761,7 +762,9 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
         else:
             timepoint_registration = np.zeros(3)
         all_params.append((registration_params, translation_params, timepoint_registration))
-
+    for p in all_params:
+        print(p)
+        print(p[0].shape) 
     registration_series = np.stack([p[0] for p in all_params])
     translation_series = np.stack([p[1] for p in all_params])
     timepoint_registrations = np.stack([p[2] for p in all_params])

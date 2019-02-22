@@ -54,7 +54,7 @@ def get_dataset_name_string(index):
 
 magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + get_dataset_path(36)
 imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files'
-imaris_name = 'with_correction_isrc05_wls_tprc5'
+imaris_name = 'with_correction_isrc05_xcorr_wls_tprc5'
 
 convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
             output_dir=imaris_dir, output_basename=imaris_name, intra_stack_registration_channels=[1, 2, 3, 4, 5],
