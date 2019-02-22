@@ -762,9 +762,6 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
         else:
             timepoint_registration = np.zeros(3)
         all_params.append((registration_params, translation_params, timepoint_registration))
-    for p in all_params:
-        print(p)
-        print(p[0].shape) 
     registration_series = np.stack([p[0] for p in all_params])
     translation_series = np.stack([p[1] for p in all_params])
     timepoint_registrations = np.stack([p[2] for p in all_params])
