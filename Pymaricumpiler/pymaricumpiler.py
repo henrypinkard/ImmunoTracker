@@ -633,7 +633,7 @@ def estimate_background(raw_stacks, nonempty_pixels):
     return np.array(backgrounds)
 
 def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata,
-                    registration_series, translation_series, abs_timepoint_registrations):
+                    registration_series, translation_series, abs_timepoint_registrations, output_filter_sigma):
     num_channels = metadata['num_channels']
     num_frames = metadata['num_frames']
     byte_depth = metadata['byte_depth']
@@ -656,6 +656,8 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
                        abs_timepoint_registrations[time_index, 2]:abs_timepoint_registrations[time_index, 2] + stitched.shape[2]] = stitched
                 print('writing to Imaris channel {}'.format(channel_index))
                 for z_index, image in enumerate(tp_registered):
+                    if output_filter_sigma is not None:
+                        image = filters.gaussian_filter(image.astype(np.float), output_filter_sigma)
                     image = image.astype(np.uint8 if byte_depth == 1 else np.uint16)
                     # add image to imaris writer
                     # print('Frame: {} of {}, Channel: {} of {}, Slice: {} of {}'.format(
@@ -667,7 +669,8 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
             intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8):
+            inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
+            output_filter_sigma=None):
     """
 
     :param magellan_dir: directory of magellan data to be converted
@@ -690,6 +693,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
     :param inter_stack_max_z: Maximum z shift among different stacks. Set smaller to speed up computations
     :param timepoint_registration_channel: Channel to use for registering different timepoints to one another
     :param n_cores: number of CPU cores to use when parallelizing inter-stack registrations.
+    :param output_filter_sigma: apply gaussian filter to each 2D slice of final filtered image if this is set to pixel sigma of filter
     :return:
     """
 
@@ -774,7 +778,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
 
     ram_efficient_stitch_register_imaris_write(output_dir, output_basename, imaris_size,
                                                magellan, metadata, registration_series, translation_series,
-                                               abs_timepoint_registrations)
+                                               abs_timepoint_registrations, output_filter_sigma)
 
 
 # magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
