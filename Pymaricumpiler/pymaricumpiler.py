@@ -628,7 +628,7 @@ def estimate_background(raw_stacks, nonempty_pixels):
     all_pix = np.stack(all_pix.values())
     backgrounds = []
     for channel_pix in all_pix:
-        backgrounds.append(np.mean(channel_pix[channel_pix < np.percentile(channel_pix, 25)]))
+        backgrounds.append(np.mean(channel_pix[channel_pix <= np.percentile(channel_pix, 25)]))
     return np.array(backgrounds)
 
 def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata,
