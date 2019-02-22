@@ -452,6 +452,13 @@ def stitch_all_channels(stacks, translations, registrations, tile_overlap, row_c
     return stitched
 
 def x_corr_register_3D(volume1, volume2, max_shift):
+    """
+    Compute cross correlation based 3D measurement
+    :param volume1:
+    :param volume2:
+    :param max_shift:
+    :return:
+    """
     src_ft = np.fft.fftn(volume1)
     target_ft = np.fft.fftn(volume2)
     cross_corr = np.fft.ifftn((src_ft * target_ft.conj()))
@@ -465,6 +472,13 @@ def x_corr_register_3D(volume1, volume2, max_shift):
     return shifts
 
 def normalized_x_corr_register_3D(volume1, volume2, max_shift):
+    """
+    Compute normalized cross correlation based alignment. Takes a really long time but gives better result
+    :param volume1:
+    :param volume2:
+    :param max_shift:
+    :return:
+    """
     score = np.zeros((2*max_shift[0]+1, 2*max_shift[1]+1, 2*max_shift[2]+1))
     t = np.arange(-max_shift[0], max_shift[0] + 1)
     u = np.arange(-max_shift[1], max_shift[1] + 1)
@@ -496,14 +510,16 @@ def normalized_x_corr_register_3D(volume1, volume2, max_shift):
 
     shifts = np.array(np.unravel_index(np.argmax(score), score.shape)).astype(np.int)
     shifts -= np.array(score.shape) // 2
-    return shifts
+    #compute weight based on minimum intensity of the two channels
+    weight = min(np.mean(np.ravel(volume1)), np.mean(np.ravel(volume2)))
+    return shifts, weight
 
 def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, metadata,
-                                      max_shift_z, channel_index, backgrounds, n_cores=8):
+                                      max_shift_z, channel_indices, backgrounds, n_cores=8):
     """
     Register stacks to one another using phase correlation and a least squares fit
     :param stacks:
-    :param channel_index:
+    :param channel_indices:
     :return:
     """
     row_col_coords = metadata['row_col_coords']
@@ -512,51 +528,58 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
 
     #Calculate pairwise correspondences by phase correlation for all adjacent tiles
     volumes_to_register = []
-    registration_position_indices = []
-    for position_index1 in range(len(stacks)):
-        row1, col1 = row_col_coords[position_index1]
-        stack1_reg_channel = apply_intra_stack_registration(stacks[position_index1][channel_index],
-                                                registrations[position_index1], background=backgrounds[channel_index])
-        for position_index2 in range(position_index1):
-            row2, col2 = row_col_coords[position_index2]
-            if not ((row1 == row2 + 1 and col1 == col2) or (row1 == row2 and col1 == col2 + 1)):
-                continue #non adjacent tiles
-            stack2_reg_channel = apply_intra_stack_registration(stacks[position_index2][channel_index],
-                                                registrations[position_index2], background=backgrounds[channel_index])
+    registration_position_channel_indices = []
+    for channel_index in channel_indices:
+        for position_index1 in range(len(stacks)):
+            row1, col1 = row_col_coords[position_index1]
+            stack1_reg_channel = apply_intra_stack_registration(stacks[position_index1][channel_index],
+                                                    registrations[position_index1], background=backgrounds[channel_index])
+            for position_index2 in range(position_index1):
+                row2, col2 = row_col_coords[position_index2]
+                if not ((row1 == row2 + 1 and col1 == col2) or (row1 == row2 and col1 == col2 + 1)):
+                    continue #non adjacent tiles
+                stack2_reg_channel = apply_intra_stack_registration(stacks[position_index2][channel_index],
+                                                    registrations[position_index2], background=backgrounds[channel_index])
 
-            #use only areas that are valid for both
-            both_nonempty = np.logical_and(nonempty_pixels[position_index1], nonempty_pixels[position_index2])
-            stack1_valid = stack1_reg_channel[both_nonempty, :, :]
-            stack2_valid = stack2_reg_channel[both_nonempty, :, :]
+                #use only areas that are valid for both
+                both_nonempty = np.logical_and(nonempty_pixels[position_index1], nonempty_pixels[position_index2])
+                stack1_valid = stack1_reg_channel[both_nonempty, :, :]
+                stack2_valid = stack2_reg_channel[both_nonempty, :, :]
 
-            if row1 == row2 + 1 and col1 == col2:
-                overlap1 = stack1_valid[:, :tile_overlaps[0], :]
-                overlap2 = stack2_valid[:, -tile_overlaps[0]:, :]
-            elif row1 == row2 and col1 == col2 + 1:
-                overlap1 = stack1_valid[:, :, :tile_overlaps[1]]
-                overlap2 = stack2_valid[:, :, -tile_overlaps[1]:]
-            volumes_to_register.append((overlap1, overlap2))
-            registration_position_indices.append((position_index1, position_index2))
+                if row1 == row2 + 1 and col1 == col2:
+                    overlap1 = stack1_valid[:, :tile_overlaps[0], :]
+                    overlap2 = stack2_valid[:, -tile_overlaps[0]:, :]
+                elif row1 == row2 and col1 == col2 + 1:
+                    overlap1 = stack1_valid[:, :, :tile_overlaps[1]]
+                    overlap2 = stack2_valid[:, :, -tile_overlaps[1]:]
+                volumes_to_register.append((overlap1, overlap2))
+                registration_position_channel_indices.append((position_index1, position_index2, channel_index))
 
     with Parallel(n_jobs=n_cores) as parallel:
-        pairwise_registrations = parallel(delayed(normalized_x_corr_register_3D)(overlaps[0], overlaps[1], max_shift) for
+        pairwise_registrations_and_weights = parallel(delayed(normalized_x_corr_register_3D)(overlaps[0], overlaps[1], max_shift) for
                                                   overlaps in volumes_to_register)
-    # two_tile_registrations = [(normalized_x_corr_register_3D(overlap1, overlap2, max_shift), position_index1,
-    #                 position_index2) for position_index1, position_index2, overlap1, overlap2 in volumes_to_register]
+        #non parallel implementation for debuggin
+        # pairwise_registrations_and_weights = [normalized_x_corr_register_3D(overlap1, overlap2, max_shift) for
+        #                                       overlap1, overlap2 in volumes_to_register]
 
-    def least_squares_traslations(two_tile_registrations, registration_position_indices):
+    def least_squares_traslations(pairwise_registrations_and_weights, registration_position_channel_indices):
         #Put into least squares matrix to solve for tile translations up to additive constant
         # set absolute translations for position 0 equal to zero to define absolut coordiante system
-        A = np.zeros((3, 3 * len(stacks)))
+        num_positions = len(stacks)
+        # specify an absolute translation of position 1 as 0,0,0 (doesn't matter bc glabal coordinates arbitrary anyway)
+        A = np.zeros((3, 3 * num_positions))
         A[0, 0] = 1
         A[1, 1] = 1
         A[2, 2] = 1
         b = [0, 0, 0]
-        for i in range(len(two_tile_registrations)):
-            two_tile_registration = two_tile_registrations[i]
-            pos1, pos2 = registration_position_indices[i]
+        W = [1, 1, 1]
+        for i in range(len(pairwise_registrations_and_weights)):
+            two_tile_registration, weight = pairwise_registrations_and_weights[i]
+            pos1, pos2, channel = registration_position_channel_indices[i]
+            rescaled_weight = max(1e-30, weight - backgrounds[channel_index])
+            W.extend(3*[rescaled_weight])
             b.extend(two_tile_registration)
-            a = np.zeros((3, 3*len(stacks)))
+            a = np.zeros((3, 3*num_positions))
             a[0, pos2 * 3] = 1
             a[0, pos1 * 3] = -1
             a[1, pos2 * 3 + 1] = 1
@@ -565,8 +588,13 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
             a[2, pos1 * 3 + 2] = -1
             A = np.concatenate((A, a), 0)
         b = np.array(b)
+        w = np.sqrt(np.diag(W))
         #solve least squares problem
-        x = np.dot(np.dot(np.linalg.inv(np.dot(A.T, A)), A.T), b)
+        # x = np.dot(np.dot(np.linalg.inv(np.dot(A.T, A)), A.T), b)
+        #rewight to do weighted least sqaures
+        b_w = np.dot(w, b)
+        A_w = np.dot(w, A)
+        x = np.dot(np.dot(np.linalg.inv(np.dot(A_w.T, A_w)), A_w.T), b_w)
         #make global translations indexed by position index
         global_translations = -np.reshape(np.round(x), ( -1, 3)).astype(np.int)
         #Use global translations to stitch together timepoint into full volume
@@ -575,8 +603,7 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
         global_translations -= np.min(global_translations, axis=0)
         return global_translations
 
-    ls_traslations = least_squares_traslations(pairwise_registrations, registration_position_indices)
-    print(ls_traslations)
+    ls_traslations = least_squares_traslations(pairwise_registrations_and_weights, registration_position_channel_indices)
     # zero center translation params, since offset is arbitrary
     ls_traslations[:, 1:] -= np.round((np.max(ls_traslations[:, 1:], axis=0) + np.min(ls_traslations[:, 1:], axis=0)) / 2).astype(np.int)
     #invert xy translations so they work correctly
@@ -598,8 +625,11 @@ def estimate_background(raw_stacks, nonempty_pixels):
             else:
                 all_pix[channel_index] = np.concatenate((all_pix[channel_index],
                     np.ravel(raw_stacks[position_index][channel_index][nonempty_pixels[position_index]])))
-    return np.median(np.stack(all_pix.values()), axis=1)
-
+    all_pix = np.stack(all_pix.values())
+    backgrounds = []
+    for channel_pix in all_pix:
+        backgrounds.append(np.mean(channel_pix[channel_pix < np.percentile(channel_pix, 25)]))
+    return np.array(backgrounds)
 
 def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata,
                     registration_series, translation_series, abs_timepoint_registrations):
@@ -636,7 +666,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
             intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channel=0, inter_stack_max_z=7, timepoint_registration_channel=0, n_cores=8):
+            inter_stack_registration_channels=[0], inter_stack_max_z=7, timepoint_registration_channel=0, n_cores=8):
     """
 
     :param magellan_dir: directory of magellan data to be converted
@@ -694,7 +724,7 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
         # XYZ stack misalignments
         if do_inter_stack:
             translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
-                            metadata, max_shift_z=inter_stack_max_z, channel_index=inter_stack_registration_channel,
+                            metadata, max_shift_z=inter_stack_max_z, channel_indices=inter_stack_registration_channels,
                                                                    backgrounds=backgrounds, n_cores=n_cores)
         else:
             translation_params = np.zeros((metadata['num_positions'], 3), dtype=np.int)
@@ -749,4 +779,4 @@ def convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoint
 
 # magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
 # convert(magellan_dir, do_intra_stack=True, do_inter_stack=True,
-#         inter_stack_registration_channel=0, timepoint_registration_channel=0, n_cores=8)
+#         inter_stack_registration_channels=[0, 5], timepoint_registration_channel=0, n_cores=8)
