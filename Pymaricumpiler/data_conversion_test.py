@@ -56,26 +56,20 @@ magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + get_dataset
 imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files'
 # imaris_name = 'with_correction_isrc05_xcorr_wls_tprc5'
 
-convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
-            output_dir=imaris_dir, output_basename='Corrected_sigma_2', intra_stack_registration_channels=[1, 2, 3, 4, 5],
+convert(magellan_dir, input_filter_sigma=2, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
+            output_dir=imaris_dir, output_basename='Prefiltered_no_correction', intra_stack_registration_channels=[1, 2, 3, 4, 5],
             intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
             intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channels=[0,5], inter_stack_max_z=7, timepoint_registration_channel=5, n_cores=24,
-            output_filter_sigma=2)
+            inter_stack_registration_channels=[0,5], inter_stack_max_z=7, timepoint_registration_channel=5, n_cores=24)
 
-convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
-            output_dir=imaris_dir, output_basename='Corrected_sigma_6', intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
-            intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channels=[0,5], inter_stack_max_z=7, timepoint_registration_channel=5, n_cores=24,
-            output_filter_sigma=6)
+# convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
+#             output_dir=imaris_dir, output_basename='Corrected_sigma_3', intra_stack_registration_channels=[1, 2, 3, 4, 5],
+#             intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
+#             intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
+#             inter_stack_registration_channels=[0,5], inter_stack_max_z=7, timepoint_registration_channel=5, n_cores=24,
+#             output_filter_sigma=3)
 
-convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
-            output_dir=imaris_dir, output_basename='Corrected_sigma_10', intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
-            intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channels=[0,5], inter_stack_max_z=7, timepoint_registration_channel=5, n_cores=24,
-            output_filter_sigma=10)
+
 
 # #convert all with no corrections
 # imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files/'
