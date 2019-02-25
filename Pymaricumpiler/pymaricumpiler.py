@@ -72,7 +72,7 @@ def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, fil
                 if reverse_rank_filter:
                     #do final step of rank fitlering
                     image = ndi.percentile_filter(image, percentile=15, size=3)
-                if filter_sigma:
+                if filter_sigma is not None:
                     image = filters.gaussian_filter(image.astype(np.float), filter_sigma)
 
                 #add in image
