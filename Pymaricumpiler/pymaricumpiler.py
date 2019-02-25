@@ -647,7 +647,7 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
         for time_index in range(num_frames):
             print('Frame {}'.format(time_index))
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(
-                magellan, metadata, time_index=time_index, reverse_rank_filter=True, filter_sigma=input_filter_sigma)
+                magellan, metadata, time_index=time_index, reverse_rank_filter=True, input_filter_sigma=input_filter_sigma)
             for channel_index in range(num_channels):
                 stitched = stitch_single_channel(raw_stacks, translations=translation_series[time_index],
                         registrations=registration_series[time_index], tile_overlap=metadata['tile_overlaps'],
