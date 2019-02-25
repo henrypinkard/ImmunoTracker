@@ -43,7 +43,7 @@ def open_magellan(path):
     metadata['row_col_coords'] = np.array(magellan.row_col_tuples)
     return magellan, metadata
 
-def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, filter_sigma=None):
+def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, input_filter_sigma=None):
     """
     read raw data, store in 3D arrays for each channel at each position
     :param magellan:
@@ -72,8 +72,8 @@ def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, fil
                 if reverse_rank_filter:
                     #do final step of rank fitlering
                     image = ndi.percentile_filter(image, percentile=15, size=3)
-                if filter_sigma is not None:
-                    image = filters.gaussian_filter(image.astype(np.float), filter_sigma)
+                if input_filter_sigma is not None:
+                    image = filters.gaussian_filter(image.astype(np.float), input_filter_sigma)
 
                 #add in image
                 raw_stacks[position_index][channel_index][z_index] = image
@@ -636,7 +636,7 @@ def estimate_background(raw_stacks, nonempty_pixels):
     return np.array(backgrounds)
 
 def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata,
-                    registration_series, translation_series, abs_timepoint_registrations):
+                    registration_series, translation_series, abs_timepoint_registrations, input_filter_sigma=None):
     num_channels = metadata['num_channels']
     num_frames = metadata['num_frames']
     byte_depth = metadata['byte_depth']
@@ -647,7 +647,7 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
         for time_index in range(num_frames):
             print('Frame {}'.format(time_index))
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(
-                magellan, metadata, time_index=time_index, reverse_rank_filter=True)
+                magellan, metadata, time_index=time_index, reverse_rank_filter=True, filter_sigma=input_filter_sigma)
             for channel_index in range(num_channels):
                 stitched = stitch_single_channel(raw_stacks, translations=translation_series[time_index],
                         registrations=registration_series[time_index], tile_overlap=metadata['tile_overlaps'],
@@ -659,8 +659,6 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
                        abs_timepoint_registrations[time_index, 2]:abs_timepoint_registrations[time_index, 2] + stitched.shape[2]] = stitched
                 print('writing to Imaris channel {}'.format(channel_index))
                 for z_index, image in enumerate(tp_registered):
-                    # if output_filter_sigma is not None:
-                    #     image = filters.gaussian_filter(image.astype(np.float), output_filter_sigma)
                     image = image.astype(np.uint8 if byte_depth == 1 else np.uint16)
                     # add image to imaris writer
                     # print('Frame: {} of {}, Channel: {} of {}, Slice: {} of {}'.format(
@@ -714,7 +712,7 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
     for frame_index in range(metadata['num_frames']):
         if do_intra_stack or do_inter_stack or do_timepoints:
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(
-                                magellan, metadata, time_index=frame_index, reverse_rank_filter=True, filter_sigma=output_filter_sigma)
+                                magellan, metadata, time_index=frame_index, reverse_rank_filter=True, filter_sigma=filter_sigma)
             if backgrounds is None:
                 #get backgrounds from first time point
                 backgrounds = estimate_background(raw_stacks, nonempty_pixels)
@@ -780,7 +778,7 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
 
     ram_efficient_stitch_register_imaris_write(output_dir, output_basename, imaris_size,
                                                magellan, metadata, registration_series, translation_series,
-                                               abs_timepoint_registrations)
+                                               abs_timepoint_registrations, input_filter_sigma=input_filter_sigma)
 
 
 # magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'

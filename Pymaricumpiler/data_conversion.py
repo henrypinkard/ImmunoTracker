@@ -32,12 +32,16 @@ def get_dataset_name_string(index):
 
 #convert all with no corrections
 imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files_uncorrected'
-for index in data_indices[data_indices > 6]:
+for index in data_indices:
     data_path = get_dataset_path(index)
     namestring = get_dataset_name_string(index) + '_uncorrected'
     magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + data_path
-    print('\n\nconverting: {}\n'.format(magellan_dir))
-    convert(magellan_dir, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
+    
+    if os.path.isfile(imaris_dir + os.sep + namestring + '.ims'):
+        print('skipping {} because its already converted'.format(namestring)
+    else:
+        print('\n\nconverting: {}\n'.format(magellan_dir))
+        convert(magellan_dir, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
                 output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
                 intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
                 intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
