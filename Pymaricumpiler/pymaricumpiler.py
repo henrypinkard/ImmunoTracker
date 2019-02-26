@@ -6,6 +6,19 @@ import os
 # import matplotlib
 # matplotlib.use('TkAgg')
 # import matplotlib.pyplot as plt
+# matplotlib.rcParams['pdf.fonttype'] = 42
+# matplotlib.rcParams['ps.fonttype'] = 42
+# #make text on figures look good
+# SMALL_SIZE = 16
+# MEDIUM_SIZE = 22
+# BIGGER_SIZE = 28
+# plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+# plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+# plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+# plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+# plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+# plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+# plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 from PIL import Image
 from scipy import ndimage as ndi
 from scipy import signal, optimize
@@ -122,7 +135,7 @@ def apply_intra_stack_registration(single_channel_stack, registrations, backgrou
 
 def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, backgrounds,
             use_channels=[1, 2, 3, 4, 5], sigma_noise=2, abs_reg_bkgd_subtract_sigma=3,
-                                      likelihood_threshold_smooth_sigma=1, valid_likelihood_threshold=-18):
+                                       valid_likelihood_threshold=-18):
     """
     Compute registrations for each z slice within a stack using method based on cross correaltion followed by gaussian
     filtering and MLE fitting
@@ -211,14 +224,20 @@ def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, ba
         absolute_registrations = intra_stack_x_corr_regs(
                                         channel_stack, nonempty_pixels[position_index], max_shift=max_shift)
         zero_centered_regs = []
+        background_shifts = []
         for channel_reg in absolute_registrations:
             background_shift = np.array([
                     ndi.filters.gaussian_filter1d(channel_reg[:, 0], sigma=abs_reg_bkgd_subtract_sigma),
                     ndi.filters.gaussian_filter1d(channel_reg[:, 1], sigma=abs_reg_bkgd_subtract_sigma)]).T
+            background_shifts.append(background_shift)
             zero_centered_regs.append(channel_reg - background_shift)
         # plt.figure(); plt.plot(np.array(absolute_registrations)[1:,:, 0].T, '.-')
-        # plt.figure(); plt.plot(background_shift[:,0]); plt.show()
-        # plt.figure(); plt.plot(np.array(zero_centered_regs)[1:,:, 0].T,'.-'); plt.ylim([-24, 24]); plt.legend([str(i) for i in range(5)])
+        # plt.xlabel('z-slice index'); plt.ylabel('x shift (pixels)'); plt.legend(['Channel {}'.format(i) for i in range(1,6)])
+        # plt.plot(np.array(background_shifts)[1:,:, 0].T, 'k--');
+        #
+        # plt.figure(); plt.plot(np.array(zero_centered_regs)[1:,:, 0].T,'.-'); plt.ylim([-24, 24]);
+        # plt.legend(['Channel {}'.format(i) for i in range(1,6)]);
+        # plt.xlabel('z-slice index'); plt.ylabel('x shift (pixels)'); plt.show()
 
         #ignore empty slices
         regs_to_use = np.array([zero_centered_regs[channel]
@@ -245,9 +264,10 @@ def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, ba
             mles_all_channels[z_index] = x[np.argmax(likelihood_prod_all_channels, axis=1)]
             mls_all_channels[z_index] = np.max(likelihood_prod_all_channels, axis=1)
         composite_log_likelihood = np.log(np.prod(mls_all_channels, axis=1))
-        smoothed_log_likeliood = ndi.gaussian_filter1d(composite_log_likelihood, likelihood_threshold_smooth_sigma)
-        # plt.figure(); plt.plot(smoothed_log_likeliood, '.-')
-        valid_mles = smoothed_log_likeliood > valid_likelihood_threshold
+        # smoothed_log_likeliood = ndi.gaussian_filter1d(composite_log_likelihood, likelihood_threshold_smooth_sigma)
+        # plt.figure(); plt.plot(composite_log_likelihood, '.-'); plt.ylabel('log(likelihood)'); plt.xlabel('z-slice index'); plt.show()
+        # plt.plot(smoothed_log_likeliood, '.-')
+        valid_mles = composite_log_likelihood > valid_likelihood_threshold
 
         # mles_all_channels[np.logical_not(valid_mles)] = sin_pred_movement[np.logical_not(valid_mles)]
         mles_all_channels[np.logical_not(valid_mles)] = 0
@@ -257,11 +277,11 @@ def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, ba
         registrations = np.zeros(absolute_registrations[0].shape)
         registrations[nonempty_pixels[position_index]] = mles_all_channels
 
-        # channel = 3
-        # registered_stack = apply_intra_stack_registration(channel_stack[channel], registrations)
-        # exporttiffstack(registered_stack, 'registered with sin channel {}'.format(channel))
-        # exporttiffstack(channel_stack[channel], 'unregistered channel {}'.format(channel))
-        registration_params.append(registrations)
+        # for channel in range(6):
+        #     registered_stack = apply_intra_stack_registration(channel_stack[channel], registrations)
+        #     exporttiffstack(registered_stack, 'registered channel {}'.format(channel))
+        #     exporttiffstack(channel_stack[channel], 'unregistered channel {}'.format(channel))
+        # registration_params.append(registrations)
     return registration_params
 
 def exporttiffstack(datacube, name='export'):
@@ -670,8 +690,7 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
 
 def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
-            intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
+            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3, intra_stack_likelihood_threshold=-18,
             inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8):
     """
 
@@ -724,7 +743,6 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
             registration_params = compute_intra_stack_registrations(raw_stacks, nonempty_pixels,
                np.max(metadata['tile_overlaps']), backgrounds=backgrounds, use_channels=intra_stack_registration_channels,
                  sigma_noise=intra_stack_noise_model_sigma, abs_reg_bkgd_subtract_sigma=intra_stack_zero_center_sigma,
-                                        likelihood_threshold_smooth_sigma=intra_stack_likelihood_threshold_smooth,
                                                         valid_likelihood_threshold=intra_stack_likelihood_threshold)
         else:
             registration_params = metadata['num_positions'] * [np.zeros((metadata['max_z_index'] - metadata['min_z_index'] + 1, 2))]
