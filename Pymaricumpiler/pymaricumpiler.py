@@ -472,6 +472,7 @@ def x_corr_register_3D(volume1, volume2, max_shift):
                     search_offset[2]:search_offset[2] + 2 * max_shift[2]]
     shifts = np.array(np.unravel_index(np.argmax(search_volume), search_volume.shape)).astype(np.int)
     shifts -= np.array(search_volume.shape) // 2
+    weight = min(np.mean(np.ravel(volume1)), np.mean(np.ravel(volume2)))
     return shifts
 
 def normalized_x_corr_register_3D(volume1, volume2, max_shift):
@@ -518,7 +519,7 @@ def normalized_x_corr_register_3D(volume1, volume2, max_shift):
     return shifts, weight
 
 def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, metadata,
-                                      max_shift_z, channel_indices, backgrounds, n_cores=8):
+                            max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9):
     """
     Register stacks to one another using phase correlation and a least squares fit
     :param stacks:
@@ -527,7 +528,8 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
     """
     row_col_coords = metadata['row_col_coords']
     tile_overlaps = metadata['tile_overlaps']
-    max_shift = np.array([max_shift_z, int(0.9 * tile_overlaps[0]), int(0.9 * tile_overlaps[1])]).astype(np.int)
+    max_shift = np.array([max_shift_z, int(max_shift_percentage * tile_overlaps[0]), 
+            int(max_shift_percentage * tile_overlaps[1])]).astype(np.int)
 
     #Calculate pairwise correspondences by phase correlation for all adjacent tiles
     volumes_to_register = []
@@ -674,6 +676,7 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
     """
 
     :param magellan_dir: directory of magellan data to be converted
+    :param input_filter_sigma: apply gaussian filter to each 2D slice of raw data before doing anyhting with it
     :param do_intra_stack: True if within z-stack corrections for intravital should be applied
     :param do_inter_stack: True if registration to align different xy tiles to one another should be applied
     :param do_timepoints: True if 3D volumes at each time point should be registered to one another
@@ -693,7 +696,6 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
     :param inter_stack_max_z: Maximum z shift among different stacks. Set smaller to speed up computations
     :param timepoint_registration_channel: Channel to use for registering different timepoints to one another
     :param n_cores: number of CPU cores to use when parallelizing inter-stack registrations.
-    :param output_filter_sigma: apply gaussian filter to each 2D slice of final filtered image if this is set to pixel sigma of filter
     :return:
     """
 
@@ -712,7 +714,7 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
     for frame_index in range(metadata['num_frames']):
         if do_intra_stack or do_inter_stack or do_timepoints:
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(
-                                magellan, metadata, time_index=frame_index, reverse_rank_filter=True, filter_sigma=filter_sigma)
+                                magellan, metadata, time_index=frame_index, reverse_rank_filter=True, input_filter_sigma=input_filter_sigma)
             if backgrounds is None:
                 #get backgrounds from first time point
                 backgrounds = estimate_background(raw_stacks, nonempty_pixels)
