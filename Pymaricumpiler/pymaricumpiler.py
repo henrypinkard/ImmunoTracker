@@ -584,12 +584,12 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
                 registration_position_channel_indices.append((position_index1, position_index2, channel_index))
 
     if normalized_x_corr:
-    #     with Parallel(n_jobs=n_cores) as parallel:
-    #         pairwise_registrations_and_weights = parallel(delayed(normalized_x_corr_register_3D)(overlaps[0], overlaps[1], max_shift) for
-    #                                                   overlaps in volumes_to_register)
+        with Parallel(n_jobs=n_cores) as parallel:
+            pairwise_registrations_and_weights = parallel(delayed(normalized_x_corr_register_3D)(overlaps[0], overlaps[1], max_shift) for
+                                                      overlaps in volumes_to_register)
 
-        pairwise_registrations_and_weights = [normalized_x_corr_register_3D(overlaps[0], overlaps[1], max_shift) for
-                                              overlaps in volumes_to_register]
+        # pairwise_registrations_and_weights = [normalized_x_corr_register_3D(overlaps[0], overlaps[1], max_shift) for
+        #                                       overlaps in volumes_to_register]
     else:
         pairwise_registrations_and_weights = [x_corr_register_3D(overlaps[0], overlaps[1], max_shift) for
                                               overlaps in volumes_to_register]
@@ -621,12 +621,11 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
             A = np.concatenate((A, a), 0)
         b = np.array(b)
         w = np.sqrt(np.diag(W))
-        #solve least squares problem
-        # x = np.dot(np.dot(np.linalg.inv(np.dot(A.T, A)), A.T), b)
         #rewight to do weighted least sqaures
         b_w = np.dot(w, b)
         A_w = np.dot(w, A)
-        x = np.dot(np.dot(np.linalg.inv(np.dot(A_w.T, A_w)), A_w.T), b_w)
+        # solve with least squares solver
+        x = np.linalg.lstsq(A_w, b_w)[0]
         #make global translations indexed by position index
         global_translations = -np.reshape(np.round(x), ( -1, 3)).astype(np.int)
         #Use global translations to stitch together timepoint into full volume
