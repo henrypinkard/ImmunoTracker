@@ -25,6 +25,7 @@ from scipy import signal, optimize
 from itertools import combinations
 import warnings
 from joblib import Parallel, delayed
+# from numba import jit
 
 
 def open_magellan(path):
@@ -281,7 +282,7 @@ def compute_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, ba
         #     registered_stack = apply_intra_stack_registration(channel_stack[channel], registrations)
         #     exporttiffstack(registered_stack, 'registered channel {}'.format(channel))
         #     exporttiffstack(channel_stack[channel], 'unregistered channel {}'.format(channel))
-        # registration_params.append(registrations)
+        registration_params.append(registrations)
     return registration_params
 
 def exporttiffstack(datacube, name='export'):
@@ -321,7 +322,7 @@ def write_imaris(directory, name, time_series, pixel_size_xy_um, pixel_size_z_um
                     writer.write_z_slice(image, z_index, channel_index, time_index, elapsed_time_ms)
     print('Finshed!')
 
-def stitch_single_channel(stacks, translations, registrations, tile_overlap, row_col_coords, channel_index,
+def  stitch_single_channel(stacks, translations, registrations, tile_overlap, row_col_coords, channel_index,
                           backgrounds=None):
     """
     Stitch raw stacks into single volume
@@ -413,19 +414,20 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
                 #check if neighboring strip is out of bounds and adjust if so
                 if axis0_neighbor_tile_coords[1] > stack_shape[1]:
                     axis0_neighbor_tile_coords[axis0_neighbor_tile_coords > stack_shape[1]] = stack_shape[1]
-                    strip_destination = strip_destination[-(axis0_neighbor_tile_coords[1] - axis0_neighbor_tile_coords[0]):, :]
+                    strip_destination = strip_destination[:axis0_neighbor_tile_coords[1] - axis0_neighbor_tile_coords[0], :]
                 if axis0_neighbor_tile_coords[0] < 0:
                     axis0_neighbor_tile_coords[axis0_neighbor_tile_coords < 0] = 0
-                    strip_destination = strip_destination[:(axis0_neighbor_tile_coords[1] - axis0_neighbor_tile_coords[0]), :]
+                    strip_destination = strip_destination[-(axis0_neighbor_tile_coords[1] - axis0_neighbor_tile_coords[0]):, :]
                 if axis1_neighbor_tile_coords[1] > stack_shape[2]:
                     axis1_neighbor_tile_coords[axis1_neighbor_tile_coords > stack_shape[2]] = stack_shape[2]
-                    strip_destination = strip_destination[:, -(axis1_neighbor_tile_coords[1] - axis1_neighbor_tile_coords[0]):]
+                    strip_destination = strip_destination[:, :axis1_neighbor_tile_coords[1] - axis1_neighbor_tile_coords[0]]
                 if axis1_neighbor_tile_coords[0] < 0:
                     axis1_neighbor_tile_coords[axis1_neighbor_tile_coords < 0] = 0
-                    strip_destination = strip_destination[:, :(axis1_neighbor_tile_coords[1] - axis1_neighbor_tile_coords[0])]
+                    strip_destination = strip_destination[:, -(axis1_neighbor_tile_coords[1] - axis1_neighbor_tile_coords[0]):]
 
-
-                strip_destination[:, :] = stacks[neighbor_p_index][channel_index][neighbor_stack_z,
+                #add stuff from neighboring tile into strip if theres even anything to add
+                if np.ptp(axis0_neighbor_tile_coords) != 0 and np.ptp(axis1_neighbor_tile_coords) != 0:
+                    strip_destination[:, :] = stacks[neighbor_p_index][channel_index][neighbor_stack_z,
                                         axis0_neighbor_tile_coords[0]:axis0_neighbor_tile_coords[1],
                                         axis1_neighbor_tile_coords[0]:axis1_neighbor_tile_coords[1]]
 
@@ -493,8 +495,9 @@ def x_corr_register_3D(volume1, volume2, max_shift):
     shifts = np.array(np.unravel_index(np.argmax(search_volume), search_volume.shape)).astype(np.int)
     shifts -= np.array(search_volume.shape) // 2
     weight = min(np.mean(np.ravel(volume1)), np.mean(np.ravel(volume2)))
-    return shifts
+    return shifts, weight
 
+# @jit()
 def normalized_x_corr_register_3D(volume1, volume2, max_shift):
     """
     Compute normalized cross correlation based alignment. Takes a really long time but gives better result
@@ -539,7 +542,7 @@ def normalized_x_corr_register_3D(volume1, volume2, max_shift):
     return shifts, weight
 
 def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, metadata,
-                            max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9):
+            max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9, normalized_x_corr=True):
     """
     Register stacks to one another using phase correlation and a least squares fit
     :param stacks:
@@ -580,13 +583,16 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
                 volumes_to_register.append((overlap1, overlap2))
                 registration_position_channel_indices.append((position_index1, position_index2, channel_index))
 
-    with Parallel(n_jobs=n_cores) as parallel:
-        pairwise_registrations_and_weights = parallel(delayed(normalized_x_corr_register_3D)(overlaps[0], overlaps[1], max_shift) for
-                                                  overlaps in volumes_to_register)
+    if normalized_x_corr:
+    #     with Parallel(n_jobs=n_cores) as parallel:
+    #         pairwise_registrations_and_weights = parallel(delayed(normalized_x_corr_register_3D)(overlaps[0], overlaps[1], max_shift) for
+    #                                                   overlaps in volumes_to_register)
 
-        #non parallel implementation for debuggin
-        # pairwise_registrations_and_weights = [normalized_x_corr_register_3D(overlap1, overlap2, max_shift) for
-        #                                       overlap1, overlap2 in volumes_to_register]
+        pairwise_registrations_and_weights = [normalized_x_corr_register_3D(overlaps[0], overlaps[1], max_shift) for
+                                              overlaps in volumes_to_register]
+    else:
+        pairwise_registrations_and_weights = [x_corr_register_3D(overlaps[0], overlaps[1], max_shift) for
+                                              overlaps in volumes_to_register]
 
     def least_squares_traslations(pairwise_registrations_and_weights, registration_position_channel_indices):
         #Put into least squares matrix to solve for tile translations up to additive constant
@@ -658,7 +664,8 @@ def estimate_background(raw_stacks, nonempty_pixels):
     return np.array(backgrounds)
 
 def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata,
-                    registration_series, translation_series, abs_timepoint_registrations, input_filter_sigma=None):
+                    registration_series, translation_series, abs_timepoint_registrations, input_filter_sigma=None,
+                                               reverse_rank_filter=False):
     num_channels = metadata['num_channels']
     num_frames = metadata['num_frames']
     byte_depth = metadata['byte_depth']
@@ -668,8 +675,8 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
                 num_channels, num_frames, metadata['pixel_size_xy_um'], float(metadata['pixel_size_z_um'])) as writer:
         for time_index in range(num_frames):
             print('Frame {}'.format(time_index))
-            raw_stacks, nonempty_pixels, timestamp = read_raw_data(
-                magellan, metadata, time_index=time_index, reverse_rank_filter=True, input_filter_sigma=input_filter_sigma)
+            raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=time_index,
+                                    reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
             for channel_index in range(num_channels):
                 stitched = stitch_single_channel(raw_stacks, translations=translation_series[time_index],
                         registrations=registration_series[time_index], tile_overlap=metadata['tile_overlaps'],
@@ -691,7 +698,8 @@ def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, mag
 def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8):
+            inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
+            reverse_rank_filter=False):
     """
 
     :param magellan_dir: directory of magellan data to be converted
@@ -732,8 +740,8 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
     stitched_image_size=None
     for frame_index in range(metadata['num_frames']):
         if do_intra_stack or do_inter_stack or do_timepoints:
-            raw_stacks, nonempty_pixels, timestamp = read_raw_data(
-                                magellan, metadata, time_index=frame_index, reverse_rank_filter=True, input_filter_sigma=input_filter_sigma)
+            raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=frame_index,
+                                    reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
             if backgrounds is None:
                 #get backgrounds from first time point
                 backgrounds = estimate_background(raw_stacks, nonempty_pixels)
@@ -797,10 +805,10 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
     imaris_size = np.array(stitched_image_size) + np.max(abs_timepoint_registrations, axis=0).astype(np.int)
 
     ram_efficient_stitch_register_imaris_write(output_dir, output_basename, imaris_size,
-                                               magellan, metadata, registration_series, translation_series,
-                                               abs_timepoint_registrations, input_filter_sigma=input_filter_sigma)
+            magellan, metadata, registration_series, translation_series, abs_timepoint_registrations,
+                    input_filter_sigma=input_filter_sigma, reverse_rank_filter=reverse_rank_filter)
 
 
 # magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
-# convert(magellan_dir, do_intra_stack=True, do_inter_stack=True,
-#         inter_stack_registration_channels=[0, 5], timepoint_registration_channel=0, n_cores=8)
+# convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, inter_stack_registration_channels=[5],
+#                     timepoint_registration_channel=5, n_cores=8, reverse_rank_filter=True)
