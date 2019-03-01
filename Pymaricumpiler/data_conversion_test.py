@@ -56,24 +56,23 @@ magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + get_dataset
 imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files'
 # imaris_name = 'with_correction_isrc05_xcorr_wls_tprc5'
 
-convert(magellan_dir, input_filter_sigma=2, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
-            output_dir=imaris_dir, output_basename='Prefiltered_no_correction', intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
-            intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channels=[0,5], inter_stack_max_z=15, timepoint_registration_channel=5, n_cores=24)
+# convert(magellan_dir, input_filter_sigma=2, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
+#             output_dir=imaris_dir, output_basename='Prefiltered_no_correction', intra_stack_registration_channels=[1, 2, 3, 4, 5],
+#             intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
+#             intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
+#             inter_stack_registration_channels=[0,5], inter_stack_max_z=15, timepoint_registration_channel=5, n_cores=24)
 
-convert(magellan_dir, input_filter_sigma=2, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
-            output_dir=imaris_dir, output_basename='Prefiltered_corrected', intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
-            intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channels=[0,5], inter_stack_max_z=15, timepoint_registration_channel=5, n_cores=24)
+convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
+            output_dir=imaris_dir, output_basename='regular_new_conversion', intra_stack_registration_channels=[1, 2, 3, 4, 5],
+            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3, intra_stack_likelihood_threshold=-18,
+            inter_stack_registration_channels=[0, 5], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=24,
+            reverse_rank_filter=True, exp_weight=False)
 
-convert(magellan_dir, input_filter_sigma=2, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
-            output_dir=imaris_dir, output_basename='Prefiltered_corrected_c5_isr_only', intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
-            intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-            inter_stack_registration_channels=[5], inter_stack_max_z=15, timepoint_registration_channel=5, n_cores=24)
-
+convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter_stack=True, do_timepoints=True,
+            output_dir=imaris_dir, output_basename='exp_weight_new_conversion', intra_stack_registration_channels=[1, 2, 3, 4, 5],
+            intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3, intra_stack_likelihood_threshold=-18,
+            inter_stack_registration_channels=[0, 5], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=24,
+            reverse_rank_filter=True, exp_weight=True)
 
 
 

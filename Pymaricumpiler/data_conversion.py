@@ -38,7 +38,7 @@ for index in data_indices:
     magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + data_path
     
     if os.path.isfile(imaris_dir + os.sep + namestring + '.ims'):
-        print('skipping {} because its already converted'.format(namestring)
+        print('skipping {} because its already converted'.format(namestring))
     else:
         print('\n\nconverting: {}\n'.format(magellan_dir))
         convert(magellan_dir, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,

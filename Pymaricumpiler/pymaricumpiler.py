@@ -494,8 +494,7 @@ def x_corr_register_3D(volume1, volume2, max_shift):
                     search_offset[2]:search_offset[2] + 2 * max_shift[2]]
     shifts = np.array(np.unravel_index(np.argmax(search_volume), search_volume.shape)).astype(np.int)
     shifts -= np.array(search_volume.shape) // 2
-    weight = min(np.mean(np.ravel(volume1)), np.mean(np.ravel(volume2)))
-    return shifts, weight
+    return shifts
 
 # @jit()
 def normalized_x_corr_register_3D(volume1, volume2, max_shift):
@@ -537,12 +536,10 @@ def normalized_x_corr_register_3D(volume1, volume2, max_shift):
 
     shifts = np.array(np.unravel_index(np.argmax(score), score.shape)).astype(np.int)
     shifts -= np.array(score.shape) // 2
-    #compute weight based on minimum intensity of the two channels
-    weight = min(np.mean(np.ravel(volume1)), np.mean(np.ravel(volume2)))
-    return shifts, weight
+    return shifts
 
 def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, metadata,
-            max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9, normalized_x_corr=True):
+            max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9, normalized_x_corr=True, exp_weight=False):
     """
     Register stacks to one another using phase correlation and a least squares fit
     :param stacks:
@@ -584,15 +581,19 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
                 registration_position_channel_indices.append((position_index1, position_index2, channel_index))
 
     if normalized_x_corr:
+        shift_and_weight = lambda v1, v2, max_shift: (normalized_x_corr_register_3D(v1,v2,max_shift), 
+                                                min(np.mean(np.ravel(v1)), np.mean(np.ravel(v2))))
         with Parallel(n_jobs=n_cores) as parallel:
-            pairwise_registrations_and_weights = parallel(delayed(normalized_x_corr_register_3D)(overlaps[0], overlaps[1], max_shift) for
-                                                      overlaps in volumes_to_register)
+            pairwise_registrations_and_weights = parallel(delayed(shift_and_weight)(overlaps[0], overlaps[1], max_shift)
+                                                    for overlaps in volumes_to_register)
 
-        # pairwise_registrations_and_weights = [normalized_x_corr_register_3D(overlaps[0], overlaps[1], max_shift) for
+        # pairwise_registrations_and_weights = [(normalized_x_corr_register_3D(overlaps[0], overlaps[1], max_shift),
+        #                                        min(np.mean(np.ravel(overlaps[0])), np.mean(np.ravel(overlaps[1]))) for
         #                                       overlaps in volumes_to_register]
     else:
-        pairwise_registrations_and_weights = [x_corr_register_3D(overlaps[0], overlaps[1], max_shift) for
-                                              overlaps in volumes_to_register]
+        pairwise_registrations_and_weights = [(x_corr_register_3D(overlaps[0], overlaps[1], max_shift), 
+                                               min(np.mean(np.ravel(overlaps[0])), np.mean(np.ravel(overlaps[1])))) for
+                                               overlaps in volumes_to_register]
 
     def least_squares_traslations(pairwise_registrations_and_weights, registration_position_channel_indices):
         #Put into least squares matrix to solve for tile translations up to additive constant
@@ -621,6 +622,8 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
             A = np.concatenate((A, a), 0)
         b = np.array(b)
         w = np.sqrt(np.diag(W))
+        if exp_weight:
+            w = np.exp(w)
         #rewight to do weighted least sqaures
         b_w = np.dot(w, b)
         A_w = np.dot(w, A)
@@ -698,7 +701,7 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3, intra_stack_likelihood_threshold=-18,
             inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
-            reverse_rank_filter=False):
+            reverse_rank_filter=False, exp_weight=False):
     """
 
     :param magellan_dir: directory of magellan data to be converted
@@ -757,7 +760,7 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
         if do_inter_stack:
             translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
                             metadata, max_shift_z=inter_stack_max_z, channel_indices=inter_stack_registration_channels,
-                                                                   backgrounds=backgrounds, n_cores=n_cores)
+                                                                   backgrounds=backgrounds, n_cores=n_cores, exp_weight=exp_weight)
         else:
             translation_params = np.zeros((metadata['num_positions'], 3), dtype=np.int)
         # Update the size of stitched image based on XYZ translations
