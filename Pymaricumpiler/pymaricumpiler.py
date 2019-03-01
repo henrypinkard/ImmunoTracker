@@ -659,6 +659,8 @@ def estimate_background(raw_stacks, nonempty_pixels):
             else:
                 all_pix[channel_index] = np.concatenate((all_pix[channel_index],
                     np.ravel(raw_stacks[position_index][channel_index][nonempty_pixels[position_index]])))
+        if all_pix[channel_index].size > 1e8:
+            break #dont need every last pixel
     all_pix = np.stack(all_pix.values())
     backgrounds = []
     for channel_pix in all_pix:
