@@ -113,7 +113,10 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
 
         all_channel_stack = np.stack([raw_stacks[position_index][channel] for channel in use_channels], axis=3)
         all_channel_stack_valid = all_channel_stack[nonempty_pixels[position_index]].astype(np.float32) #use only slices where data was collected
-        filtered = np.apply_over_axes(lambda img: filters.gaussian_filter(img, sigma), all_channel_stack_valid, [0, 3])
+        filtered = np.zeros_like(all_channel_stack_valid)
+        for slice in range(all_channel_stack_valid.shape[0]):
+            for channel in range(all_channel_stack_valid.shape[3]):
+                filtered[slice, :, :, channel] = filters.gaussian_filter(all_channel_stack_valid[slice, :, :, channel], sigma)
         #normalize by total intensity in all channels so dimmer parts of stack don't have weaker gradients
         normalizations = np.mean(np.reshape(filtered, (filtered.shape[0], -1)), axis=1) - np.mean(backgrounds)
         if normalize:
@@ -164,7 +167,7 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
         raw_stacked = np.stack([raw_stacks[position_index][channel][nonempty_pixels[position_index]] for channel in range(6)], axis=0)
         fixed_stacked = np.stack([apply_intra_stack_registration(raw_stacks[position_index][channel][nonempty_pixels[position_index]], corrections) for channel in range(6)], axis=0)
         exporttiffstack(np.reshape((fixed_stacked), (fixed_stacked.shape[0]*fixed_stacked.shape[1],
-                        fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name='momentum1000', path=)
+                        fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name='momentum1000')
         exporttiffstack(np.reshape((raw_stacked), (fixed_stacked.shape[0]*fixed_stacked.shape[1],
                         fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name='raw2')
 

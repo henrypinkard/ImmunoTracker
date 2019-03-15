@@ -292,6 +292,6 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
                     input_filter_sigma=input_filter_sigma, reverse_rank_filter=reverse_rank_filter)
 
 
-magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
-convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, inter_stack_registration_channels=[5],
-                    timepoint_registration_channel=5, n_cores=8, reverse_rank_filter=True, input_filter_sigma=2)
+# magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
+# convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, inter_stack_registration_channels=[5],
+#                     timepoint_registration_channel=5, n_cores=8, reverse_rank_filter=True, input_filter_sigma=2)
