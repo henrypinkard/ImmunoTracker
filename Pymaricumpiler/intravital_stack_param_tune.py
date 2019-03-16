@@ -108,7 +108,8 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
      :return:
      """
 
-    start_time = time.start()
+    print('momentum: {}\nlearningrate: {}\nnormalize: {}\nsigma: {}'.format(momentum,learning_rate,normalize, sigma))
+    start_time = time.time()
 
     #TODO:
     position_index = 1
@@ -146,7 +147,7 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
         if loss_numpy < min_loss:
             min_loss = loss_numpy
             min_loss_iteration = iteration
-        if iteration > min_loss_iteration + 20:
+        if iteration > min_loss_iteration + 30:
             break
         print('iteration {}, loss {}'.format(iteration, loss.numpy()))
         #get gradient and take step
@@ -158,7 +159,7 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
     #TODO: add regularization to bias solutions towards 0 when little data?
 
     name = 'mom_{}__lr_{}__norm_{}__sigma_{}'.format(momentum,learning_rate,normalize, sigma)
-    path = '/media/hugespace/henry/data/lymphosight/optmization_tuning/'
+    path = '/media/hugespace/henry/lymphosight/optimization_tuning/'
     with open(name + '.txt', 'w') as file:
         file.write(str(loss_history))
         elapsed = time.time() - start_time
@@ -166,12 +167,12 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
 
     fixed_stacked = np.stack([apply_intra_stack_registration(raw_stacks[position_index][channel][nonempty_pixels[position_index]], corrections) for channel in range(6)], axis=0)
     exporttiffstack(np.reshape((fixed_stacked), (fixed_stacked.shape[0]*fixed_stacked.shape[1],
-                    fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name=name)
+                    fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name=name, path=path)
 
 
 
 
-magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
+magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/2018-6-2 4 hours post LPS/subregion timelapse_1'
 reverse_rank_filter=True
 input_filter_sigma=2
 intra_stack_registration_channels=[1, 2, 3, 4, 5]
@@ -198,4 +199,5 @@ for learning_rate in lrs:
             for sigma in sigmas:
                 registration_params = optimize_intra_stack_registrations(raw_stacks, nonempty_pixels,
                         np.max(metadata['tile_overlaps']),  backgrounds=backgrounds,
-                        use_channels=intra_stack_registration_channels)
+                        use_channels=intra_stack_registration_channels, learning_rate=learning_rate,
+                        momentum=momentum, sigma=sigma, normalize=normalize)
