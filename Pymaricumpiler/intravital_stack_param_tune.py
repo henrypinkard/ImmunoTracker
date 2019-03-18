@@ -1,5 +1,7 @@
 import tensorflow as tf
 tf.enable_eager_execution()
+from scipy import signal
+
 
 # import matplotlib
 # matplotlib.use('TkAgg')
@@ -96,7 +98,7 @@ def apply_intra_stack_registration(single_channel_stack, registrations, backgrou
         return registered_stack
 
 def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, backgrounds, use_channels,
-                                       learning_rate=2e-5, sigma=7, momentum=0.99, normalize=True):
+                                       learning_rate, momentum, reg_strength):
     """
      Compute registrations for each z slice within a stack using method based on cross correaltion followed by gaussian
      filtering and MLE fitting
@@ -108,66 +110,76 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
      :return:
      """
 
-    print('momentum: {}\nlearningrate: {}\nnormalize: {}\nsigma: {}'.format(momentum,learning_rate,normalize, sigma))
+    print('momentum: {}\nlearningrate: {}\nreg: {}'.format(momentum,learning_rate, reg_strength))
     start_time = time.time()
 
-    #TODO:
+    # TODO: maybe add second
     position_index = 1
 
     all_channel_stack = np.stack([raw_stacks[position_index][channel] for channel in use_channels], axis=3)
-    all_channel_stack_valid = all_channel_stack[nonempty_pixels[position_index]].astype(np.float32) #use only slices where data was collected
+    all_channel_stack_valid = all_channel_stack[nonempty_pixels[position_index]].astype(
+        np.float32)  # use only slices where data was collected
     filtered = np.zeros_like(all_channel_stack_valid)
     for slice in range(all_channel_stack_valid.shape[0]):
         for channel in range(all_channel_stack_valid.shape[3]):
-            filtered[slice, :, :, channel] = filters.gaussian_filter(all_channel_stack_valid[slice, :, :, channel],
-                                                                     sigma)
-    #normalize by total intensity in all channels so dimmer parts of stack don't have weaker gradients
+            # filtered[slice, :, :, channel] = filters.gaussian_filter(all_channel_stack_valid[slice, :, :, channel],
+            #                                                          sigma)
+            filtered[slice, :, :, channel] = signal.medfilt2d(all_channel_stack_valid[slice, :, :, channel], 5)
+
+    # normalize by total intensity in all channels so dimmer parts of stack don't have weaker gradients
     normalizations = np.mean(np.reshape(filtered, (filtered.shape[0], -1)), axis=1) - np.mean(backgrounds)
-    if normalize:
-        normalized_stack = filtered / normalizations[:, None, None, None]
-    else:
-        normalized_stack = filtered
+    normalized_stack = filtered / normalizations[:, None, None, None]
+
     model = tf.keras.Sequential([ImageTranslationLayer(normalized_stack, max_shift)])
 
-    #Optimize
-    optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum)
-    min_loss = np.finfo(np.float).max
-    min_loss_iteration = 0
-    loss_history = []
-    for iteration in range(3000):
-        with tf.GradientTape(persistent=True) as tape:
-            shifted = model(None)
-            translation_params = model.trainable_variables[0]
-            data_loss = tf.reduce_sum(tf.abs(shifted[1:, ...] - shifted[:-1, ...]))
-            weight_penalty = tf.reduce_mean(tf.abs(translation_params))
-            loss = data_loss
-                    # + 1e0*weight_penalty
-        loss_numpy = loss.numpy()
-        loss_history.append(loss_numpy)
-        if loss_numpy < min_loss:
-            min_loss = loss_numpy
-            min_loss_iteration = iteration
-        if iteration > min_loss_iteration + 30:
-            break
-        print('iteration {}, loss {}'.format(iteration, loss.numpy()))
-        #get gradient and take step
-        grads = tape.gradient(loss, [translation_params])
-        optimizer.apply_gradients(zip(grads, [translation_params]), global_step=tf.train.get_or_create_global_step())
-    corrections = np.flip(translation_params.numpy()[..., 0], axis=1)
+    def optimize(learning_rate=3e-5, stopping_iterations=20, regularization=1e4):
+        optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.9)
+        min_loss = np.finfo(np.float).max
+        min_loss_iteration = 0
+        history = []
+        for iteration in range(1000):
+            with tf.GradientTape() as tape:
+                shifted = model(None)
+                translation_params = model.trainable_variables[0]
+                data_loss = tf.reduce_mean((shifted[1:, ...] - shifted[:-1, ...]) ** 2)
+                squared_pixel_shifts = tf.reduce_sum(tf.reshape(translation_params, [-1, 2]) ** 2, axis=1)
+                # only use sqrt where it doesn't make gradient explode
+                safe_x = tf.where(squared_pixel_shifts > 1e-2, squared_pixel_shifts,
+                                  1e-2 * tf.ones_like(squared_pixel_shifts))
+                safe_f = tf.zeros_like
+                pixel_shifts = tf.where(squared_pixel_shifts < 1e-2, tf.sqrt(safe_x), safe_f(squared_pixel_shifts))
+                weight_penalty = tf.reduce_mean(pixel_shifts)
+                loss = data_loss + weight_penalty * regularization
+            grads = tape.gradient(loss, [translation_params])
+
+            rms_shift = tf.reduce_mean(
+                tf.sqrt(tf.reduce_sum(tf.reshape(translation_params, [-1, 2]) ** 2, axis=1))).numpy()
+            optimizer.apply_gradients(zip(grads, [translation_params]),
+                                      global_step=tf.train.get_or_create_global_step())
+            # record loss and maybe break loop
+            loss_numpy = loss.numpy()
+            if loss_numpy < min_loss:
+                min_loss = loss_numpy
+                min_loss_iteration = iteration
+            if iteration > min_loss_iteration + stopping_iterations:
+                break
+            history.append('iteration {}, data loss {} \t\t reg loss {} \t\t rms shift {}'.format(iteration, data_loss.numpy(),
+                                                                                         regularization * weight_penalty.numpy(),
+                                                                                         rms_shift))
+            print(history[len(history)-1])
+        corrections = np.flip(np.reshape(translation_params.numpy(), [-1, 2]), axis=1)
 
 
-    #TODO: add regularization to bias solutions towards 0 when little data?
+        name = 'mom_{}__lr_{}__reg_{}'.format(momentum, learning_rate, reg_strength)
+        path = '/media/hugespace/henry/lymphosight/optimization_tuning/'
+        with open(name + '.txt', 'w') as file:
+            file.write(str(history))
+            elapsed = time.time() - start_time
+            file.write('elapsed: {}'.format(elapsed))
 
-    name = 'mom_{}__lr_{}__norm_{}__sigma_{}'.format(momentum,learning_rate,normalize, sigma)
-    path = '/media/hugespace/henry/lymphosight/optimization_tuning/'
-    with open(name + '.txt', 'w') as file:
-        file.write(str(loss_history))
-        elapsed = time.time() - start_time
-        file.write('elapsed: {}'.format(elapsed))
-
-    fixed_stacked = np.stack([apply_intra_stack_registration(raw_stacks[position_index][channel][nonempty_pixels[position_index]], corrections) for channel in range(6)], axis=0)
-    exporttiffstack(np.reshape((fixed_stacked), (fixed_stacked.shape[0]*fixed_stacked.shape[1],
-                    fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name=name, path=path)
+        fixed_stacked = np.stack([apply_intra_stack_registration(raw_stacks[position_index][channel][nonempty_pixels[position_index]], corrections) for channel in range(6)], axis=0)
+        exporttiffstack(np.reshape((fixed_stacked), (fixed_stacked.shape[0]*fixed_stacked.shape[1],
+                        fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name=name, path=path)
 
 
 
@@ -189,15 +201,13 @@ raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_
 
 backgrounds = estimate_background(raw_stacks, nonempty_pixels)
 
-lrs = [1e-6, 2e-5, 6e-5, 2e-4]
-sigmas = [0, 3, 7, 10]
-momentums = [0.9, 0.95, 0.99, 0.999]
-normalizes = [True, False]
+lrs = [1e5, 2e2, 1e3]
+momentums = [0.9, 0.95]
+reg_strength = [1e-1, 1e-2, 1e-3]
 for learning_rate in lrs:
     for momentum in momentums:
-        for normalize in normalizes:
-            for sigma in sigmas:
+        for reg in reg_strength:
                 registration_params = optimize_intra_stack_registrations(raw_stacks, nonempty_pixels,
                         np.max(metadata['tile_overlaps']),  backgrounds=backgrounds,
                         use_channels=intra_stack_registration_channels, learning_rate=learning_rate,
-                        momentum=momentum, sigma=sigma, normalize=normalize)
+                        momentum=momentum, reg_strength=reg)

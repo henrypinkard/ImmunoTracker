@@ -9,6 +9,7 @@ import scipy.ndimage as ndi
 from transformer import spatial_transformer_network
 from PIL import Image
 from scipy.ndimage import filters
+from scipy import signal
 
 
 class ImageTranslationLayer(tf.keras.layers.Layer):
@@ -28,14 +29,15 @@ class ImageTranslationLayer(tf.keras.layers.Layer):
     # on the input shape and hence removes the need for the user to specify
     # full shapes. It is possible to create variables during __init__() if
     # you already know their full shapes.
-    self.abs_translations = self.add_variable("abs_translations", [self.num_z_slices, 2, 1], dtype=tf.float32,
+    self.translation_weights = self.add_variable("abs_translations", [self.num_z_slices * 2], dtype=tf.float32,
                                               initializer=tf.keras.initializers.zeros)
 
   def call(self, input):
-      identities = tf.eye(2, 2, [self.abs_translations.shape[0].value])
+      abs_translations = tf.reshape(self.translation_weights, [self.num_z_slices, 2])
+      identities = tf.eye(2, 2, [abs_translations.shape[0].value])
       #normalizing so translations can be kept in pixel coordinates
-      normalized_translations = self.abs_translations / np.array([self.height / 2, self.width / 2])[None, :, None]
-      affines = tf.concat([identities, normalized_translations], axis=2)
+      normalized_translations = abs_translations / np.array([self.height / 2, self.width / 2])[None, :]
+      affines = tf.concat([identities, normalized_translations[:, :, None]], axis=2)
       transformed = spatial_transformer_network(self.image, tf.reshape(affines, [-1, 6]))
       crop_offset = tf.convert_to_tensor(self.max_shift // 2)
       self.cropped_and_transated = transformed[:, crop_offset:-crop_offset, crop_offset:-crop_offset, :]
@@ -112,49 +114,71 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
         position_index = 1
 
         all_channel_stack = np.stack([raw_stacks[position_index][channel] for channel in use_channels], axis=3)
-        all_channel_stack_valid = all_channel_stack[nonempty_pixels[position_index]].astype(np.float32) #use only slices where data was collected
+        all_channel_stack_valid = all_channel_stack[nonempty_pixels[position_index]].astype(
+            np.float32)  # use only slices where data was collected
         filtered = np.zeros_like(all_channel_stack_valid)
         for slice in range(all_channel_stack_valid.shape[0]):
             for channel in range(all_channel_stack_valid.shape[3]):
-                filtered[slice, :, :, channel] = filters.gaussian_filter(all_channel_stack_valid[slice, :, :, channel], sigma)
-        #normalize by total intensity in all channels so dimmer parts of stack don't have weaker gradients
+                # filtered[slice, :, :, channel] = filters.gaussian_filter(all_channel_stack_valid[slice, :, :, channel],
+                #                                                          sigma)
+                filtered[slice, :, :, channel] = signal.medfilt2d(all_channel_stack_valid[slice, :, :, channel], 5)
+
+        # normalize by total intensity in all channels so dimmer parts of stack don't have weaker gradients
         normalizations = np.mean(np.reshape(filtered, (filtered.shape[0], -1)), axis=1) - np.mean(backgrounds)
         if normalize:
             normalized_stack = filtered / normalizations[:, None, None, None]
         else:
             normalized_stack = filtered
+
         model = tf.keras.Sequential([ImageTranslationLayer(normalized_stack, max_shift)])
 
-        #Optimize
-        optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum)
-        min_loss = np.finfo(np.float).max
-        min_loss_iteration = 0
-        loss_history = []
-        for iteration in range(3000):
-            with tf.GradientTape(persistent=True) as tape:
-                shifted = model(None)
-                translation_params = model.trainable_variables[0]
-                data_loss = tf.reduce_sum(tf.abs(shifted[1:, ...] - shifted[:-1, ...]))
-                weight_penalty = tf.reduce_mean(tf.abs(translation_params))
-                loss = data_loss
-                        # + 1e0*weight_penalty
-            loss_numpy = loss.numpy()
-            loss_history.append(loss_numpy)
-            if loss_numpy < min_loss:
-                min_loss = loss_numpy
-                min_loss_iteration = iteration
-            if iteration > min_loss_iteration + 20:
-                break
-            print('iteration {}, loss {}'.format(iteration, loss.numpy()))
-            #get gradient and take step
-            grads = tape.gradient(loss, [translation_params])
-            optimizer.apply_gradients(zip(grads, [translation_params]), global_step=tf.train.get_or_create_global_step())
-        corrections = np.flip(translation_params.numpy()[..., 0], axis=1)
+        def optimize(learning_rate=3e-5, stopping_iterations=20, regularization=1e4):
+            optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.9)
+            min_loss = np.finfo(np.float).max
+            min_loss_iteration = 0
+            loss_history = []
+            for iteration in range(25):
+                with tf.GradientTape() as tape:
+                    shifted = model(None)
+                    translation_params = model.trainable_variables[0]
+                    data_loss = tf.reduce_mean((shifted[1:, ...] - shifted[:-1, ...])**2)
+                    squared_pixel_shifts = tf.reduce_sum(tf.reshape(translation_params, [-1, 2]) **2, axis=1)
+                    #only use sqrt where it doesn't make gradient explode
+                    safe_x = tf.where(squared_pixel_shifts > 1e-2, squared_pixel_shifts, 1e-2*tf.ones_like(squared_pixel_shifts))
+                    safe_f = tf.zeros_like
+                    pixel_shifts = tf.where(squared_pixel_shifts < 1e-2, tf.sqrt(safe_x), safe_f(squared_pixel_shifts))
+                    weight_penalty = tf.reduce_mean(pixel_shifts)
+                    loss = data_loss + weight_penalty*regularization
+                grads = tape.gradient(loss, [translation_params])
 
+                rms_shift = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.reshape(translation_params, [-1, 2]) ** 2, axis=1))).numpy()
+                optimizer.apply_gradients(zip(grads, [translation_params]), global_step=tf.train.get_or_create_global_step())
+                #record loss and maybe break loop
+                loss_numpy = loss.numpy()
+                loss_history.append(loss_numpy)
+                if loss_numpy < min_loss:
+                    min_loss = loss_numpy
+                    min_loss_iteration = iteration
+                if iteration > min_loss_iteration + stopping_iterations:
+                    break
+                print('iteration {}, data loss {} \t\t reg loss {} \t\t rms shift {}'.format(iteration, data_loss.numpy(),
+                                          regularization * weight_penalty.numpy(), rms_shift))
+            corrections = np.flip(np.reshape(translation_params.numpy(), [-1, 2]), axis=1)
+            return corrections
+
+        corrections = optimize(learning_rate=2e2, regularization=1e-2, momentum=0.95)
+
+        learning_rate = 5e-6
+        while learning_rate >= 1e-8:
+            print('optimizing: learning rate {}'.format(learning_rate))
+            corrections = optimize(learning_rate=learning_rate)
+            learning_rate =learning_rate * 1e-2
+
+        s = 40
 
         #TODO: add regularization to bias solutions towards 0 when little data?
 
-        # np.round(translation_params.numpy())[..., 0]          #for viewing integer translations
+        # np.round(translation_params.numpy())         #for viewing integer translations
 
         # exporttiffstack(shifted.numpy()[...,4].astype(np.uint8), 'optimized_one_channel')
         # exporttiffstack(all_channel_stack[...,4].astype(np.uint8), 'raw_one_channel')
@@ -167,7 +191,8 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
         raw_stacked = np.stack([raw_stacks[position_index][channel][nonempty_pixels[position_index]] for channel in range(6)], axis=0)
         fixed_stacked = np.stack([apply_intra_stack_registration(raw_stacks[position_index][channel][nonempty_pixels[position_index]], corrections) for channel in range(6)], axis=0)
         exporttiffstack(np.reshape((fixed_stacked), (fixed_stacked.shape[0]*fixed_stacked.shape[1],
-                        fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name='momentum1000')
+                        fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name='regged')
+
         exporttiffstack(np.reshape((raw_stacked), (fixed_stacked.shape[0]*fixed_stacked.shape[1],
                         fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name='raw2')
 
