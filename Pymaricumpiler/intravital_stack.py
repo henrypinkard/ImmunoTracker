@@ -132,22 +132,21 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
 
         model = tf.keras.Sequential([ImageTranslationLayer(normalized_stack, max_shift)])
 
-        def optimize(learning_rate=3e-5, stopping_iterations=20, regularization=1e4):
-            optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.9)
+        def optimize(model, learning_rate=3e-5, stopping_iterations=20, regularization=1e4, momentum=0.9):
+            optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum)
             min_loss = np.finfo(np.float).max
             min_loss_iteration = 0
             loss_history = []
-            for iteration in range(25):
+            for iteration in range(500):
                 with tf.GradientTape() as tape:
                     shifted = model(None)
-                    translation_params = model.trainable_variables[0]
                     data_loss = tf.reduce_mean((shifted[1:, ...] - shifted[:-1, ...])**2)
-                    squared_pixel_shifts = tf.reduce_sum(tf.reshape(translation_params, [-1, 2]) **2, axis=1)
+                    translation_params = model.trainable_variables[0]
+                    sum_squared_translations = tf.reduce_sum(translation_params**2)
                     #only use sqrt where it doesn't make gradient explode
-                    safe_x = tf.where(squared_pixel_shifts > 1e-2, squared_pixel_shifts, 1e-2*tf.ones_like(squared_pixel_shifts))
-                    safe_f = tf.zeros_like
-                    pixel_shifts = tf.where(squared_pixel_shifts < 1e-2, tf.sqrt(safe_x), safe_f(squared_pixel_shifts))
-                    weight_penalty = tf.reduce_mean(pixel_shifts)
+                    safe_x = tf.where(sum_squared_translations > 1e-2, sum_squared_translations, 1e-2)
+                    pixel_shift_2_norm = tf.where(sum_squared_translations > 1e-2, tf.sqrt(safe_x), 0)
+                    weight_penalty = pixel_shift_2_norm / translation_params.shape[0].value
                     loss = data_loss + weight_penalty*regularization
                 grads = tape.gradient(loss, [translation_params])
 
@@ -156,6 +155,11 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
                 #record loss and maybe break loop
                 loss_numpy = loss.numpy()
                 loss_history.append(loss_numpy)
+                if iteration >= 10:
+                    stddev = np.std(np.array(loss_history)[-10:])
+                    if stddev / loss_history[0] < 1e-4:
+                        break
+                print(np.std(np.array(loss_history)[-10:]))
                 if loss_numpy < min_loss:
                     min_loss = loss_numpy
                     min_loss_iteration = iteration
@@ -166,17 +170,8 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
             corrections = np.flip(np.reshape(translation_params.numpy(), [-1, 2]), axis=1)
             return corrections
 
-        corrections = optimize(learning_rate=2e2, regularization=1e-2, momentum=0.95)
+        corrections = optimize(model, learning_rate=2e2, regularization=1e-2, momentum=0.95)
 
-        learning_rate = 5e-6
-        while learning_rate >= 1e-8:
-            print('optimizing: learning rate {}'.format(learning_rate))
-            corrections = optimize(learning_rate=learning_rate)
-            learning_rate =learning_rate * 1e-2
-
-        s = 40
-
-        #TODO: add regularization to bias solutions towards 0 when little data?
 
         # np.round(translation_params.numpy())         #for viewing integer translations
 
