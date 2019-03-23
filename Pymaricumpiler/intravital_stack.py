@@ -39,9 +39,10 @@ class ImageTranslationLayer(tf.keras.layers.Layer):
       normalized_translations = abs_translations / np.array([self.height / 2, self.width / 2])[None, :]
       affines = tf.concat([identities, normalized_translations[:, :, None]], axis=2)
       transformed = spatial_transformer_network(self.image, tf.reshape(affines, [-1, 6]))
-      crop_offset = tf.convert_to_tensor(self.max_shift // 2)
-      self.cropped_and_transated = transformed[:, crop_offset:-crop_offset, crop_offset:-crop_offset, :]
-      return self.cropped_and_transated
+      # crop_offset = tf.convert_to_tensor(self.max_shift // 2)
+      # self.cropped_and_transated = transformed[:, crop_offset:-crop_offset, crop_offset:-crop_offset, :]
+      # return self.cropped_and_transated
+      return transformed
 
 def exporttiffstack(datacube, name='export', path='/Users/henrypinkard/Desktop/'):
     '''
@@ -111,17 +112,18 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
     for position_index in raw_stacks.keys():
 
         #TODO:
-        position_index = 1
+        position_index = 0
 
         all_channel_stack = np.stack([raw_stacks[position_index][channel] for channel in use_channels], axis=3)
         all_channel_stack_valid = all_channel_stack[nonempty_pixels[position_index]].astype(
             np.float32)  # use only slices where data was collected
-        filtered = np.zeros_like(all_channel_stack_valid)
-        for slice in range(all_channel_stack_valid.shape[0]):
-            for channel in range(all_channel_stack_valid.shape[3]):
-                # filtered[slice, :, :, channel] = filters.gaussian_filter(all_channel_stack_valid[slice, :, :, channel],
-                #                                                          sigma)
-                filtered[slice, :, :, channel] = signal.medfilt2d(all_channel_stack_valid[slice, :, :, channel], 5)
+        # filtered = np.zeros_like(all_channel_stack_valid)
+        # for slice in range(all_channel_stack_valid.shape[0]):
+        #     for channel in range(all_channel_stack_valid.shape[3]):
+        #         # filtered[slice, :, :, channel] = filters.gaussian_filter(all_channel_stack_valid[slice, :, :, channel],
+        #         #                                                          sigma)
+        #         filtered[slice, :, :, channel] = signal.medfilt2d(all_channel_stack_valid[slice, :, :, channel], 5)
+        filtered = all_channel_stack_valid
 
         # normalize by total intensity in all channels so dimmer parts of stack don't have weaker gradients
         normalizations = np.mean(np.reshape(filtered, (filtered.shape[0], -1)), axis=1) - np.mean(backgrounds)
@@ -142,11 +144,15 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
                     shifted = model(None)
                     data_loss = tf.reduce_mean((shifted[1:, ...] - shifted[:-1, ...])**2)
                     translation_params = model.trainable_variables[0]
-                    sum_squared_translations = tf.reduce_sum(translation_params**2)
-                    #only use sqrt where it doesn't make gradient explode
-                    safe_x = tf.where(sum_squared_translations > 1e-2, sum_squared_translations, 1e-2)
-                    pixel_shift_2_norm = tf.where(sum_squared_translations > 1e-2, tf.sqrt(safe_x), 0)
-                    weight_penalty = pixel_shift_2_norm / translation_params.shape[0].value
+                    # sum_squared_translations = tf.reduce_sum(translation_params**2)
+                    # #only use sqrt where it doesn't make gradient explode
+                    # safe_x = tf.where(sum_squared_translations > 1e-2, sum_squared_translations, 1e-2)
+                    # pixel_shift_2_norm = tf.where(sum_squared_translations > 1e-2, tf.sqrt(safe_x), 0)
+                    # weight_penalty = pixel_shift_2_norm / translation_params.shape[0].value
+
+                    weight_penalty = tf.reduce_mean(translation_params**2)
+
+
                     loss = data_loss + weight_penalty*regularization
                 grads = tape.gradient(loss, [translation_params])
 
@@ -155,10 +161,10 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
                 #record loss and maybe break loop
                 loss_numpy = loss.numpy()
                 loss_history.append(loss_numpy)
-                if iteration >= 10:
-                    stddev = np.std(np.array(loss_history)[-10:])
-                    if stddev / loss_history[0] < 1e-4:
-                        break
+                # if iteration >= 10:
+                    # stddev = np.std(np.array(loss_history)[-10:])
+                    # if stddev / loss_history[0] < 1e-4:
+                    #     break
                 print(np.std(np.array(loss_history)[-10:]))
                 if loss_numpy < min_loss:
                     min_loss = loss_numpy
@@ -170,7 +176,7 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
             corrections = np.flip(np.reshape(translation_params.numpy(), [-1, 2]), axis=1)
             return corrections
 
-        corrections = optimize(model, learning_rate=2e2, regularization=1e-2, momentum=0.95)
+        corrections = optimize(model, learning_rate=2e2, regularization=0, momentum=0.9)
 
 
         # np.round(translation_params.numpy())         #for viewing integer translations
@@ -179,9 +185,9 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
         # exporttiffstack(all_channel_stack[...,4].astype(np.uint8), 'raw_one_channel')
         # exporttiffstack(apply_intra_stack_registration(all_channel_stack[..., 4], corrections).astype(np.uint8), 'hp_correct_one_channel')
 
-        name = 'mom_{}__lr_{}__norm_{}__sigma_{}'.format(momentum,learning_rate,normalize, sigma)
-        with open(name + '.txt', 'w') as file:
-            file.write(str(loss_history))
+        # name = 'mom_{}__lr_{}__norm_{}__sigma_{}'.format(momentum,learning_rate,normalize, sigma)
+        # with open(name + '.txt', 'w') as file:
+        #     file.write(str(loss_history))
 
         raw_stacked = np.stack([raw_stacks[position_index][channel][nonempty_pixels[position_index]] for channel in range(6)], axis=0)
         fixed_stacked = np.stack([apply_intra_stack_registration(raw_stacks[position_index][channel][nonempty_pixels[position_index]], corrections) for channel in range(6)], axis=0)
