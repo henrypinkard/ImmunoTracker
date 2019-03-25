@@ -53,7 +53,6 @@ class IndividualStacksLayer(tf.keras.layers.Layer):
                      ], axis=0))
       return full_stacks
 
-
 class ImageStitchingLayer(tf.keras.layers.Layer):
 
   def __init__(self, row_col_coords, stack_shape, overlap_shape, use_channels):
@@ -129,34 +128,47 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
 
     zyxc_stacks = [np.stack(stack.values(), axis=3) for stack in raw_stacks.values()]
 
+
     stacks_layer = IndividualStacksLayer(zyxc_stacks, nonempty_pixels)
     stitch_layer = ImageStitchingLayer(row_col_coords, zyxc_stacks[0].shape, overlap_shape, inter_stack_channels)
-
-    model = tf.keras.Sequential([stacks_layer, stitch_layer])
-
-
-    def optimize(model, learning_rate=3e-5, stopping_iterations=20, regularization=1e4, momentum=0.9):
-        optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum)
-        min_loss = np.finfo(np.float).max
-        min_loss_iteration = 0
-        loss_history = []
-        for iteration in range(500):
-            with tf.GradientTape() as tape:
-                stitching_loss = model(None)
+    full_model = tf.keras.Sequential([stacks_layer, stitch_layer])
+    #model for calculating loss over individual stacks
+    individual_stacks_model = tf.keras.Sequential([full_model.get_layer(index=0)])
 
 
-                #TODO: add intra_stack_loss
+    optimizer = tf.train.MomentumOptimizer(learning_rate=1e-2, momentum=0.9)
 
-                # data_loss = tf.reduce_mean((shifted[1:, ...] - shifted[:-1, ...]) ** 2)
-                params = model.trainable_variables
-                # sum_squared_translations = tf.reduce_sum(translation_params**2)
-                # #only use sqrt where it doesn't make gradient explode
-                # safe_x = tf.where(sum_squared_translations > 1e-2, sum_squared_translations, 1e-2)
-                # pixel_shift_2_norm = tf.where(sum_squared_translations > 1e-2, tf.sqrt(safe_x), 0)
-                # weight_penalty = pixel_shift_2_norm / translation_params.shape[0].value
+    min_loss = np.finfo(np.float).max
+    min_loss_iteration = 0
+    loss_history = []
+    for iteration in range(500):
+        with tf.GradientTape() as full_tape:
+            with tf.GradientTape() as stack_tape:
+                stacks = individual_stacks_model(None)
+                stack_loss = tf.zeros((), tf.float32)
+                for shifted_stack in stacks:
+                    stack_loss += tf.reduce_mean((shifted_stack[1:, ...] - shifted_stack[:-1, ...]) ** 2)
 
-                # weight_penalty = tf.reduce_mean(translation_params ** 2)
+            stitching_loss = full_model(None)
+            all_params = full_model.trainable_variables
+            stack_params = [all_params[2*i] for i in range(len(stacks))]
 
-                # loss = data_loss + weight_penalty * regularization
-            grads = tape.gradient(stitching_loss, model.trainable_variables)
+        print('computing grads')
+        stack_grads = stack_tape.gradient(stack_loss, stack_params)
+        stitch_grads = full_tape.gradient(stitching_loss, all_params)
+        print(stack_grads[0])
+        print(stitch_grads[0])
 
+            # data_loss = tf.reduce_mean((shifted[1:, ...] - shifted[:-1, ...]) ** 2)
+            # sum_squared_translations = tf.reduce_sum(translation_params**2)
+            # #only use sqrt where it doesn't make gradient explode
+            # safe_x = tf.where(sum_squared_translations > 1e-2, sum_squared_translations, 1e-2)
+            # pixel_shift_2_norm = tf.where(sum_squared_translations > 1e-2, tf.sqrt(safe_x), 0)
+            # weight_penalty = pixel_shift_2_norm / translation_params.shape[0].value
+
+            # weight_penalty = tf.reduce_mean(translation_params ** 2)
+
+            # loss = data_loss + weight_penalty * regularization
+
+
+    # optimizer.apply_gradients(zip(grads, params), global_step=tf.train.get_or_create_global_step())
