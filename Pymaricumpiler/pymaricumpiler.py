@@ -104,6 +104,7 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
             optimize_timepoint(raw_stacks, nonempty_pixels, metadata['row_col_coords'], metadata['tile_overlaps'],
                                intra_stack_channels=intra_stack_registration_channels,
                                inter_stack_channels=inter_stack_registration_channels)
+            raise Exception('Done optimize')
         # Intravatal breathing artifact correcttions within stack
         # if do_intra_stack:
         #     registration_params = optimize_intra_stack_registrations(raw_stacks, nonempty_pixels,
@@ -171,8 +172,3 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
     ram_efficient_stitch_register_imaris_write(output_dir, output_basename, imaris_size,
             magellan, metadata, registration_series, translation_series, abs_timepoint_registrations,
                     input_filter_sigma=input_filter_sigma, reverse_rank_filter=reverse_rank_filter)
-
-
-magellan_dir = '/Users/henrypinkard/Desktop/Lymphosight/2018-6-2 4 hours post LPS/subregion timelapse_1'
-convert(magellan_dir, do_intra_stack=True, do_inter_stack=True, inter_stack_registration_channels=[5],
-                    timepoint_registration_channel=5, n_cores=8, reverse_rank_filter=True, input_filter_sigma=2)

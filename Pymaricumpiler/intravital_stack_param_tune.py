@@ -132,24 +132,22 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
 
     model = tf.keras.Sequential([ImageTranslationLayer(normalized_stack, max_shift)])
 
-    def optimize(learning_rate=3e-5, stopping_iterations=20, regularization=1e4):
-        optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.9)
+    def optimize(learning_rate=3e-5, stopping_iterations=20, regularization=1e4, momentum=momentum):
+        optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum)
         min_loss = np.finfo(np.float).max
         min_loss_iteration = 0
         history = []
         for iteration in range(1000):
             with tf.GradientTape() as tape:
                 shifted = model(None)
+                data_loss = tf.reduce_mean((shifted[1:, ...] - shifted[:-1, ...])**2)
                 translation_params = model.trainable_variables[0]
-                data_loss = tf.reduce_mean((shifted[1:, ...] - shifted[:-1, ...]) ** 2)
-                squared_pixel_shifts = tf.reduce_sum(tf.reshape(translation_params, [-1, 2]) ** 2, axis=1)
-                # only use sqrt where it doesn't make gradient explode
-                safe_x = tf.where(squared_pixel_shifts > 1e-2, squared_pixel_shifts,
-                                  1e-2 * tf.ones_like(squared_pixel_shifts))
-                safe_f = tf.zeros_like
-                pixel_shifts = tf.where(squared_pixel_shifts < 1e-2, tf.sqrt(safe_x), safe_f(squared_pixel_shifts))
-                weight_penalty = tf.reduce_mean(pixel_shifts)
-                loss = data_loss + weight_penalty * regularization
+                sum_squared_translations = tf.reduce_sum(translation_params**2)
+                #only use sqrt where it doesn't make gradient explode
+                safe_x = tf.where(sum_squared_translations > 1e-2, sum_squared_translations, 1e-2)
+                pixel_shift_2_norm = tf.where(sum_squared_translations > 1e-2, tf.sqrt(safe_x), 0)
+                weight_penalty = pixel_shift_2_norm / translation_params.shape[0].value
+                loss = data_loss + weight_penalty*regularization
             grads = tape.gradient(loss, [translation_params])
 
             rms_shift = tf.reduce_mean(
@@ -172,7 +170,7 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
 
         name = 'mom_{}__lr_{}__reg_{}'.format(momentum, learning_rate, reg_strength)
         path = '/media/hugespace/henry/lymphosight/optimization_tuning/'
-        with open(name + '.txt', 'w') as file:
+        with open(path + name + '.txt', 'w') as file:
             file.write(str(history))
             elapsed = time.time() - start_time
             file.write('elapsed: {}'.format(elapsed))
@@ -181,6 +179,7 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
         exporttiffstack(np.reshape((fixed_stacked), (fixed_stacked.shape[0]*fixed_stacked.shape[1],
                         fixed_stacked.shape[2],fixed_stacked.shape[3])).astype(np.uint8), name=name, path=path)
 
+    optimize(learning_rate=learning_rate, regularization=reg, momentum=momentum)
 
 
 
@@ -201,7 +200,8 @@ raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_
 
 backgrounds = estimate_background(raw_stacks, nonempty_pixels)
 
-lrs = [1e5, 2e2, 1e3]
+# lrs = [5e1, 2e2, 1e3]
+lrs = [2e2, 1e3]
 momentums = [0.9, 0.95]
 reg_strength = [1e-1, 1e-2, 1e-3]
 for learning_rate in lrs:
