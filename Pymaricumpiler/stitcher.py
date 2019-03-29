@@ -119,7 +119,9 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
     """
     stack_shape = stacks[0][0].shape
     byte_depth = 1 if stacks[0][0].dtype == np.uint8 else 2
+    #convert possibly floats to ints
     registrations = np.round(registrations).astype(np.int)
+    translations = np.round(translations).astype(np.int)
     # make z coordinate 0-based
     translations[:, 0] -= np.min(translations[:, 0])
     # Figure out size of stitched image
@@ -227,7 +229,7 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
 
         return inserted_tile
 
-    print('stitching channel {}'.format(channel_index))
+    # print('stitching channel {}'.format(channel_index))
     for stitched_z in np.arange(stitched.shape[0]):
         # print('stitching slice {}'.format(stitched_z))
         tile_center_translations = translations[:, 1:]
@@ -256,9 +258,9 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
                 destination_corners[0, 1]:destination_corners[1, 1]] = tile_to_add
     return stitched
 
-def stitch_all_channels(stacks, translations, registrations, tile_overlap, row_col_coords, background=None):
+def stitch_all_channels(stacks, translations, registrations, tile_overlap, row_col_coords, backgrounds=None):
     stitched = []
     for channel_index in range(len(stacks[0])):
         stitched.append(stitch_single_channel(stacks, translations, registrations, tile_overlap,
-                                              row_col_coords, channel_index=channel_index, background=None))
+                                              row_col_coords, channel_index=channel_index, backgrounds=backgrounds))
     return stitched

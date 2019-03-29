@@ -93,7 +93,8 @@ def convert(magellan_dir, input_filter_sigma=None, do_intra_stack=True, do_inter
     previous_stitched = None
     backgrounds=None
     stitched_image_size=None
-    for frame_index in range(metadata['num_frames']):
+    # for frame_index in range(metadata['num_frames']):
+    for frame_index in [7]:
         if do_intra_stack or do_inter_stack or do_timepoints:
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=frame_index,
                                     reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
