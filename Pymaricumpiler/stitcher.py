@@ -1,11 +1,11 @@
 import numpy as np
 from intravital_stack import  apply_intra_stack_registration
-from joblib import Parallel, delayed
 from utility import x_corr_register_3D, normalized_x_corr_register_3D
-import tensorflow as tf
+from tempfile import mkdtemp
+from os import path
 
 def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, metadata,
-            max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9, normalized_x_corr=True):
+            max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9, normalized_x_corr=False):
     """
     Register stacks to one another using phase correlation and a least squares fit
     :param stacks:
@@ -49,9 +49,10 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
     if normalized_x_corr:
         shift_and_weight = lambda v1, v2, max_shift: (normalized_x_corr_register_3D(v1,v2,max_shift),
                                                 min(np.mean(np.ravel(v1)), np.mean(np.ravel(v2))))
-        with Parallel(n_jobs=n_cores) as parallel:
-            pairwise_registrations_and_weights = parallel(delayed(shift_and_weight)(overlaps[0], overlaps[1], max_shift)
-                                                    for overlaps in volumes_to_register)
+        raise Exception('Normalized cross correlation no longer supported, use optimization version instead')
+        # with Parallel(n_jobs=n_cores) as parallel:
+        #     pairwise_registrations_and_weights = parallel(delayed(shift_and_weight)(overlaps[0], overlaps[1], max_shift)
+        #                                             for overlaps in volumes_to_register)
 
         # pairwise_registrations_and_weights = [(normalized_x_corr_register_3D(overlaps[0], overlaps[1], max_shift),
         #                                        min(np.mean(np.ravel(overlaps[0])), np.mean(np.ravel(overlaps[1]))) for
@@ -110,7 +111,7 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
 
 
 def stitch_single_channel(stacks, translations, registrations, tile_overlap, row_col_coords, channel_index,
-                          backgrounds=None):
+                          backgrounds=None, save_memory=False):
     """
     Stitch raw stacks into single volume
     :param raw_data: dict with positions as keys containing list with 1 3d numpy array of pixels for each channel
@@ -129,10 +130,14 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
     stitched_image_size = [np.ptp(translations[:, 0]) + stack_shape[0],
                    (1 + np.ptp(row_col_coords[:, 0], axis=0)) * (stack_shape[1] - tile_overlap[0]),
                    (1 + np.ptp(row_col_coords[:, 1], axis=0)) * (stack_shape[2] - tile_overlap[1])]
-    if backgrounds is not None:
-        stitched = backgrounds[channel_index] * np.ones(stitched_image_size, dtype=np.uint8 if byte_depth == 1 else np.uint16)
+    if save_memory:
+        filename = path.join(mkdtemp(), 'stitched{}.dat'.format(channel_index))
+        stitched = np.memmap(filename=filename, dtype=np.uint8 if byte_depth == 1 else np.uint16,
+                                                              shape=tuple(stitched_image_size), mode='w+')
     else:
         stitched = np.zeros(stitched_image_size, dtype=np.uint8 if byte_depth == 1 else np.uint16)
+    if backgrounds is not None:
+        stitched[:] = backgrounds[channel_index]
 
     def get_stitch_coords(stitched_z, p_index):
         stack_z = stitched_z + translations[p_index, 0]

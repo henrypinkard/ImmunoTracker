@@ -2,7 +2,8 @@ from imariswriter import ImarisJavaWrapper
 import numpy as np
 from stitcher import stitch_single_channel
 from data_reading import read_raw_data
-
+from tempfile import mkdtemp
+from os import path
 
 def write_imaris(directory, name, time_series, pixel_size_xy_um, pixel_size_z_um):
     timepoint0 = time_series[0][0]
@@ -27,32 +28,38 @@ def write_imaris(directory, name, time_series, pixel_size_xy_um, pixel_size_z_um
                     writer.write_z_slice(image, z_index, channel_index, time_index, elapsed_time_ms)
     print('Finshed!')
 
-def ram_efficient_stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata,
-                    registration_series, translation_series, abs_timepoint_registrations, input_filter_sigma=None,
-                                               reverse_rank_filter=False):
+def stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata, registration_series,
+                        translation_series, abs_timepoint_registrations, input_filter_sigma=None,
+                                 reverse_rank_filter=False, save_memory=False):
     num_channels = metadata['num_channels']
     num_frames = metadata['num_frames']
     byte_depth = metadata['byte_depth']
     print('Imaris file: {}'.format(name))
     print('Imaris directory: {}'.format(directory))
-    with ImarisJavaWrapper(directory, name, (int(imaris_size[2]), int(imaris_size[1]), int(imaris_size[0])), byte_depth,
-                num_channels, num_frames, metadata['pixel_size_xy_um'], float(metadata['pixel_size_z_um'])) as writer:
+    with ImarisJavaWrapper(directory, name, (int(imaris_size[2]), int(imaris_size[1]), int(imaris_size[0])),
+                           int(byte_depth), int(num_channels), int(num_frames), metadata['pixel_size_xy_um'],
+                           float(metadata['pixel_size_z_um'])) as writer:
         for time_index in range(num_frames):
             print('Frame {}'.format(time_index))
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=time_index,
-                                    reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
+                reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma, save_ram=save_memory)
             for channel_index in range(num_channels):
                 stitched = stitch_single_channel(raw_stacks, translations=translation_series[time_index],
                         registrations=registration_series[time_index], tile_overlap=metadata['tile_overlaps'],
-                        row_col_coords=metadata['row_col_coords'], channel_index=channel_index)
+                        row_col_coords=metadata['row_col_coords'], channel_index=channel_index, save_memory=save_memory)
                 #fit into the larger image to account for timepoint registrations
-                tp_registered = np.zeros(imaris_size)
+                if save_memory:
+                    filename = path.join(mkdtemp(), 'stitched_tp_reggistered{}.dat'.format(channel_index))
+                    tp_registered = np.memmap(filename=filename, dtype=np.uint8 if byte_depth == 1 else np.uint16,
+                                         shape=tuple(imaris_size), mode='w+')
+                else:
+                    tp_registered = np.zeros(imaris_size, dtype=np.uint8 if byte_depth == 1 else np.uint16)
                 tp_registered[abs_timepoint_registrations[time_index, 0]:abs_timepoint_registrations[time_index, 0] + stitched.shape[0],
                         abs_timepoint_registrations[time_index, 1]:abs_timepoint_registrations[time_index, 1] + stitched.shape[1],
                        abs_timepoint_registrations[time_index, 2]:abs_timepoint_registrations[time_index, 2] + stitched.shape[2]] = stitched
                 print('writing to Imaris channel {}'.format(channel_index))
                 for z_index, image in enumerate(tp_registered):
-                    image = image.astype(np.uint8 if byte_depth == 1 else np.uint16)
+                    image = np.array(image, dtype=np.uint8 if byte_depth == 1 else np.uint16)
                     # add image to imaris writer
                     # print('Frame: {} of {}, Channel: {} of {}, Slice: {} of {}'.format(
                     #     time_index + 1, num_frames, channel_index + 1, num_channels, z_index, imaris_size[0]))
