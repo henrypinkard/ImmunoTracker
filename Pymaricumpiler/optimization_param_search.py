@@ -1,9 +1,12 @@
 from pymaricumpiler import open_magellan, read_raw_data
 from optimization_stitcher import optimize_timepoint
-from multiprocessing import Process
+from multiprocessing import Process, Pool
 
 
-def run_optimization(magellan_dir, frame_index, learning_rate, prefilter):
+magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/2018-6-2 4 hours post LPS/subregion timelapse_1'
+
+def run_optimization(params):
+    frame_index, learning_rate, prefilter = params
     name = 'frame_{}__lr_{}__prefilter_{}'.format(frame_index, learning_rate, prefilter)
 
     magellan, metadata = open_magellan(magellan_dir)
@@ -14,14 +17,19 @@ def run_optimization(magellan_dir, frame_index, learning_rate, prefilter):
                        intra_stack_channels=[1, 2, 3, 4, 5], inter_stack_channels=[0, 5],
                        prefilter=prefilter, learning_rate=learning_rate, name=name)
 
-magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/2018-6-2 4 hours post LPS/subregion timelapse_1'
 
 lrs = [1e-2, 1e-1, 5e-1, 1, 5]
 prefilter = [True, False]
 frame_index = [0, 7]
+
+params = []
 for learning_rate in lrs:
     for pf in prefilter:
         for t in frame_index:
-            print('s')
-            p = Process(target=run_optimization, args=(magellan_dir, magellan_dir, t, learning_rate, pf))
-            p.start()
+            params.append((t, learning_rate, pf))
+
+with Pool(2) as pool:
+    pool.map(run_optimization, params)
+    # p = Process(target=run_optimization, args=(magellan_dir, t, learning_rate, pf))
+    # p.start()
+    # run_optimization(magellan_dir, t, learning_rate, pf)
