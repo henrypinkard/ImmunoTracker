@@ -146,7 +146,7 @@ def convert(magellan_dir, corrections=None, save_memory=False, input_filter_sigm
 
         else:
             timepoint_registration = np.zeros(3) #first one is 0
-        previous_stitched = stitched
+            previous_stitched = stitched
 
         all_params.append((registration_params, translation_params, timepoint_registration))
     registration_series = np.stack([p[0] for p in all_params])
