@@ -130,23 +130,22 @@ def convert(magellan_dir, corrections=None, save_memory=False, input_filter_sigm
         if metadata['num_frames'] > 1:
             stitched = stitch_single_channel(raw_stacks, translation_params, registration_params, metadata['tile_overlaps'],
                     metadata['row_col_coords'], channel_index=timepoint_registration_channel, backgrounds=backgrounds)
-        if previous_stitched is not None:
-            #expand the size of the shorter one to match the bigger one
-            if previous_stitched.shape[0] < stitched.shape[0]:
-                previous_stitched_padded = np.ones(stitched.shape)*backgrounds[timepoint_registration_channel]
-                previous_stitched_padded[:previous_stitched.shape[0]] = previous_stitched
-                previous_stitched = previous_stitched_padded
-            elif previous_stitched.shape[0] > stitched.shape[0]:
-                stitched_padded = np.ones(previous_stitched.shape)*backgrounds[timepoint_registration_channel]
-                stitched_padded[:stitched.shape[0]] = stitched
-                stitched = stitched_padded
-            print('Registering timepoints')
-            timepoint_registration = x_corr_register_3D(
-                            previous_stitched, stitched, max_shift=np.array([10, *(np.array(raw_stacks[0][0].shape[1:]) // 2)]) )
-
+            if previous_stitched is not None:
+                #expand the size of the shorter one to match the bigger one
+                if previous_stitched.shape[0] < stitched.shape[0]:
+                    previous_stitched_padded = np.ones(stitched.shape)*backgrounds[timepoint_registration_channel]
+                    previous_stitched_padded[:previous_stitched.shape[0]] = previous_stitched
+                    previous_stitched = previous_stitched_padded
+                elif previous_stitched.shape[0] > stitched.shape[0]:
+                    stitched_padded = np.ones(previous_stitched.shape)*backgrounds[timepoint_registration_channel]
+                    stitched_padded[:stitched.shape[0]] = stitched
+                    stitched = stitched_padded
+                print('Registering timepoints')
+                timepoint_registration = x_corr_register_3D(
+                                previous_stitched, stitched, max_shift=np.array([10, *(np.array(raw_stacks[0][0].shape[1:]) // 2)]) )
+            previous_stitched = stitched
         else:
             timepoint_registration = np.zeros(3) #first one is 0
-            previous_stitched = stitched
 
         all_params.append((registration_params, translation_params, timepoint_registration))
     registration_series = np.stack([p[0] for p in all_params])
