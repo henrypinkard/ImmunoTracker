@@ -139,7 +139,7 @@ def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, b
             min_loss = np.finfo(np.float).max
             min_loss_iteration = 0
             loss_history = []
-            for iteration in range(500):
+            for iteration in range(400):
                 with tf.GradientTape() as tape:
                     shifted = model(None)
                     data_loss = tf.reduce_mean((shifted[1:, ...] - shifted[:-1, ...])**2)

@@ -16,11 +16,6 @@ import os
 # plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
 # plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 # plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-from PIL import Image
-from scipy import signal, optimize
-from itertools import combinations
-import warnings
-from intravital_stack import optimize_intra_stack_registrations
 from stitcher import stitch_single_channel
 from stitcher import compute_inter_stack_registrations
 from utility import x_corr_register_3D

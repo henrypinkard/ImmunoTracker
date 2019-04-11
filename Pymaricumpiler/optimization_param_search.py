@@ -6,27 +6,24 @@ from multiprocessing import Process, Pool
 magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/2018-6-2 4 hours post LPS/subregion timelapse_1'
 
 def run_optimization(params):
-    frame_index, learning_rate, prefilter = params
-    name = 'frame_{}__lr_{}__prefilter_{}'.format(frame_index, learning_rate, prefilter)
+    learning_rate, stitch_regularization, stack_regularization = params
+    name = 'lr_{}__stitch_reg_{}__stack_reg_{}'.format(0, learning_rate, prefilter)
 
     magellan, metadata = open_magellan(magellan_dir)
 
-    raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=frame_index,
+    raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=0,
                             reverse_rank_filter=True, input_filter_sigma=2)
     optimize_timepoint(raw_stacks, nonempty_pixels, metadata['row_col_coords'], metadata['tile_overlaps'],
                        intra_stack_channels=[1, 2, 3, 4, 5], inter_stack_channels=[0, 5],
-                       prefilter=prefilter, learning_rate=learning_rate, name=name)
+                       learning_rate=learning_rate, name=name)
 
 
-lrs = [1e-2, 1e-1, 5e-1, 1, 5]
-prefilter = [True, False]
-frame_index = [0, 7]
-
+lrs = [1e-2, 1e-1, 1]
+regs = [1e-2, 1, 1e2]
 params = []
 for learning_rate in lrs:
-    for pf in prefilter:
-        for t in frame_index:
-            params.append((t, learning_rate, pf))
+    for reg in regs:
+        params.append((learning_rate, reg, reg))
 
 with Pool(2) as pool:
     pool.map(run_optimization, params)

@@ -182,16 +182,8 @@ def convert_params(intra_stack_params_tensor, stitching_params_tensor, nonempty_
 
 
 def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
-                       inter_stack_channels, prefilter=False, learning_rate=1e-1, name='image'):
+                       inter_stack_channels, learning_rate=1e-1, stitch_regularization=1, stack_regularization=1, name='image'):
     zyxc_stacks = [np.stack(stack.values(), axis=3) for stack in raw_stacks.values()]
-    if prefilter:
-        #gaussian filter data prior to optimization
-        for pos_stack in zyxc_stacks:
-            for slice_index in range(pos_stack.shape[0]):
-                for channel_index in range(pos_stack.shape[3]):
-                    pos_stack[slice_index, :, :, channel_index] = filters.gaussian_filter(
-                        pos_stack[slice_index, :, :, channel_index], sigma=2)
-
     stacks_layer = IndividualStacksLayer(zyxc_stacks, nonempty_pixels)
     stitch_layer = ImageStitchingLayer(row_col_coords, zyxc_stacks[0].shape, overlap_shape, inter_stack_channels)
     full_model = tf.keras.Sequential([stacks_layer, stitch_layer])
@@ -203,9 +195,15 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
     min_loss_iteration = 0
     loss_history = []
 
-    path = '/media/hugespace/henry/lymphosight/optimization_tuning/'
+    stack_loss_rescale = None
+    stitch_loss_rescale = None
+    path = '/media/hugespace/henry/lymphosight/optimization_tuning_regularization/'
     with open(path + name + '.txt', 'w') as file:
-        for iteration in range(800):
+        for iteration in range(400):
+            all_params = full_model.trainable_variables
+            intra_stack_params_tensor = [all_params[2*i] for i in range(len(stacks))]
+            stitching_params_tensor = [all_params[2 * i + 1] for i in range(len(stacks))] + [all_params[-1]]
+
             with tf.GradientTape() as stack_tape:
                 stacks = individual_stacks_model(None)
                 #compute intra_stack_alignment cost
@@ -214,11 +212,25 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
                     for channel in intra_stack_channels:
                         stack_loss += tf.reduce_mean((
                                             shifted_stack[1:, :, :, channel] - shifted_stack[:-1, :, :, channel]) ** 2)
+                if stack_loss_rescale is None: #rescale loss to magnitude one
+                    stack_loss_rescale = np.abs(stack_loss.numpy())
+                stack_loss = stack_loss / stack_loss_rescale
+                #add regularization
+                stack_params_vec = tf.concat(intra_stack_params_tensor, axis=0)
+                stack_penalty = tf.reduce_mean(tf.abs(stack_params_vec))
+                stack_loss = stack_loss + stack_regularization * stack_penalty
             with tf.GradientTape() as full_tape:
                 stitching_loss = full_model(None)
-            all_params = full_model.trainable_variables
-            intra_stack_params_tensor = [all_params[2*i] for i in range(len(stacks))]
-            stitching_params_tensor = [all_params[2 * i + 1] for i in range(len(stacks))] + [all_params[-1]]
+                if stitch_loss_rescale is None:
+                    stitch_loss_rescale = np.abs(stitching_loss.numpy())
+                stitching_loss = stitching_loss / stitch_loss_rescale
+                #add regualrization
+                stitch_params_single_tensor = tf.concat(
+                    [tf.concat((stitching_params_tensor[i], tf.reshape(stitching_params_tensor[-1][i], (1, 1))), axis=1)
+                     for i in range(len(stitching_params_tensor) - 1)], axis=0)
+                stitch_penalty = tf.reduce_mean(tf.abs(stitch_params_single_tensor))
+                stitch_loss = stitch_loss + stitch_regularization * stitch_penalty
+
 
             # write out intermeiate images during optimization
             if iteration % 20 == 0:
@@ -232,15 +244,16 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
             stitch_grads = full_tape.gradient(stitching_loss, stitching_params_tensor)
 
 
-            if iteration == 0:
-                #rescale gradients to account for different magnitudes corresponding to differences in image intensity
-                stack_grads_rescale = 0.25 / np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stack_grads]) ** 2))
-                # rms_stitch_stack_grads = np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stitch_stack_grads]) ** 2))
-                stitch_grads_rescale = 0.25 / np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stitch_grads]) ** 2))
+            # if iteration == 0:
+            #     #rescale gradients to account for different magnitudes corresponding to differences in image intensity
+            #     stack_grads_rescale = 0.25 / np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stack_grads]) ** 2))
+            #     # rms_stitch_stack_grads = np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stitch_stack_grads]) ** 2))
+            #     stitch_grads_rescale = 0.25 / np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stitch_grads]) ** 2))
 
-            stack_grads = [stack_grads_rescale * g for g in stack_grads]
-            # stitch_stack_grads = [grad_rescale_factor[1] * g for g in stitch_stack_grads]
-            stitch_grads = [stitch_grads_rescale * g for g in stitch_grads]
+
+            # stack_grads = [stack_grads_rescale * g for g in stack_grads]
+            # # stitch_stack_grads = [grad_rescale_factor[1] * g for g in stitch_stack_grads]
+            # stitch_grads = [stitch_grads_rescale * g for g in stitch_grads]
 
             #compute rms pixel shifts to monitor progress
             intra_stack_rms_shift = np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in intra_stack_params_tensor]) ** 2))

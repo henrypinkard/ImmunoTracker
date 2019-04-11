@@ -1,5 +1,5 @@
 import numpy as np
-from intravital_stack import  apply_intra_stack_registration
+from old.intravital_stack import  apply_intra_stack_registration
 from utility import x_corr_register_3D, normalized_x_corr_register_3D
 from tempfile import mkdtemp
 from os import path
