@@ -200,12 +200,12 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
     path = '/media/hugespace/henry/lymphosight/optimization_tuning_regularization/'
     with open(path + name + '.txt', 'w') as file:
         for iteration in range(400):
-            all_params = full_model.trainable_variables
-            intra_stack_params_tensor = [all_params[2*i] for i in range(len(stacks))]
-            stitching_params_tensor = [all_params[2 * i + 1] for i in range(len(stacks))] + [all_params[-1]]
-
             with tf.GradientTape() as stack_tape:
                 stacks = individual_stacks_model(None)
+                all_params = full_model.trainable_variables
+                intra_stack_params_tensor = [all_params[2 * i] for i in range(len(stacks))]
+                stitching_params_tensor = [all_params[2 * i + 1] for i in range(len(stacks))] + [all_params[-1]]
+
                 #compute intra_stack_alignment cost
                 stack_loss = tf.zeros((), tf.float32)
                 for shifted_stack in stacks:
