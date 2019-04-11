@@ -204,7 +204,6 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
                 stacks = individual_stacks_model(None)
                 all_params = full_model.trainable_variables
                 intra_stack_params_tensor = [all_params[2 * i] for i in range(len(stacks))]
-                stitching_params_tensor = [all_params[2 * i + 1] for i in range(len(stacks))] + [all_params[-1]]
 
                 #compute intra_stack_alignment cost
                 stack_loss = tf.zeros((), tf.float32)
@@ -221,6 +220,8 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
                 stack_loss = stack_loss + stack_regularization * stack_penalty
             with tf.GradientTape() as full_tape:
                 stitching_loss = full_model(None)
+                #get stitching params
+                stitching_params_tensor = [all_params[2 * i + 1] for i in range(len(stacks))] + [full_model.trainable_variables[-1]]
                 if stitch_loss_rescale is None:
                     stitch_loss_rescale = np.abs(stitching_loss.numpy())
                 stitching_loss = stitching_loss / stitch_loss_rescale
