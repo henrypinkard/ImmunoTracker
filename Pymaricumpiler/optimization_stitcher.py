@@ -230,7 +230,7 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
                     [tf.concat((stitching_params_tensor[i], tf.reshape(stitching_params_tensor[-1][i], (1, 1))), axis=1)
                      for i in range(len(stitching_params_tensor) - 1)], axis=0)
                 stitch_penalty = tf.reduce_mean(tf.abs(stitch_params_single_tensor))
-                stitch_loss = stitch_loss + stitch_regularization * stitch_penalty
+                stitching_loss = stitching_loss + stitch_regularization * stitch_penalty
 
 
             # write out intermeiate images during optimization
