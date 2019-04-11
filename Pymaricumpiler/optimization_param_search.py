@@ -7,7 +7,7 @@ magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/2018-6-2 4 hours pos
 
 def run_optimization(params):
     learning_rate, stitch_regularization, stack_regularization = params
-    name = 'lr_{}__stitch_reg_{}__stack_reg_{}'.format(0, learning_rate, prefilter)
+    name = 'lr_{}__stitch_reg_{}__stack_reg_{}'.format(learning_rate, stitch_regularization, stack_regularization)
 
     magellan, metadata = open_magellan(magellan_dir)
 
