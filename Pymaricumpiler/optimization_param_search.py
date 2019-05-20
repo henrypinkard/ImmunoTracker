@@ -15,15 +15,17 @@ def run_optimization(params):
                             reverse_rank_filter=True, input_filter_sigma=2)
     optimize_timepoint(raw_stacks, nonempty_pixels, metadata['row_col_coords'], metadata['tile_overlaps'],
                        intra_stack_channels=[1, 2, 3, 4, 5], inter_stack_channels=[0, 5],
-                       learning_rate=learning_rate, name=name)
+                       learning_rate=learning_rate, stitch_regularization=stitch_regularization, stack_regularization=stack_regularization, name=name)
 
 
-lrs = [1e-2, 1e-1, 1]
-regs = [1e-2, 1, 1e2]
+lrs = [1, 3, 9]
+stack_regs = [1e-2, 1]
+stitch_regs = [1e-2, 1e-1, 1]
 params = []
 for learning_rate in lrs:
-    for reg in regs:
-        params.append((learning_rate, reg, reg))
+    for stack_reg in stack_regs:
+        for stitch_reg in stitch_regs:
+            params.append((learning_rate, stitch_reg, stack_reg))
 
 with Pool(2) as pool:
     pool.map(run_optimization, params)
