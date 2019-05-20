@@ -182,7 +182,8 @@ def convert_params(intra_stack_params_tensor, stitching_params_tensor, nonempty_
 
 
 def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
-                       inter_stack_channels, learning_rate=1e-1, stitch_regularization=1, stack_regularization=1, name='image'):
+                       inter_stack_channels, learning_rate_stack=10, learning_rate_stitch=1,
+                       stitch_regularization=0.01, stack_regularization=0.01, name='image'):
     zyxc_stacks = [np.stack(stack.values(), axis=3) for stack in raw_stacks.values()]
     stacks_layer = IndividualStacksLayer(zyxc_stacks, nonempty_pixels)
     stitch_layer = ImageStitchingLayer(row_col_coords, zyxc_stacks[0].shape, overlap_shape, inter_stack_channels)
@@ -190,7 +191,8 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
     #model for calculating loss over individual stacks
     individual_stacks_model = tf.keras.Sequential([full_model.get_layer(index=0)])
 
-    optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.95)
+    stitch_optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate_stitch, momentum=0.95)
+    stack_optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate_stack, momentum=0.95)
     min_loss = np.finfo(np.float).max
     min_loss_iteration = 0
     loss_history = []
@@ -199,7 +201,7 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
     stitch_loss_rescale = None
     path = '/media/hugespace/henry/lymphosight/optimization_tuning_regularization/'
     with open(path + name + '.txt', 'w') as file:
-        for iteration in range(400):
+        for iteration in range(500):
             with tf.GradientTape() as stack_tape:
                 stacks = individual_stacks_model(None)
                 all_params = full_model.trainable_variables
@@ -264,9 +266,9 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
             print(out)
             file.write(out + '\n')
 
-            optimizer.apply_gradients(zip(stack_grads, intra_stack_params_tensor), global_step=tf.train.get_or_create_global_step())
+            stack_optimizer.apply_gradients(zip(stack_grads, intra_stack_params_tensor), global_step=tf.train.get_or_create_global_step())
             # optimizer.apply_gradients(zip(stitch_stack_grads, intra_stack_params_tensor), global_step=tf.train.get_or_create_global_step())
-            optimizer.apply_gradients(zip(stitch_grads, stitching_params_tensor), global_step=tf.train.get_or_create_global_step())
+            stitch_optimizer.apply_gradients(zip(stitch_grads, stitching_params_tensor), global_step=tf.train.get_or_create_global_step())
 
             #make the mean xy shift for stitching 0
             mean_shift = tf.reduce_mean(tf.concat(stitching_params_tensor[:-1], axis=0), axis=0)
