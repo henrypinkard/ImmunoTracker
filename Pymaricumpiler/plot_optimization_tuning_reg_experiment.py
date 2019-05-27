@@ -39,13 +39,21 @@ def plotit(data, title, index):
             lr = key.split('_')[4]
             stack_reg = '0'
             stitch_reg = '0'
+        elif key.startswith('Adam'):
+            lr = key[:-4]
+            stitch_reg = '0.01'
+            stack_reg = '0.01'
+        elif key.startswith('different'):
+            lr = '0'
+            stitch_reg = '0.01'
+            stack_reg = '0.01'
         else:
             lr, stitch_reg, stack_reg = [key.replace('.txt', '').split('_')[i] for i in [1, 5, 9]]
-        if not (lr == '1' or lr == '3' or lr == '9' or lr == '10' or lr == '0.1' or lr == '0.01'):
+        # if not (lr == '1' or lr == '3' or lr == '9' or lr == '10' or lr == '0.1' or lr == '0.01' or lr == '0'):
+        #     continue
+        if not (stitch_reg == '0' or stitch_reg == '0.01' ):
             continue
-        if not (stitch_reg == '0' or stitch_reg == '0.01' or stitch_reg == '0.1' or stitch_reg == '1'):
-            continue
-        if not (stack_reg == '0' or stack_reg == '0.01' or stack_reg == '1'):
+        if not (stack_reg == '0' or stack_reg == '0.01' ):
             continue
 
 
@@ -115,13 +123,13 @@ stack_regs = list(stack_regs)
 stitch_regs = list(stitch_regs)
 
 
-rax = plt.axes([0, 0.2, 0.05, 0.15])
+rax = plt.axes([0, 0.1, 0.1, 0.35])
 check_lr = CheckButtons(rax, lrs, len(lrs) * [True])
 
-rax = plt.axes([0, 0.4, 0.05, 0.15])
+rax = plt.axes([0, 0.5, 0.05, 0.15])
 check_stack_reg = CheckButtons(rax, stack_regs, len(stack_regs) * [True])
 
-rax = plt.axes([0, 0.6, 0.05, 0.15])
+rax = plt.axes([0, 0.7, 0.05, 0.15])
 check_stitch_reg = CheckButtons(rax, stitch_regs, len(stitch_regs) * [True])
 
 def update_lines(discar_param):
@@ -144,3 +152,21 @@ print(stitch_regs)
 
 plt.show()
 pass
+
+log = data['Adam0.1.txt']
+min_loss0 = log[0, 0]
+min_loss1 = log[0, 1]
+new_min_iter = 0
+for i in np.arange(log.shape[0]):
+    if min_loss0 > log[i, 0]:
+        min_loss0 = log[i, 0]
+        new_min_iter = 0
+    if min_loss1 > log[i, 1]:
+        min_loss1 = log[i, 1]
+        new_min_iter = 0
+    new_min_iter = new_min_iter + 1
+    if new_min_iter == 10:
+        break
+print(i, min_loss0, min_loss1)
+
+
