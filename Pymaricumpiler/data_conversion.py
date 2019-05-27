@@ -37,7 +37,7 @@ imaris_dir = '/media/hugespace/henry/lymphosight/imaris_files'
 for index in data_indices:
     data_path = get_dataset_path(index)
     namestring = get_dataset_name_string(index) + '_uncorrected'
-    magellan_dir = '/media/hugespace/henry/data/lymphosight/raw_data/' + data_path
+    magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/' + data_path
     
     if os.path.isfile(imaris_dir + os.sep + namestring + '.ims'):
         print('skipping {} because its already converted'.format(namestring))
