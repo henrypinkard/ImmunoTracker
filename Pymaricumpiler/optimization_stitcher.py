@@ -183,7 +183,8 @@ def convert_params(intra_stack_params_tensor, stitching_params_tensor, nonempty_
 
 def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
                        inter_stack_channels, learning_rate,
-                       stitch_regularization=0.01, stack_regularization=0.01, name='image'):
+                       stitch_regularization=0.01, stack_regularization=0.01, name='image',
+                       optimization_log_dir='.'):
     zyxc_stacks = [np.stack(stack.values(), axis=3) for stack in raw_stacks.values()]
     stacks_layer = IndividualStacksLayer(zyxc_stacks, nonempty_pixels)
     stitch_layer = ImageStitchingLayer(row_col_coords, zyxc_stacks[0].shape, overlap_shape, inter_stack_channels)
@@ -191,20 +192,14 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
     #model for calculating loss over individual stacks
     individual_stacks_model = tf.keras.Sequential([full_model.get_layer(index=0)])
 
-    stitch_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999)
-    stack_optimizer = stitch_optimizer
+    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999)
 
-    # stitch_optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate_stitch, momentum=0.95)
-    # stack_optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate_stack, momentum=0.95)
-    min_loss = np.finfo(np.float).max
-    min_loss_iteration = 0
-    loss_history = []
-
+    new_min_iter = 0
+    iteration = 0
     stack_loss_rescale = None
     stitch_loss_rescale = None
-    path = '/media/hugespace/henry/lymphosight/optimization_tuning_regularization/'
-    with open(path + name + '.txt', 'w') as file:
-        for iteration in range(500):
+    with open(optimization_log_dir + name + '.txt', 'w') as file:
+        while True:
             with tf.GradientTape() as stack_tape:
                 stacks = individual_stacks_model(None)
                 all_params = full_model.trainable_variables
@@ -237,44 +232,42 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
                 stitch_penalty = tf.reduce_mean(tf.abs(stitch_params_single_tensor))
                 stitching_loss = stitching_loss + stitch_regularization * stitch_penalty
 
-
             # write out intermeiate images during optimization
-            if iteration % 20 == 0:
-                full_intra_params, stitch_params = convert_params(intra_stack_params_tensor, stitching_params_tensor, nonempty_pixels)
-                # print(stitch_params)
-                export_stitched_tiff(raw_stacks, row_col_coords, overlap_shape, full_intra_params, stitch_params,
-                                     name='{} iteration{}'.format(name, iteration), path=path)
-
-            stack_grads = stack_tape.gradient(stack_loss, intra_stack_params_tensor)
-            # stitch_stack_grads, stitch_grads = full_tape.gradient(stitching_loss, [intra_stack_params_tensor, stitching_params_tensor])
-            stitch_grads = full_tape.gradient(stitching_loss, stitching_params_tensor)
-
-
-            # if iteration == 0:
-            #     #rescale gradients to account for different magnitudes corresponding to differences in image intensity
-            #     stack_grads_rescale = 0.25 / np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stack_grads]) ** 2))
-            #     # rms_stitch_stack_grads = np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stitch_stack_grads]) ** 2))
-            #     stitch_grads_rescale = 0.25 / np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stitch_grads]) ** 2))
-
-
-            # stack_grads = [stack_grads_rescale * g for g in stack_grads]
-            # # stitch_stack_grads = [grad_rescale_factor[1] * g for g in stitch_stack_grads]
-            # stitch_grads = [stitch_grads_rescale * g for g in stitch_grads]
+            # if iteration % 20 == 0:
+            #     full_intra_params, stitch_params = convert_params(intra_stack_params_tensor, stitching_params_tensor, nonempty_pixels)
+            #     # print(stitch_params)
+            #     export_stitched_tiff(raw_stacks, row_col_coords, overlap_shape, full_intra_params, stitch_params,
+            #                          name='{} iteration{}'.format(name, iteration), path=path)
 
             #compute rms pixel shifts to monitor progress
             intra_stack_rms_shift = np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in intra_stack_params_tensor]) ** 2))
             stitch_rms_shift = np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stitching_params_tensor]) ** 2))
-
             out = '{},{},{},{}'.format(stitching_loss.numpy(), stack_loss.numpy(), stitch_rms_shift, intra_stack_rms_shift)
             print(out)
             file.write(out + '\n')
 
-            stack_optimizer.apply_gradients(zip(stack_grads, intra_stack_params_tensor), global_step=tf.train.get_or_create_global_step())
-            # optimizer.apply_gradients(zip(stitch_stack_grads, intra_stack_params_tensor), global_step=tf.train.get_or_create_global_step())
-            stitch_optimizer.apply_gradients(zip(stitch_grads, stitching_params_tensor), global_step=tf.train.get_or_create_global_step())
+            #calc gradients and take a step
+            stack_grads = stack_tape.gradient(stack_loss, intra_stack_params_tensor)
+            stitch_grads = full_tape.gradient(stitching_loss, stitching_params_tensor)
+            optimizer.apply_gradients(zip(stack_grads, intra_stack_params_tensor), global_step=tf.train.get_or_create_global_step())
+            optimizer.apply_gradients(zip(stitch_grads, stitching_params_tensor), global_step=tf.train.get_or_create_global_step())
 
             #make the mean xy shift for stitching 0
             mean_shift = tf.reduce_mean(tf.concat(stitching_params_tensor[:-1], axis=0), axis=0)
             for xy_shift in stitching_params_tensor[:-1]:
                 xy_shift.assign(xy_shift - mean_shift)
 
+            #check for stopping condition
+            if min_loss_stitch > stitching_loss.numpy():
+                min_loss_stitch = stitching_loss.numpy()
+                new_min_iter = 0
+            if min_loss_stack > stack_loss.numpy():
+                min_loss_stack = stack_loss.numpy()
+                new_min_iter = 0
+            new_min_iter = new_min_iter + 1
+            if new_min_iter == 10:
+                break
+
+            iteration = iteration + 1
+    full_intra_params, stitch_params = convert_params(intra_stack_params_tensor, stitching_params_tensor, nonempty_pixels)
+    return full_intra_params, stitch_params

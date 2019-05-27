@@ -49,7 +49,7 @@ def estimate_background(raw_stacks, nonempty_pixels):
 def convert(magellan_dir, corrections=None, save_memory=False, input_filter_sigma=None,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
-            reverse_rank_filter=False):
+            reverse_rank_filter=False, optimization_log_dir='.'):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
     :param magellan_dir: directory of magellan data to be converted
@@ -101,7 +101,9 @@ def convert(magellan_dir, corrections=None, save_memory=False, input_filter_sigm
                 registration_params, translation_params = optimize_timepoint(raw_stacks, nonempty_pixels,
                                metadata['row_col_coords'], metadata['tile_overlaps'],
                                intra_stack_channels=intra_stack_registration_channels,
-                               inter_stack_channels=inter_stack_registration_channels)
+                               inter_stack_channels=inter_stack_registration_channels,
+                                optimization_log_dir=optimization_log_dir,
+                                                            name=output_basename + '_tp' + frame_index)
             elif corrections == 'fast_register':
                 if backgrounds is None:
                     # get backgrounds from first time point

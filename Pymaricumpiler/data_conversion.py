@@ -2,16 +2,16 @@ from pymaricumpiler import convert
 import os
 import csv
 import numpy as np
-from pygellan import MagellanDataset
 
 #download latest version of the master data spreadsheet
 os.system("rclone copy wallercloud:henry/lymphosight/Datasets.csv .")
 
 with open('Datasets.csv', 'r') as f:
-  reader = csv.reader(f)
-  list_form = list(reader)
+    reader = csv.reader(f)
+    list_form = list(reader)
 str_array = np.array(list_form[1:])
 data_indices = str_array[:, 0].astype(np.int)
+os.system('rm Datasets.csv')
 
 def get_dataset_path(index):
     dat_list_index = int((data_indices == index).nonzero()[0])
@@ -29,9 +29,11 @@ def get_dataset_name_string(index):
     path = '{}_{}{}{}'.format(date, experiment, '_', dataset)
     return path
 
+#test one
+data_indices = np.array([39])
 
 #convert all with no corrections
-imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files_uncorrected'
+imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files'
 for index in data_indices:
     data_path = get_dataset_path(index)
     namestring = get_dataset_name_string(index) + '_uncorrected'
@@ -41,9 +43,9 @@ for index in data_indices:
         print('skipping {} because its already converted'.format(namestring))
     else:
         print('\n\nconverting: {}\n'.format(magellan_dir))
-        convert(magellan_dir, do_intra_stack=False, do_inter_stack=False, do_timepoints=False,
+        convert(magellan_dir, corrections='optimize', input_filter_sigma=2,
                 output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-                intra_stack_noise_model_sigma=2, intra_stack_zero_center_sigma=3,
-                intra_stack_likelihood_threshold_smooth=1.0, intra_stack_likelihood_threshold=-18,
-                inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=24)
+                inter_stack_registration_channels=[0, 5], timepoint_registration_channel=5,
+                reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/')
+
 
