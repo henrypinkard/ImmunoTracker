@@ -33,7 +33,7 @@ def get_dataset_name_string(index):
 data_indices = np.array([39])
 
 #convert all with no corrections
-imaris_dir = '/media/hugespace/henry/data/lymphosight/imaris_files'
+imaris_dir = '/media/hugespace/henry/lymphosight/imaris_files'
 for index in data_indices:
     data_path = get_dataset_path(index)
     namestring = get_dataset_name_string(index) + '_uncorrected'
