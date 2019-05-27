@@ -5,18 +5,22 @@ from multiprocessing import Process, Pool
 
 magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/2018-6-2 4 hours post LPS/subregion timelapse_1'
 
-def run_optimization():
-    name = 'different_learning_rates'
+# def run_optimization():
 
-    magellan, metadata = open_magellan(magellan_dir)
 
-    raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=0,
-                            reverse_rank_filter=True, input_filter_sigma=2)
-    optimize_timepoint(raw_stacks, nonempty_pixels, metadata['row_col_coords'], metadata['tile_overlaps'],
-                       intra_stack_channels=[1, 2, 3, 4, 5], inter_stack_channels=[0, 5],
-                     name=name)
+magellan, metadata = open_magellan(magellan_dir)
 
-run_optimization()
+raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=0,
+                        reverse_rank_filter=True, input_filter_sigma=2)
+
+tups = [(lr, 'Adam{}'.format(lr)) for lr in [0.01, 0.05, 0.25, 0.5]]
+for lr, name in tups:
+	print(lr, name)
+	optimize_timepoint(raw_stacks, nonempty_pixels, metadata['row_col_coords'], metadata['tile_overlaps'],
+                   intra_stack_channels=[1, 2, 3, 4, 5], inter_stack_channels=[0, 5], learning_rate=lr,
+                 name=name)
+
+# run_optimization()
 
 # lrs = [1, 3, 9]
 # stack_regs = [1e-2, 1]
