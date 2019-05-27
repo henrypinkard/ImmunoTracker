@@ -182,7 +182,7 @@ def convert_params(intra_stack_params_tensor, stitching_params_tensor, nonempty_
 
 
 def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
-                       inter_stack_channels, learning_rate_stack=10, learning_rate_stitch=1,
+                       inter_stack_channels, learning_rate,
                        stitch_regularization=0.01, stack_regularization=0.01, name='image'):
     zyxc_stacks = [np.stack(stack.values(), axis=3) for stack in raw_stacks.values()]
     stacks_layer = IndividualStacksLayer(zyxc_stacks, nonempty_pixels)
@@ -191,8 +191,11 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
     #model for calculating loss over individual stacks
     individual_stacks_model = tf.keras.Sequential([full_model.get_layer(index=0)])
 
-    stitch_optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate_stitch, momentum=0.95)
-    stack_optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate_stack, momentum=0.95)
+    stitch_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999)
+    stack_optimizer = stitch_optimizer
+
+    # stitch_optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate_stitch, momentum=0.95)
+    # stack_optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate_stack, momentum=0.95)
     min_loss = np.finfo(np.float).max
     min_loss_iteration = 0
     loss_history = []
