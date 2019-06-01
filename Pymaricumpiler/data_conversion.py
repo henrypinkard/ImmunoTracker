@@ -43,7 +43,7 @@ for index in conversion_indices:
         print('skipping {} because its already converted'.format(namestring))
     else:
         print('\n\nconverting: {}\n'.format(magellan_dir))
-        convert(magellan_dir, corrections='optimize', input_filter_sigma=2,
+        convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
                 output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
                 inter_stack_registration_channels=[0, 5], timepoint_registration_channel=5,
                 reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/')
