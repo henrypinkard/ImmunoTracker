@@ -30,13 +30,13 @@ def get_dataset_name_string(index):
     return path
 
 #test one
-data_indices = np.array([39])
+conversion_indices = np.array([36])
 
 #convert all with no corrections
 imaris_dir = '/media/hugespace/henry/lymphosight/imaris_files'
-for index in data_indices:
+for index in conversion_indices:
     data_path = get_dataset_path(index)
-    namestring = get_dataset_name_string(index) + '_uncorrected'
+    namestring = get_dataset_name_string(index)
     magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/' + data_path
     
     if os.path.isfile(imaris_dir + os.sep + namestring + '.ims'):

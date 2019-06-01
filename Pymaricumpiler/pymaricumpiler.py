@@ -97,17 +97,17 @@ def convert(magellan_dir, corrections=None, save_memory=False, input_filter_sigm
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=frame_index,
                                     reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma,
                                                                    save_ram=save_memory)
+            if backgrounds is None:
+                    # get backgrounds from first time point
+                backgrounds = estimate_background(raw_stacks, nonempty_pixels)
             if corrections == 'optimize':
                 registration_params, translation_params = optimize_timepoint(raw_stacks, nonempty_pixels,
                                metadata['row_col_coords'], metadata['tile_overlaps'],
                                intra_stack_channels=intra_stack_registration_channels,
                                inter_stack_channels=inter_stack_registration_channels,
                                 optimization_log_dir=optimization_log_dir,
-                                                            name=output_basename + '_tp' + frame_index)
+                                                            name=output_basename + '_tp{}'.format(frame_index))
             elif corrections == 'fast_register':
-                if backgrounds is None:
-                    # get backgrounds from first time point
-                    backgrounds = estimate_background(raw_stacks, nonempty_pixels)
                 translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
                                 metadata, max_shift_z=inter_stack_max_z, channel_indices=inter_stack_registration_channels,
                                                                        backgrounds=backgrounds, n_cores=n_cores)
@@ -124,6 +124,8 @@ def convert(magellan_dir, corrections=None, save_memory=False, input_filter_sigm
         #Register 3D volumes of successive timepoints to one another
 
         #create a stitched version for doing timepoint to timepoint registrations
+        
+        timepoint_registration = np.zeros(3)
         if metadata['num_frames'] > 1:
             stitched = stitch_single_channel(raw_stacks, translation_params, registration_params, metadata['tile_overlaps'],
                     metadata['row_col_coords'], channel_index=timepoint_registration_channel, backgrounds=backgrounds)
@@ -141,8 +143,6 @@ def convert(magellan_dir, corrections=None, save_memory=False, input_filter_sigm
                 timepoint_registration = x_corr_register_3D(
                                 previous_stitched, stitched, max_shift=np.array([10, *(np.array(raw_stacks[0][0].shape[1:]) // 2)]) )
             previous_stitched = stitched
-        else:
-            timepoint_registration = np.zeros(3) #first one is 0
 
         all_params.append((registration_params, translation_params, timepoint_registration))
     registration_series = np.stack([p[0] for p in all_params])

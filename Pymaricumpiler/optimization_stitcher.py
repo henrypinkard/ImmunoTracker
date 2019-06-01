@@ -182,7 +182,7 @@ def convert_params(intra_stack_params_tensor, stitching_params_tensor, nonempty_
 
 
 def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
-                       inter_stack_channels, learning_rate,
+                       inter_stack_channels, learning_rate=0.1,
                        stitch_regularization=0.01, stack_regularization=0.01, name='image',
                        optimization_log_dir='.'):
     zyxc_stacks = [np.stack(stack.values(), axis=3) for stack in raw_stacks.values()]
@@ -195,6 +195,8 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999)
 
     new_min_iter = 0
+    min_loss_stitch = 10
+    min_loss_stack = 10
     iteration = 0
     stack_loss_rescale = None
     stitch_loss_rescale = None

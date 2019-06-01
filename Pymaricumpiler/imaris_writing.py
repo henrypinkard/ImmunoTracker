@@ -50,16 +50,16 @@ def stitch_register_imaris_write(directory, name, imaris_size, magellan, metadat
                 #fit into the larger image to account for timepoint registrations
                 if save_memory:
                     filename = path.join(mkdtemp(), 'stitched_tp_reggistered{}.dat'.format(channel_index))
-                    tp_registered = np.memmap(filename=filename, dtype=np.uint8 if byte_depth == 1 else np.uint16,
+                    tp_registered = np.memmap(filename=filename, dtype=np.uint8 if int(byte_depth) == 1 else np.uint16,
                                          shape=tuple(imaris_size), mode='w+')
                 else:
-                    tp_registered = np.zeros(imaris_size, dtype=np.uint8 if byte_depth == 1 else np.uint16)
+                    tp_registered = np.zeros(imaris_size.astype(np.int), dtype=np.uint8 if int(byte_depth) == 1 else np.uint16)
                 tp_registered[abs_timepoint_registrations[time_index, 0]:abs_timepoint_registrations[time_index, 0] + stitched.shape[0],
                         abs_timepoint_registrations[time_index, 1]:abs_timepoint_registrations[time_index, 1] + stitched.shape[1],
                        abs_timepoint_registrations[time_index, 2]:abs_timepoint_registrations[time_index, 2] + stitched.shape[2]] = stitched
                 print('writing to Imaris channel {}'.format(channel_index))
                 for z_index, image in enumerate(tp_registered):
-                    image = np.array(image, dtype=np.uint8 if byte_depth == 1 else np.uint16)
+                    image = np.array(image, dtype=np.uint8 if int(byte_depth) == 1 else np.uint16)
                     # add image to imaris writer
                     # print('Frame: {} of {}, Channel: {} of {}, Slice: {} of {}'.format(
                     #     time_index + 1, num_frames, channel_index + 1, num_channels, z_index, imaris_size[0]))
