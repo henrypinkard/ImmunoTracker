@@ -48,7 +48,7 @@ def estimate_background(raw_stacks, nonempty_pixels):
 
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, save_memory=False, input_filter_sigma=None,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            inter_stack_registration_channels=[0], inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
+            inter_stack_registration_channels=[0], num_time_points=None, inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
             reverse_rank_filter=False, optimization_log_dir='.'):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
@@ -91,10 +91,31 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     previous_stitched = None
     backgrounds=None
     stitched_image_size=None
-    for frame_index in range(metadata['num_frames']):
+    if num_time_points is None:
+        num_time_points=metadata['num_frames']
+    for frame_index in range(num_time_points):
         translation_params = np.zeros((metadata['num_positions'], 3), dtype=np.int)
         registration_params = metadata['num_positions'] * [np.zeros((metadata['max_z_index']
                                                                      - metadata['min_z_index'] + 1, 2))]
+
+        raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=frame_index,
+                    reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma, save_ram=save_memory)
+        if backgrounds is None:
+            # get backgrounds from first time point
+            backgrounds = estimate_background(raw_stacks, nonempty_pixels)
+        if position_registrations is not None:
+            if position_registrations == 'optimize':
+                registration_params, translation_params = optimize_timepoint(raw_stacks, nonempty_pixels,
+                               metadata['row_col_coords'], metadata['tile_overlaps'],
+                               intra_stack_channels=intra_stack_registration_channels,
+                               inter_stack_channels=inter_stack_registration_channels,
+                                optimization_log_dir=optimization_log_dir,
+                                                            name=output_basename + '_tp{}'.format(frame_index))
+            elif position_registrations == 'fast_register':
+                translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
+                                metadata, max_shift_z=inter_stack_max_z, channel_indices=inter_stack_registration_channels,
+                                                                       backgrounds=backgrounds, n_cores=n_cores)
+
         # Update the size of stitched image based on XYZ translations
         if stitched_image_size is None:
             stitched_image_size = [np.ptp(np.round(translation_params[:, 0])) + metadata['max_z_index'] - metadata['min_z_index'] + 1,
