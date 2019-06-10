@@ -106,11 +106,10 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         if position_registrations is not None:
             if position_registrations == 'optimize':
                 registration_params, translation_params = optimize_timepoint(raw_stacks, nonempty_pixels,
-                               metadata['row_col_coords'], metadata['tile_overlaps'],
-                               intra_stack_channels=intra_stack_registration_channels,
-                               inter_stack_channels=inter_stack_registration_channels,
-                                optimization_log_dir=optimization_log_dir,
-                                                            name=output_basename + '_tp{}'.format(frame_index))
+                        metadata['row_col_coords'], metadata['tile_overlaps'],
+                        intra_stack_channels=intra_stack_registration_channels, pixel_size_xy=magellan.pixel_size_xy_um,
+                        pixel_size_z=magellan.pixel_size_z_um, inter_stack_channels=inter_stack_registration_channels,
+                        optimization_log_dir=optimization_log_dir, name=output_basename + '_tp{}'.format(frame_index))
             elif position_registrations == 'fast_register':
                 translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
                                 metadata, max_shift_z=inter_stack_max_z, channel_indices=inter_stack_registration_channels,

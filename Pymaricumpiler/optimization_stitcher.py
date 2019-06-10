@@ -182,8 +182,8 @@ def convert_params(intra_stack_params_tensor, stitching_params_tensor, nonempty_
 
 
 def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
-                       inter_stack_channels, stack_learning_rate=0.1, stitch_learning_rate=0.5,
-                       stitch_regularization=0.01, stack_regularization=0.01, name='image',
+                       inter_stack_channels, pixel_size_xy, pixel_size_z, stack_learning_rate=0.1, stitch_learning_rate=0.5,
+                       stitch_regularization=1e-4, stack_regularization=0.01, name='image',
                        optimization_log_dir='.'):
     zyxc_stacks = [np.stack(stack.values(), axis=3) for stack in raw_stacks.values()]
     stacks_layer = IndividualStacksLayer(zyxc_stacks, nonempty_pixels)
@@ -256,7 +256,11 @@ def optimize_timepoint(raw_stacks, nonempty_pixels, row_col_coords, overlap_shap
                 stitch_params_single_tensor = tf.concat(
                     [tf.concat((stitching_params_tensor[i], tf.reshape(stitching_params_tensor[-1][i], (1, 1))), axis=1)
                      for i in range(len(stitching_params_tensor) - 1)], axis=0)
-                stitch_penalty = tf.reduce_mean(tf.abs(stitch_params_single_tensor))
+                #account for anisotrpy in pixels sizes
+                isotropic_params = tf.concat([stitch_params_single_tensor[:, :2],
+                           tf.reshape(pixel_size_z / pixel_size_xy * stitch_params_single_tensor[:, 2], [-1, 1])], axis=1)
+
+                stitch_penalty = tf.reduce_mean(isotropic_params ** 2)
                 stitching_loss = stitching_loss + stitch_regularization * stitch_penalty
 
             #compute rms pixel shifts to monitor progress
