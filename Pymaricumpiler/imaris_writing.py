@@ -32,7 +32,7 @@ def stitch_register_imaris_write(directory, name, imaris_size, magellan, metadat
                         translation_series, abs_timepoint_registrations, input_filter_sigma=None,
                                  reverse_rank_filter=False, save_memory=False):
     num_channels = metadata['num_channels']
-    num_frames = metadata['num_frames']
+    num_frames = abs_timepoint_registrations.shape[0]
     byte_depth = metadata['byte_depth']
     print('Imaris file: {}'.format(name))
     print('Imaris directory: {}'.format(directory))
