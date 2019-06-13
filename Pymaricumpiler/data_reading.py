@@ -1,4 +1,4 @@
-from pygellan import MagellanDataset
+from magellan_data import MagellanDataset
 import numpy as np
 from scipy import ndimage as ndi
 from scipy.ndimage import filters
