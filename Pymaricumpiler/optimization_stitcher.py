@@ -1,7 +1,5 @@
-from stitcher import stitch_single_channel
 import jax.numpy as np
-from jax import grad, hessian, jit
-from transformer import spatial_transformer_network
+from jax import jit
 # import matplotlib
 # matplotlib.use('TkAgg')
 # import matplotlib.pyplot as plt
@@ -57,111 +55,8 @@ def convert_stitch_params(stitching_params_tensor):
         stitch_params = np.concatenate([-stitch_params[:, 0, None], stitch_params[:, 1:]], axis=1)
         return stitch_params
 
-def optimize_stacks(raw_stacks, nonempty_pixels, stack_learning_rate, stack_regularization, intra_stack_channels, log_file):
-    zyxc_stacks = [np.stack(stack.values(), axis=3) for stack in raw_stacks.values()]
-    stacks_layer = IndividualStacksLayer(zyxc_stacks, nonempty_pixels)
-    #model for calculating loss over individual stacks
-    individual_stacks_model = tf.keras.Sequential([stacks_layer])
 
-    stack_optimizer = tf.train.AdamOptimizer(learning_rate=stack_learning_rate, beta1=0.9, beta2=0.999)
-    stack_loss_rescale = None
-
-    # Stack optimization loop
-    new_min_iter = 0
-    min_loss = 10
-    iteration = 0
-    #TODO: change back
-    while iteration < 4:
-    # while True:
-        with tf.GradientTape() as stack_tape:
-            stacks = individual_stacks_model(None)
-            intra_stack_params_tensor = individual_stacks_model.trainable_variables
-
-            # compute intra_stack_alignment cost
-            stack_loss = tf.zeros((), tf.float32)
-            for shifted_stack in stacks:
-                for channel in intra_stack_channels:
-                    stack_loss += tf.reduce_mean(( shifted_stack[1:, :, :, channel] - shifted_stack[:-1, :, :, channel]) ** 2)
-            if stack_loss_rescale is None:  # rescale loss to magnitude one
-                stack_loss_rescale = np.abs(stack_loss.numpy())
-            stack_loss = stack_loss / stack_loss_rescale
-            # add regularization
-            stack_params_vec = tf.concat(intra_stack_params_tensor, axis=0)
-            stack_penalty = tf.reduce_mean(tf.abs(stack_params_vec))
-            stack_loss = stack_loss + stack_regularization * stack_penalty
-
-        intra_stack_rms_shift = np.sqrt(
-            np.mean(np.concatenate([np.ravel(g.numpy()) for g in intra_stack_params_tensor]) ** 2))
-        out = 'Stack loss,stack rms,{},{}'.format(stack_loss.numpy(), intra_stack_rms_shift)
-        print(out)
-        log_file.write(out + '\n')
-
-        # calc gradients and take a step
-        stack_grads = stack_tape.gradient(stack_loss, intra_stack_params_tensor)
-        stack_optimizer.apply_gradients(zip(stack_grads, intra_stack_params_tensor),
-                                        global_step=tf.train.get_or_create_global_step())
-        if min_loss > stack_loss.numpy():
-            min_loss = stack_loss.numpy()
-            new_min_iter = 0
-        new_min_iter = new_min_iter + 1
-        if new_min_iter == 10:
-            break
-        iteration = iteration + 1
-    return convert_stack_params(intra_stack_params_tensor, nonempty_pixels)
-
-
-def interpolate_stack_with_z_shift(z_shift, stack, all_z_translations):
-  """
-  :param z_shift:
-  :param stack: zyxc stack
-  :return:
-  """
-  stack_shape = stack.shape
-  min_z_index = np.floor(np.min(all_z_translations)).astype(np.int32)
-  max_z_index = np.ceil(np.max(all_z_translations)).astype(np.int32) + stack_shape[0]
-  stack_z_shape = max_z_index - min_z_index
-  # generate interpolated stack based on float z shift
-  stack_z_offset = np.floor(z_shift).astype(np.int32)
-  top_stack = np.concatenate([np.zeros((stack_z_offset, stack_shape[1], stack_shape[2], stack_shape[3])), stack,
-                         np.zeros(((stack_z_shape + 1) - (stack_z_offset + stack.shape[0]), stack_shape[1], stack_shape[2], stack_shape[3]))], axis=0)
-  bottom_stack = np.concatenate([np.zeros((stack_z_offset + 1, stack_shape[1], stack_shape[2], stack_shape[3])), stack,
-                            np.zeros((stack_z_shape - (stack_z_offset + stack.shape[0]), stack_shape[1],
-                                      stack_shape[2], stack_shape[3]))], axis=0)
-  bottom_weight = z_shift - stack_z_offset.astype(np.float32)
-  top_weight = 1 - bottom_weight
-  interpolated_stack = top_stack * top_weight + bottom_stack * bottom_weight
-  return interpolated_stack
-
-
-def interpolate_stack_with_xy_shift(yx_shift, stack):
-    """
-    Apply the xy shift an interpolate a new stack
-    """
-    def interp_along_axis(stack, axis, shift):
-        extra_shape = (stack.shape[0], np.abs(shift) // 1, stack.shape[2], stack.shape[3]) if axis == 1 else \
-            (stack.shape[0], stack.shape[1], np.abs(shift) // 1, stack.shape[3])
-        unit_shape = (stack.shape[0], 1, stack.shape[2], stack.shape[3]) if axis == 1 else \
-            (stack.shape[0], stack.shape[1], 1, stack.shape[3])
-        if shift >= 0:
-            stack1 = np.concatenate([np.zeros(extra_shape), np.zeros(unit_shape), stack], axis=axis)
-            stack2 = np.concatenate([np.zeros(extra_shape), stack, np.zeros(unit_shape)], axis=axis)
-            stack1_weight = shift - (shift // 1)
-            stack2_weight = 1 - stack1_weight
-            interpolated_stack = stack1 * stack1_weight + stack2 * stack2_weight
-            interpolated_stack = interpolated_stack[:stack.shape[0], :stack.shape[1], :stack.shape[2]]
-        else:
-            stack1 = np.concatenate([stack, np.zeros(unit_shape), np.zeros(extra_shape)], axis=axis)
-            stack2 = np.concatenate([np.zeros(unit_shape), stack, np.zeros(extra_shape)], axis=axis)
-            stack1_weight = np.abs(shift) - (np.abs(shift) // 1)
-            stack2_weight = 1 - stack1_weight
-            interpolated_stack = stack1 * stack1_weight + stack2 * stack2_weight
-            interpolated_stack = interpolated_stack[-stack.shape[0]:, -stack.shape[1]:, -stack.shape[2]:]
-        return interpolated_stack
-    stack = interp_along_axis(stack, 1, yx_shift[0])
-    stack = interp_along_axis(stack, 2, yx_shift[1])
-    return stack
-
-def compute_overlap(registered_stacks, row_col_coords, overlap_shape, use_channels):
+def inter_stack_stitch_loss(registered_stacks, row_col_coords, overlap_shape, use_channels):
     """
     Compute a loss function based on the overlap of different tiles
     """
@@ -204,61 +99,47 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
                        stitch_regularization=1e-16, stack_regularization=0.01, name='image',
                        optimization_log_dir='.'):
 
-
-    for zyxc_stack in p_zyxc_stacks:
-        interpolate_stack()
-        intra_stack_alignment_loss(zyxc_stack, intra_stack_channels)
-
-    intra_stack_rms_shift = np.sqrt(
-        np.mean(np.concatenate([np.ravel(g.numpy()) for g in intra_stack_params_tensor]) ** 2))
-    out = 'Stack loss,stack rms,{},{}'.format(stack_loss.numpy(), intra_stack_rms_shift)
-
-
-    stack_loss = tf.zeros((), tf.float32)
-    for shifted_stack in stacks:
+    def compute_stack_loss(zyxc_stack, slice_translations):
+        loss = np.array([0.0])
         for channel in intra_stack_channels:
-            stack_loss += tf.reduce_mean((shifted_stack[1:, :, :, channel] - shifted_stack[:-1, :, :, channel]) ** 2)
-    if stack_loss_rescale is None:  # rescale loss to magnitude one
-        stack_loss_rescale = np.abs(stack_loss.numpy())
-    stack_loss = stack_loss / stack_loss_rescale
-    # add regularization
-    stack_params_vec = tf.concat(intra_stack_params_tensor, axis=0)
-    stack_penalty = tf.reduce_mean(tf.abs(stack_params_vec))
-    stack_loss = stack_loss + stack_regularization * stack_penalty
+            interpolated = interpolate_stack(zyxc_stack[..., channel], fill_val=127, yx_translations=slice_translations)
+            loss += intra_stack_alignment_loss(interpolated, intra_stack_channels)
+        return loss
+
+    for pos_index in p_zyxc_stacks.keys():
+        slice_translations = np.zeros(2 * np.sum(nonempty_pixels[pos_index]))
+        zyxc_stack = p_zyxc_stacks[pos_index]
+        loss_fn = lambda t: compute_stack_loss(zyxc_stack, t)
+        grad_fn = jit(grad(loss_fn))
+
+        while True: #optimzation loop
+            loss = loss_fn(slice_translations)
+            grad = grad_fn(slice_translations)
+            slice_translations = slice_translations - stack_learning_rate * grad
+            print(loss)
 
 
 
+    # intra_stack_rms_shift = np.sqrt(
+    #     np.mean(np.concatenate([np.ravel(g.numpy()) for g in intra_stack_params_tensor]) ** 2))
+    # out = 'Stack loss,stack rms,{},{}'.format(stack_loss.numpy(), intra_stack_rms_shift)
 
     #intialize as zeros
-    translation_params = np.zeros((len(p_zyxc_stacks) * 3, 1))
-
-
-    def stitch_loss(translation_params):
-        #TODO: add in registrations
-        #reformat
-        translation_params = np.reshape(translation_params, [-1, 3])
-        #make min z translation 0
-        translation_params -= np.min(translation_params[:, 0])
-        registered_stacks = []
-        for pos_index, zyxc_stack in enumerate(p_zyxc_stacks.values()):
-            # stack = interpolate_stack_with_z_shift(translation_params[pos_index, 0], zyxc_stack, translation_params[:, 0])
-            # stack = interpolate_stack_with_xy_shift(translation_params[pos_index, 1:], stack)
-            # registered_stacks.append(stack)
-            registered_stacks.append(zyxc_stack)
-        return compute_overlap(registered_stacks, row_col_coords, overlap_shape, inter_stack_channels)
-
-
-
-    from jax import jit, jacfwd, jacrev
-    def hessian(fun):
-        return jacfwd(jacrev(fun))
-
-    grad_fn = grad(stitch_loss)
-    hessian_fn = hessian(stitch_loss)
-
-    print(hessian_fn(translation_params))
-    print(grad_fn(translation_params))
-    pass
+    # translation_params = np.zeros((len(p_zyxc_stacks) * 3, 1))
+    #
+    # def stitch_loss(translation_params):
+    #     #TODO: add in registrations
+    #     #reformat
+    #     translation_params = np.reshape(translation_params, [-1, 3])
+    #     #make min z translation 0
+    #     translation_params -= np.min(translation_params[:, 0])
+    #     registered_stacks = []
+    #     for pos_index, zyxc_stack in enumerate(p_zyxc_stacks.values()):
+    #         # stack = interpolate_stack_with_z_shift(translation_params[pos_index, 0], zyxc_stack, translation_params[:, 0])
+    #         # stack = interpolate_stack_with_xy_shift(translation_params[pos_index, 1:], stack)
+    #         # registered_stacks.append(stack)
+    #         registered_stacks.append(zyxc_stack)
+    #     return compute_overlap(registered_stacks, row_col_coords, overlap_shape, inter_stack_channels)
 
 
 

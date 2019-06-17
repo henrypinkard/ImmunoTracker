@@ -5,11 +5,8 @@ tf.enable_eager_execution()
 # matplotlib.use('TkAgg')
 # import matplotlib.pyplot as plt
 import numpy as np
-import scipy.ndimage as ndi
-from transformer import spatial_transformer_network
+from old.transformer import spatial_transformer_network
 from PIL import Image
-from scipy.ndimage import filters
-from scipy import signal
 
 
 class ImageTranslationLayer(tf.keras.layers.Layer):

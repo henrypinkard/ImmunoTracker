@@ -8,9 +8,8 @@ from scipy import signal
 # import matplotlib.pyplot as plt
 import numpy as np
 import scipy.ndimage as ndi
-from transformer import spatial_transformer_network
+from old.transformer import spatial_transformer_network
 from PIL import Image
-from scipy.ndimage import filters
 from pymaricumpiler import open_magellan, read_raw_data, estimate_background
 import time
 
