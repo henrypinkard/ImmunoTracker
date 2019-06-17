@@ -23,7 +23,7 @@ from imaris_writing import stitch_register_imaris_write
 from data_reading import open_magellan, read_raw_data
 from optimization_stitcher import optimize_timepoint
 
-def estimate_background(raw_stacks, nonempty_pixels):
+def estimate_background(p_zyxc_stacks, nonempty_pixels):
     """
     Estiamte a background pixel value for every channel in raw_stacks
     :param raw_stack:
@@ -31,14 +31,14 @@ def estimate_background(raw_stacks, nonempty_pixels):
     """
     print('Computing background')
     all_pix = {}
-    for position_index in range(len(raw_stacks)):
-        for channel_index in range(len(raw_stacks[position_index])):
+    for position_index in range(len(p_zyxc_stacks)):
+        for channel_index in range(p_zyxc_stacks[position_index].shape[-1]):
             if channel_index not in all_pix:
-                all_pix[channel_index] = np.ravel(raw_stacks[position_index][channel_index][nonempty_pixels[position_index]])
+                all_pix[channel_index] = np.ravel(p_zyxc_stacks[position_index][..., channel_index][nonempty_pixels[position_index]])
             else:
                 all_pix[channel_index] = np.concatenate((all_pix[channel_index],
-                    np.ravel(raw_stacks[position_index][channel_index][nonempty_pixels[position_index]])))
-        if all_pix[channel_index].size > 1e8:
+                    np.ravel(p_zyxc_stacks[position_index][..., channel_index][nonempty_pixels[position_index]])))
+        if all_pix[0].size > 1e8:
             break #dont need every last pixel
     all_pix = np.stack(list(all_pix.values()))
     backgrounds = []
@@ -98,20 +98,21 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         registration_params = metadata['num_positions'] * [np.zeros((metadata['max_z_index']
                                                                      - metadata['min_z_index'] + 1, 2))]
 
-        raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=frame_index,
-                    reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma, save_ram=save_memory)
+        p_zyxc_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=frame_index,
+                    reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
         if backgrounds is None:
             # get backgrounds from first time point
-            backgrounds = estimate_background(raw_stacks, nonempty_pixels)
+            backgrounds = estimate_background(p_zyxc_stacks, nonempty_pixels)
         if position_registrations is not None:
             if position_registrations == 'optimize':
-                registration_params, translation_params = optimize_timepoint(raw_stacks, nonempty_pixels,
+                registration_params, translation_params = optimize_timepoint(p_zyxc_stacks, nonempty_pixels,
                         metadata['row_col_coords'], metadata['tile_overlaps'],
                         intra_stack_channels=intra_stack_registration_channels, pixel_size_xy=magellan.pixel_size_xy_um,
                         pixel_size_z=magellan.pixel_size_z_um, inter_stack_channels=inter_stack_registration_channels,
                         optimization_log_dir=optimization_log_dir, name=output_basename + '_tp{}'.format(frame_index))
             elif position_registrations == 'fast_register':
-                translation_params = compute_inter_stack_registrations(raw_stacks, nonempty_pixels, registration_params,
+                #TODO: update this function to reflect new stack shape
+                translation_params = compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registration_params,
                                 metadata, max_shift_z=inter_stack_max_z, channel_indices=inter_stack_registration_channels,
                                                                        backgrounds=backgrounds, n_cores=n_cores)
 
@@ -128,7 +129,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         #create a stitched version for doing timepoint to timepoint registrations
         timepoint_registration = np.zeros(3)
         if metadata['num_frames'] > 1 and register_timepoints:
-            stitched = stitch_single_channel(raw_stacks, translation_params, registration_params, metadata['tile_overlaps'],
+            stitched = stitch_single_channel(p_zyxc_stacks, translation_params, registration_params, metadata['tile_overlaps'],
                     metadata['row_col_coords'], channel_index=timepoint_registration_channel, backgrounds=backgrounds)
             if previous_stitched is not None:
                 #expand the size of the shorter one to match the bigger one

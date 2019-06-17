@@ -1,8 +1,47 @@
 import numpy as np
-from old.intravital_stack import  apply_intra_stack_registration
 from utility import x_corr_register_3D, normalized_x_corr_register_3D
 from tempfile import mkdtemp
 from os import path
+import scipy.ndimage as ndi
+
+
+def apply_intra_stack_registration(single_channel_stack, registrations, background=0, mode='integer'):
+    """
+    Apply the computed within z-stack registrations to all channels
+    :param stack: dict with channel indices as keys and 3D numpy arrays specific to a single stack in a single channel
+    as values
+    :param registrations: 2D registration vectors corresponding to each slice
+    :return: a list of all channels with a registered stack in each
+    """
+
+    if mode == 'float':
+        one_channel_registered_stack = np.zeros(single_channel_stack.shape)
+        for slice in range(registrations.shape[0]):
+            one_channel_registered_stack[slice, ...] = ndi.shift(single_channel_stack[slice],
+                                                                 -registrations[slice], cval=background)
+            one_channel_registered_stack[one_channel_registered_stack < background] = background
+        return one_channel_registered_stack
+    else:
+        registered_stack = np.ones_like(single_channel_stack) * background
+        for slice in range(registrations.shape[0]):
+            # need to negate to make it work right
+            reg = -np.round(registrations).astype(np.int)[slice]
+            orig_slice = single_channel_stack[slice, ...]
+            reg_slice = registered_stack[slice, ...]
+            if reg[0] > 0:
+                reg_slice = reg_slice[reg[0]:, :]
+                orig_slice = orig_slice[:-reg[0], :]
+            elif reg[0] < 0:
+                reg_slice = reg_slice[:reg[0], :]
+                orig_slice = orig_slice[-reg[0]:, :]
+            if reg[1] > 0:
+                reg_slice = reg_slice[:, reg[1]:]
+                orig_slice = orig_slice[:, :-reg[1]]
+            elif reg[1] < 0:
+                reg_slice = reg_slice[:, :reg[1]]
+                orig_slice = orig_slice[:, -reg[1]:]
+            reg_slice[:] = orig_slice[:]
+        return registered_stack
 
 def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, metadata,
             max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9, normalized_x_corr=False):
@@ -110,7 +149,7 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
     return ls_traslations
 
 
-def stitch_single_channel(stacks, translations, registrations, tile_overlap, row_col_coords, channel_index,
+def stitch_single_channel(p_zyxc_stacks, translations, registrations, tile_overlap, row_col_coords, channel_index,
                           backgrounds=None, save_memory=False):
     """
     Stitch raw stacks into single volume
@@ -118,8 +157,8 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
     :param params:
     :return:
     """
-    stack_shape = stacks[0][0].shape
-    byte_depth = 1 if stacks[0][0].dtype == np.uint8 else 2
+    stack_shape = p_zyxc_stacks[0].shape[:3]
+    byte_depth = 1 if p_zyxc_stacks[0].dtype == np.uint8 else 2
     #convert possibly floats to ints
     registrations = np.round(registrations).astype(np.int)
     translations = np.round(translations).astype(np.int)
@@ -141,7 +180,7 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
 
     def get_stitch_coords(stitched_z, p_index):
         stack_z = stitched_z + translations[p_index, 0]
-        if stack_z >= stacks[p_index][0].shape[0]:
+        if stack_z >= p_zyxc_stacks[p_index][0].shape[0]:
             return None, None, None, None  # the z registration puts things out of bounds
         intra_stack_reg = registrations[p_index, stack_z, :]
         # compute destination coordinates, and coordinates in tile to extact
@@ -221,7 +260,7 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
 
                 #add stuff from neighboring tile into strip if theres even anything to add
                 if np.ptp(axis0_neighbor_tile_coords) != 0 and np.ptp(axis1_neighbor_tile_coords) != 0:
-                    strip_destination[:, :] = stacks[neighbor_p_index][channel_index][neighbor_stack_z,
+                    strip_destination[:, :] = p_zyxc_stacks[neighbor_p_index][channel_index][neighbor_stack_z,
                                         axis0_neighbor_tile_coords[0]:axis0_neighbor_tile_coords[1],
                                         axis1_neighbor_tile_coords[0]:axis1_neighbor_tile_coords[1]]
 
@@ -239,7 +278,7 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
         # print('stitching slice {}'.format(stitched_z))
         tile_center_translations = translations[:, 1:]
         #add in each tile to appropriate place in stitched image
-        for p_index in range(len(stacks)):
+        for p_index in range(len(p_zyxc_stacks)):
             stack_z, destination_corners, destination_size, border_size = get_stitch_coords(stitched_z, p_index)
             if stack_z is None:
                 continue #Z is out of bounds of the stack
@@ -249,7 +288,7 @@ def stitch_single_channel(stacks, translations, registrations, tile_overlap, row
             cropped_border_size[cropped_border_size < 0] = 0
             cropped_border_size[cropped_border_size > tile_overlap] = tile_overlap[cropped_border_size > tile_overlap]
 
-            tile_to_add = stacks[p_index][channel_index][stack_z,
+            tile_to_add = p_zyxc_stacks[p_index][channel_index][stack_z,
                           cropped_border_size[0]:cropped_border_size[0] + destination_size[0],
                           cropped_border_size[1]:cropped_border_size[1] + destination_size[1]]
 

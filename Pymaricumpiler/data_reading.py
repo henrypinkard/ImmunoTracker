@@ -34,7 +34,7 @@ def open_magellan(path):
     metadata['row_col_coords'] = np.array(magellan.row_col_tuples)
     return magellan, metadata
 
-def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, input_filter_sigma=None, save_ram=False):
+def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, input_filter_sigma=None):
     """
     read raw data, store in 3D arrays for each channel at each position
     :param magellan:
@@ -48,21 +48,13 @@ def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, inp
     raw_stacks = {}
     nonempty_pixels = {}
     for position_index in range(metadata['num_positions']):
-        raw_stacks[position_index] = {}
-        nonempty_pixels[position_index] = {}
+        raw_stacks[position_index] = np.zeros((metadata['max_z_index'] - metadata['min_z_index'] + 1,
+                                               *metadata['tile_shape'], metadata['num_channels']),
+                                              np.uint8 if metadata['byte_depth'] == 1 else np.uint16)
         print('Reading in frame {}, position {}'.format(time_index, position_index))
         for channel_index in range(metadata['num_channels']):
-            if save_ram:
-                filename = path.join(mkdtemp(), '{}{}.dat'.format(position_index, channel_index))
-                raw_stacks[position_index][channel_index] = np.memmap(filename=filename, mode='w+',
-                                                    dtype=np.uint8 if metadata['byte_depth'] == 1 else np.uint16,
-                          shape=(metadata['max_z_index'] - metadata['min_z_index'] + 1, *metadata['tile_shape']))
-            else:
-                raw_stacks[position_index][channel_index] = np.zeros((metadata['max_z_index'] -
-                    metadata['min_z_index'] + 1, *metadata['tile_shape']),
-                                                dtype=np.uint8 if metadata['byte_depth'] == 1 else np.uint16)
             nonempty_pixels[position_index] = (metadata['max_z_index'] - metadata['min_z_index'] + 1)*[False]
-            for z_index in range(raw_stacks[position_index][channel_index].shape[0]):
+            for z_index in range(raw_stacks[position_index].shape[0]):
                 if not magellan.has_image(channel_index=channel_index, pos_index=position_index,
                                         z_index=z_index + metadata['min_z_index'], t_index=time_index):
                     continue
@@ -75,7 +67,7 @@ def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, inp
                     image = filters.gaussian_filter(image.astype(np.float), input_filter_sigma)
 
                 #add in image
-                raw_stacks[position_index][channel_index][z_index] = image
+                raw_stacks[position_index][z_index, :, :, channel_index] = image.astype(raw_stacks[position_index].dtype)
                 nonempty_pixels[position_index][z_index] = True
                 if elapsed_time_ms == '':
                     elapsed_time_ms = image_metadata['ElapsedTime-ms']

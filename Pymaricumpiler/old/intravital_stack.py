@@ -58,43 +58,7 @@ def exporttiffstack(datacube, name='export', path='/Users/henrypinkard/Desktop/'
     path = "{}{}.tif".format(path,name)
     imlist[0].save(path, compression="tiff_deflate", save_all=True, append_images=imlist[1:])
 
-def apply_intra_stack_registration(single_channel_stack, registrations, background=0, mode='integer'):
-    """
-    Apply the computed within z-stack registrations to all channels
-    :param stack: dict with channel indices as keys and 3D numpy arrays specific to a single stack in a single channel
-    as values
-    :param registrations: 2D registration vectors corresponding to each slice
-    :return: a list of all channels with a registered stack in each
-    """
 
-    if mode == 'float':
-        one_channel_registered_stack = np.zeros(single_channel_stack.shape)
-        for slice in range(registrations.shape[0]):
-            one_channel_registered_stack[slice, ...] = ndi.shift(single_channel_stack[slice],
-                                                                 -registrations[slice], cval=background)
-            one_channel_registered_stack[one_channel_registered_stack < background] = background
-        return one_channel_registered_stack
-    else:
-        registered_stack = np.ones_like(single_channel_stack) * background
-        for slice in range(registrations.shape[0]):
-            # need to negate to make it work right
-            reg = -np.round(registrations).astype(np.int)[slice]
-            orig_slice = single_channel_stack[slice, ...]
-            reg_slice = registered_stack[slice, ...]
-            if reg[0] > 0:
-                reg_slice = reg_slice[reg[0]:, :]
-                orig_slice = orig_slice[:-reg[0], :]
-            elif reg[0] < 0:
-                reg_slice = reg_slice[:reg[0], :]
-                orig_slice = orig_slice[-reg[0]:, :]
-            if reg[1] > 0:
-                reg_slice = reg_slice[:, reg[1]:]
-                orig_slice = orig_slice[:, :-reg[1]]
-            elif reg[1] < 0:
-                reg_slice = reg_slice[:, :reg[1]]
-                orig_slice = orig_slice[:, -reg[1]:]
-            reg_slice[:] = orig_slice[:]
-        return registered_stack
 
 def optimize_intra_stack_registrations(raw_stacks, nonempty_pixels, max_shift, backgrounds, use_channels,
                                        learning_rate=2e-5, sigma=7, momentum=0.99, normalize=True):
