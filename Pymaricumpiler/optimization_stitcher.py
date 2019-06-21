@@ -238,12 +238,10 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
 
     # optimize yx_translations for each stack
     mean_background = np.mean(backgrounds)
-    def optimize_pos(pos_index):
-        return optimize_stack()
     arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
                         pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
     with Pool(6) as p:
-        pos_raw_translations = p.map(optimize_pos, arg_lists)
+        pos_raw_translations = p.map(optimize_stack, arg_lists)
     #reformat and add in zeros for extra slices that weren't optimized
     p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
                 np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
