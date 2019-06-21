@@ -1,12 +1,164 @@
-import jax.numpy as np
-from jax import jit
-# import matplotlib
-# matplotlib.use('TkAgg')
-# import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+# tf.enable_eager_execution()
+
 from stitcher import stitch_all_channels
 from PIL import Image
-from transform_resampling import interpolate_stack
+import os
+import scipy.ndimage as ndi
+from multiprocessing import Pool
 
+os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
+
+def _generate_grid(image, zyx_translations=None, yx_translations=None):
+    """
+    Generate Nx3 (# of pixels) x (zyx) gird of coordinates to sample new pixels
+    :param image:
+    :param zyx_translations: 1 x 3 global translation for the whole stack
+    :param yx_translations: (# z) x 2 (y,x ) slice by slice registrations
+    :return:
+    """
+    #get zyx coords of all points
+    zyx = tf.meshgrid(*[tf.convert_to_tensor(np.arange(d)) for d in image.shape[:3]], indexing='ij')
+    #flatten into nx3 vector
+    n_by_zyx = tf.cast(tf.stack([tf.reshape(d, [-1]) for d in zyx], axis=1), tf.float32)
+    if zyx_translations is not None:
+        #apply globabl yxz translations
+        n_by_zyx = n_by_zyx + tf.cast(zyx_translations, tf.float32)
+    if yx_translations is not None:
+        #apply per image shifts
+        #reshape to make first axis z again
+        per_slice_coords = tf.reshape(n_by_zyx, [image.shape[0], -1, 3])
+        #add in empty z coord
+        per_slice_shifts = tf.concat([tf.zeros((yx_translations.shape[0], 1)), tf.cast(yx_translations, tf.float32)], axis=1)
+        per_slice_coords += tf.reshape(per_slice_shifts, [yx_translations.shape[0], -1, 3])
+        n_by_zyx = tf.reshape(per_slice_coords, [-1, 3])
+    return n_by_zyx
+
+def _sample_pixels(image, n_by_zyx, fill_val=128):
+    """
+    Do bilinear sampling of all pixels with the given coordinates
+    :param image: original zyx image stack
+    :param n_by_zyx: n by 3 float coords of pixels
+    :return: Nx1 pixel values
+    """
+    #get pixel values of corners
+    shape_array = np.array(image.shape)
+    #split to bounding integer values N x 8 x 3. the 8 is every combination of floor and ceil values
+    floor_indices = tf.cast(tf.floor(n_by_zyx), tf.int32)
+    ceil_indices = 1 + floor_indices
+    combos = [[floor_indices[:, 0], floor_indices[:, 1], floor_indices[:, 2]],
+             [floor_indices[:, 0], floor_indices[:, 1], ceil_indices[:, 2]],
+             [floor_indices[:, 0], ceil_indices[:, 1], floor_indices[:, 2]],
+             [floor_indices[:, 0], ceil_indices[:, 1], ceil_indices[:, 2]],
+             [ceil_indices[:, 0], floor_indices[:, 1], floor_indices[:, 2]],
+             [ceil_indices[:, 0], floor_indices[:, 1], ceil_indices[:, 2]],
+             [ceil_indices[:, 0], ceil_indices[:, 1], floor_indices[:, 2]],
+             [ceil_indices[:, 0], ceil_indices[:, 1], ceil_indices[:, 2]] ]
+    corner_indices = tf.stack([tf.stack(c, axis=1) for c in combos], axis=1)
+    #reshape to n x 3
+    int_indices_flat = tf.reshape(corner_indices, [-1, 3])
+
+    #clip indices so indexing works
+    clipped_indices = tf.stack([tf.clip_by_value(int_indices_flat[:, i], 0, shape_array[i] - 1) for i in range(3)], axis=1)
+    #make mask for replacing pixel values with default value
+    out_of_bounds_mask = tf.logical_or(tf.logical_or(
+                        tf.logical_or(int_indices_flat[:, 0] < 0, int_indices_flat[:, 0] > shape_array[0]),
+                        tf.logical_or(int_indices_flat[:, 1] < 0, int_indices_flat[:, 1] > shape_array[1])),
+                        tf.logical_or(int_indices_flat[:, 2] < 0, int_indices_flat[:, 2] > shape_array[2]))
+    pix_val_list = []
+    for c in ([0] if image.ndim == 3 else range(image.shape[3])):
+        channel_image = image[..., c] if image.ndim == 4 else image
+        pixel_vals_flat = tf.gather_nd(channel_image, clipped_indices)
+        #now replace values
+        pixel_vals_flat = tf.where(out_of_bounds_mask, fill_val*tf.ones_like(pixel_vals_flat), pixel_vals_flat)
+        pix_val_list.append(tf.reshape(pixel_vals_flat, [-1, 8]))
+    pixel_values = tf.stack(pix_val_list, axis=2)
+
+    #calculate weights: N x 8
+    ceil_weights = n_by_zyx - tf.cast(floor_indices, tf.float32)
+    floor_weights = 1.0 - ceil_weights
+    corner_weights = tf.stack([floor_weights[:, 0] * floor_weights[:, 1] * floor_weights[:, 2],
+                                 floor_weights[:, 0] * floor_weights[:, 1] * ceil_weights[:, 2],
+                                 floor_weights[:, 0] * ceil_weights[:, 1] * floor_weights[:, 2],
+                                 floor_weights[:, 0] * ceil_weights[:, 1] * ceil_weights[:, 2],
+                                 ceil_weights[:, 0] * floor_weights[:, 1] * floor_weights[:, 2],
+                                 ceil_weights[:, 0] * floor_weights[:, 1] * ceil_weights[:, 2],
+                                 ceil_weights[:, 0] * ceil_weights[:, 1] * floor_weights[:, 2],
+                                 ceil_weights[:, 0] * ceil_weights[:, 1] * ceil_weights[:, 2]], axis=1)
+
+    #add together to get pixels values
+    interpolated_pixels = tf.reduce_sum(tf.cast(pixel_values, tf.float32) * corner_weights[:, :, None], axis=1)
+    return tf.reshape(interpolated_pixels, image.shape)
+
+def intra_stack_alignment_graph(yx_translations, zyx_stack, fill_val, stack_learning_rate=2, stack_regularization=1e-4):
+    interpolated = _interpolate_stack(zyx_stack, fill_val=fill_val, yx_translations=yx_translations)
+    loss = tf.reduce_mean((interpolated[1:, :, :] - interpolated[:-1, :, :]) ** 2)
+    loss = loss + stack_regularization * tf.reduce_mean(yx_translations ** 2)
+    optimizer = tf.train.AdamOptimizer(learning_rate=stack_learning_rate)
+    optimize_op = optimizer.minimize(loss)
+    return loss, optimize_op
+
+def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations, p_zyxc_stacks, row_col_coords, overlap_shape, fill_val, stitch_regularizaton=0.0):
+    """
+    Compute a loss function based on the overlap of different tiles
+    """
+
+    p_zyx_translations = tf.reshape(p_zyx_translations, [-1, 3])
+    translated_stacks = {pos_index: _interpolate_stack(p_zyxc_stacks[pos_index], fill_val=fill_val,
+                    zyx_translations=p_zyx_translations[pos_index], yx_translations=p_yx_translations[pos_index])
+                         for pos_index in p_zyxc_stacks.keys()}
+
+    # make sure z translations are all positive
+    loss = 0.0
+    for position_index1 in range(len(translated_stacks)):
+        row1, col1 = row_col_coords[position_index1]
+        stack1 = translated_stacks[position_index1]
+        for position_index2 in range(position_index1):
+            row2, col2 = row_col_coords[position_index2]
+            stack2 = translated_stacks[position_index2]
+            if not ((row1 == row2 + 1 and col1 == col2) or (row1 == row2 and col1 == col2 + 1)):
+                continue  # non adjacent tiles
+            if row1 == row2 + 1 and col1 == col2:
+                # stack1 is below stack2
+                overlap1 = stack1[:, :overlap_shape[0], :]
+                overlap2 = stack2[:, -overlap_shape[0]:, :]
+            elif row1 == row2 and col1 == col2 + 1:
+                overlap1 = stack1[:, :, :overlap_shape[1]]
+                overlap2 = stack2[:, :, -overlap_shape[1]:]
+            else:
+                raise Exception('This shouldnt happen!')
+            numer = tf.reduce_mean(overlap1 * overlap2) ** 2
+            denom = tf.reduce_mean(overlap1 ** 2) * tf.reduce_mean(overlap2 ** 2)
+            loss += numer / denom
+
+    loss = -loss
+    #TODO: add anisotropic regularization
+    loss = loss + stitch_regularizaton * tf.reduce_mean(p_zyx_translations ** 2)
+
+    grad = tf.gradients(loss, p_zyx_translations)[0]
+    hessian = tf.hessians(loss, p_zyx_translations)[0]
+    newton_delta = tf.matmul(tf.matrix_inverse(hessian), grad[:, None])[:, 0]
+    optimize_step = p_zyx_translations.assign(newton_delta + p_zyx_translations)
+    return optimize_step, loss
+
+def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=None):
+    """
+    Bilinear resample and interpolate an image stack
+    :param image: zyx or zyxc image stack
+    :param fill_val: what to make the background where no data available
+    :param zyx_translations: 3 element vector for glabl translation of the stack
+    :param yx_translations: vector of slice by slice registration (equal to 2 * image.shape[0])
+    :return: resampled image stack
+    """
+    if yx_translations is not None:
+        yx_translations = tf.reshape(yx_translations, [-1, 2])
+    grid = _generate_grid(img, yx_translations=yx_translations, zyx_translations=zyx_translations)
+    if img.ndim == 4: #trailing channel dimension
+        resampled = _sample_pixels(img, grid, fill_val=fill_val)
+    else:
+        resampled = _sample_pixels(img, grid, fill_val=fill_val)
+    return resampled
 
 def exporttiffstack(datacube, path, name='export'):
     '''
@@ -32,176 +184,98 @@ def export_stitched_tiff(raw_stacks, row_col_coords, overlap_shape, intra_stack_
                                          stacked.shape[2], stacked.shape[3])).astype(np.uint8), path=path, name=name)
     print('exported {}'.format(name))
 
-def convert_stack_params(intra_stack_params_tensor, nonempty_pixels):
-    """
-    Convert params used in optimization to the format expected by stitching algorithms
-    """
-    intra_params = [np.reshape(p.numpy(), [-1, 2]) for p in intra_stack_params_tensor]
-    # add on trailing and leading zeros corresponding to nonempty pixels, and flip x and y
-    full_intra_params = []
-    for pos_index, stack_params in enumerate(intra_params):
-        full_intra_params.append(
-            np.flip(np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
-                                    stack_params, np.zeros(([len(nonempty_pixels[pos_index]) -
-                                                             np.where(nonempty_pixels[pos_index])[0][-1] - 1, 2]),
-                                                           np.float32)], axis=0), axis=1))
-    return full_intra_params
+def optimize_stack(nonempty_pix_at_position, zyxc_stack, background):
+    tf.reset_default_graph()
+    yx_translations = tf.get_variable('yx_translations', [2 * sum(nonempty_pix_at_position)])
+    loss_op, optimize_op = intra_stack_alignment_graph(yx_translations=yx_translations, zyx_stack=zyxc_stack, fill_val=background)
+    new_min_iter = 0
+    min_loss = 1e40
+    iteration = 0
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        while True:
+            loss, h = sess.run([loss_op, optimize_op]) #run iteration
+            #print
+            intra_stack_rms_shift = np.sqrt(np.mean(sess.run(yx_translations)) ** 2)
+            print('Stack loss: {}  \t\tstack rms: {}'.format(loss, intra_stack_rms_shift))
+            # check for stopping condition
+            if min_loss > loss:
+                min_loss = loss
+                new_min_iter = 0
+            new_min_iter = new_min_iter + 1
+            if new_min_iter == 10:
+                break
+            iteration = iteration + 1
+        return sess.run(yx_translations)
 
-def convert_stitch_params(stitching_params_tensor):
-        # compile all params in correct format for stitching--Calculated stitch params should be negated relative
-        # to the ones optimized
-        stitch_params = np.concatenate([stitching_params_tensor[-1].numpy()[:, None],
-                                        np.concatenate([p.numpy() for p in stitching_params_tensor[:-1]], axis=0)], axis=1)
-        stitch_params = np.concatenate([-stitch_params[:, 0, None], stitch_params[:, 1:]], axis=1)
-        return stitch_params
-
-
-def inter_stack_stitch_loss(registered_stacks, row_col_coords, overlap_shape, use_channels):
-    """
-    Compute a loss function based on the overlap of different tiles
-    """
-    # make sure z translations are all positive
-    loss = np.zeros((), dtype=np.float32)
-    for position_index1 in range(len(registered_stacks)):
-        row1, col1 = row_col_coords[position_index1]
-        stack1 = registered_stacks[position_index1]
-        for position_index2 in range(position_index1):
-            row2, col2 = row_col_coords[position_index2]
-            stack2 = registered_stacks[position_index2]
-            for channel_index in use_channels:
-                if not ((row1 == row2 + 1 and col1 == col2) or (row1 == row2 and col1 == col2 + 1)):
-                    continue  # non adjacent tiles
-                stack1_channel = stack1[:, :, :, channel_index]
-                stack2_channel = stack2[:, :, :, channel_index]
-                if row1 == row2 + 1 and col1 == col2:
-                    # stack1 is below stack2
-                    overlap1 = stack1_channel[:, :overlap_shape[0], :]
-                    overlap2 = stack2_channel[:, -overlap_shape[0]:, :]
-                elif row1 == row2 and col1 == col2 + 1:
-                    overlap1 = stack1_channel[:, :, :overlap_shape[1]]
-                    overlap2 = stack2_channel[:, :, -overlap_shape[1]:]
-                # o1_mean_sub = overlap1 - np.reduce_mean(overlap1)
-                # o2_mean_sub = overlap2 - np.reduce_mean(overlap2)
-                # numer = np.reduce_sum(o1_mean_sub * o2_mean_sub) ** 2
-                # denom = np.reduce_sum(o1_mean_sub ** 2) * np.reduce_sum(o2_mean_sub ** 2)
-                numer = np.mean(overlap1 * overlap2) ** 2
-                denom = np.mean(overlap1 ** 2) * np.mean(overlap2 ** 2)
-                loss += numer / denom
-    return -loss
-
-def intra_stack_alignment_loss(zyxc_stack, intra_stack_channels):
-    loss = np.array([0.0])
-    for channel in intra_stack_channels:
-        loss += np.mean((zyxc_stack[1:, :, :, channel] - zyxc_stack[:-1, :, :, channel]) ** 2)
+def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape):
+    optimize_step, loss_op = inter_stack_stitch_graph(p_yx_translations, p_zyx_translations,
+                                                      p_zyxc_stacks_stitch, row_col_coords, overlap_shape, fill_val=0)
+    new_min_iter = 0
+    min_loss = 1e40
+    iteration = 0
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        while True:
+            loss, op = sess.run([loss_op, optimize_step])  # run iteration
+            stitch_rms_shift = np.sqrt(np.mean(sess.run(p_zyx_translations)) ** 2)
+            print('Stack loss: {}  \t\tstack rms: {}'.format(loss, stitch_rms_shift))
+            # check for stopping condition
+            if min_loss > loss:
+                min_loss = loss
+                new_min_iter = 0
+            new_min_iter = new_min_iter + 1
+            if new_min_iter == 5:
+                break
+            iteration = iteration + 1
+        return sess.run(p_zyx_translations)
 
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
-                       inter_stack_channels, pixel_size_xy, pixel_size_z, stack_learning_rate=0.3, stitch_learning_rate=0.02,
-                       stitch_regularization=1e-16, stack_regularization=0.01, name='image',
-                       optimization_log_dir='.'):
+                       inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_learning_rate=0.02, downsample_factor=2,
+                       stitch_regularization=1e-16, name='image',
+                       optimization_log_dir='./', backgrounds=None):
 
-    def compute_stack_loss(zyxc_stack, slice_translations):
-        loss = np.array([0.0])
-        for channel in intra_stack_channels:
-            interpolated = interpolate_stack(zyxc_stack[..., channel], fill_val=127, yx_translations=slice_translations)
-            loss += intra_stack_alignment_loss(interpolated, intra_stack_channels)
-        return loss
+    # optimize yx_translations for each stack
+    mean_background = np.mean(backgrounds)
+    def optimize_pos(pos_index):
+        return optimize_stack(np.array(nonempty_pixels[pos_index]),
+                    p_zyxc_stacks[pos_index][np.array(nonempty_pixels[pos_index])][..., intra_stack_channels], mean_background)
+    with Pool(6) as p:
+        pos_raw_translations = p.map(optimize_pos, p_zyxc_stacks.keys())
+    #reformat and add in zeros for extra slices that weren't optimized
+    p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
+                np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
+                np.where(nonempty_pixels[pos_index])[0][-1] - 1, 2]), np.float32)], axis=0)
+                         for pos_index in p_zyxc_stacks.keys()]
 
+    p_yx_translations = np.stack(p_yx_translations, axis=0)
+
+    # Now move on to optimizing stitching
+    means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
+    p_zyxc_stacks_stitch = {}
+    #downsample, mean subtract, remove unused channels
     for pos_index in p_zyxc_stacks.keys():
-        slice_translations = np.zeros(2 * np.sum(nonempty_pixels[pos_index]))
-        zyxc_stack = p_zyxc_stacks[pos_index]
-        loss_fn = lambda t: compute_stack_loss(zyxc_stack, t)
-        grad_fn = jit(grad(loss_fn))
+        stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
+        stack[np.logical_not(nonempty_pixels[pos_index])] = 0
+        #filter and downsample
+        for z in np.where(np.array(nonempty_pixels[pos_index]))[0]:
+            for c in range(stack.shape[3]):
+                stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2*downsample_factor / 6.0)
+        p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
+    #TODO: add in anisotropic regularization?
 
-        while True: #optimzation loop
-            loss = loss_fn(slice_translations)
-            grad = grad_fn(slice_translations)
-            slice_translations = slice_translations - stack_learning_rate * grad
-            print(loss)
+    tf.reset_default_graph()
+    p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3)
+    p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape / downsample_factor)
+    #Rescale these translations to account for downsampling
+    p_zyx_translations_optimized *= downsample_factor
 
+    p_zyx_translations = np.reshape(p_zyx_translations, [-1, 3])
+    #TODO: more optimization at full resolution or is this good?
 
+    #TODO: check that these params are right signs etc
 
-    # intra_stack_rms_shift = np.sqrt(
-    #     np.mean(np.concatenate([np.ravel(g.numpy()) for g in intra_stack_params_tensor]) ** 2))
-    # out = 'Stack loss,stack rms,{},{}'.format(stack_loss.numpy(), intra_stack_rms_shift)
+    np.save('{}{}__yx_translations.npy'.format(optimization_log_dir, name),
+            p_yx_translations=p_yx_translations, p_zyx_translations=p_zyx_translations)
 
-    #intialize as zeros
-    # translation_params = np.zeros((len(p_zyxc_stacks) * 3, 1))
-    #
-    # def stitch_loss(translation_params):
-    #     #TODO: add in registrations
-    #     #reformat
-    #     translation_params = np.reshape(translation_params, [-1, 3])
-    #     #make min z translation 0
-    #     translation_params -= np.min(translation_params[:, 0])
-    #     registered_stacks = []
-    #     for pos_index, zyxc_stack in enumerate(p_zyxc_stacks.values()):
-    #         # stack = interpolate_stack_with_z_shift(translation_params[pos_index, 0], zyxc_stack, translation_params[:, 0])
-    #         # stack = interpolate_stack_with_xy_shift(translation_params[pos_index, 1:], stack)
-    #         # registered_stacks.append(stack)
-    #         registered_stacks.append(zyxc_stack)
-    #     return compute_overlap(registered_stacks, row_col_coords, overlap_shape, inter_stack_channels)
-
-
-
-        # compute_overlap(registered_stacks, row_col_coords, overlap_shape, use_channels, all_z_translations)
-
-        # np.sum()
-
-
-        # stitch_layer = ImageStitchingLayer(row_col_coords, zyxc_stacks[0].shape, overlap_shape, inter_stack_channels)
-        # full_model = tf.keras.Sequential([stacks_layer, stitch_layer])
-        # stitch_optimizer = tf.train.MomentumOptimizer(learning_rate=stitch_learning_rate, momentum=0.99)
-        # stitch_loss_rescale = None
-
-    #     # Stitch optimization loop
-    #     new_min_iter = 0
-    #     min_loss = 10
-    #     iteration = 0
-    #     while True:
-    #         with tf.GradientTape() as full_tape:
-    #             stitching_loss = full_model(None)
-    #             #get stitching params
-    #             stitching_params_tensor = [all_params[2 * i + 1] for i in range(len(stacks))] + [full_model.trainable_variables[-1]]
-    #             if stitch_loss_rescale is None:
-    #                 stitch_loss_rescale = np.abs(stitching_loss.numpy())
-    #             stitching_loss = stitching_loss / stitch_loss_rescale
-    #             #add regualrization
-    #             stitch_params_single_tensor = tf.concat(
-    #                 [tf.concat((stitching_params_tensor[i], tf.reshape(stitching_params_tensor[-1][i], (1, 1))), axis=1)
-    #                  for i in range(len(stitching_params_tensor) - 1)], axis=0)
-    #             #account for anisotrpy in pixels sizes
-    #             isotropic_params = tf.concat([stitch_params_single_tensor[:, :2],
-    #                        tf.reshape(pixel_size_z / pixel_size_xy * stitch_params_single_tensor[:, 2], [-1, 1])], axis=1)
-    #
-    #             stitch_penalty = tf.reduce_mean(isotropic_params ** 2)
-    #             stitching_loss = stitching_loss + stitch_regularization * stitch_penalty
-    #
-    #         #compute rms pixel shifts to monitor progress
-    #         stitch_rms_shift = np.sqrt(np.mean(np.concatenate([np.ravel(g.numpy()) for g in stitching_params_tensor]) ** 2))
-    #         out = 'stitch loss, stitch rms,{},{}'.format(stitching_loss.numpy(),  stitch_rms_shift)
-    #         print(out)
-    #         file.write(out + '\n')
-    #
-    #         #calc gradients and take a step
-    #         stitch_grads = full_tape.gradient(stitching_loss, stitching_params_tensor)
-    #         stitch_optimizer.apply_gradients(zip(stitch_grads, stitching_params_tensor), global_step=tf.train.get_or_create_global_step())
-    #
-    #         #make the mean xy shift for stitching 0
-    #         mean_shift = tf.reduce_mean(tf.concat(stitching_params_tensor[:-1], axis=0), axis=0)
-    #         for xy_shift in stitching_params_tensor[:-1]:
-    #             xy_shift.assign(xy_shift - mean_shift)
-    #
-    #         #check for stopping condition
-    #         if min_loss > stitching_loss.numpy():
-    #             min_loss = stitching_loss.numpy()
-    #             new_min_iter = 0
-    #         new_min_iter = new_min_iter + 1
-    #         if new_min_iter == 10:
-    #             break
-    #         iteration = iteration + 1
-
-    stitch_params = None
-    # stitch_params = convert_stitch_params(stitching_params_tensor)
-    # return stack_params, stitch_params
-    #TODO
-    return None
+    return p_yx_translations, p_zyx_translations

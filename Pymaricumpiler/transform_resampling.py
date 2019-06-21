@@ -77,7 +77,6 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
     interpolated_pixels = np.sum(pixel_values * corner_weights, axis=1)
     return np.reshape(interpolated_pixels, image.shape)
 
-
 def interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=None):
     """
     Bilinear resample and interpolate an image stack
@@ -87,7 +86,11 @@ def interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=None
     :param yx_translations: vector of slice by slice registration (equal to 2 * image.shape[0])
     :return: resampled image stack
     """
-    yx_translations = np.reshape(yx_translations, [-1, 2])
+    if yx_translations is not None:
+        yx_translations = np.reshape(yx_translations, [-1, 2])
+    if zyx_translations is not None:
+        zyx_translations = np.reshape(zyx_translations, [1, 3])
     grid = _generate_grid(img, yx_translations=yx_translations, zyx_translations=zyx_translations)
     resampled = _sample_pixels(img, grid, fill_val=fill_val)
     return resampled
+
