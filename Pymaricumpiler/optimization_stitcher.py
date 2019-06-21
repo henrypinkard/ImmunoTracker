@@ -137,7 +137,7 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations, p_zyxc_stack
     loss = loss + stitch_regularizaton * tf.reduce_mean(p_zyx_translations ** 2)
 
     grad = tf.gradients(loss, p_zyx_translations)[0]
-    hessian = tf.hessians(loss, p_zyx_translations)[0]
+    hessian = tf.hessians(loss, tf.reshape(p_zyx_translations, [-1]))[0]
     newton_delta = tf.matmul(tf.matrix_inverse(hessian), grad[:, None])[:, 0]
     optimize_step = p_zyx_translations.assign(newton_delta + p_zyx_translations)
     return optimize_step, loss
@@ -266,7 +266,8 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
 
     tf.reset_default_graph()
     p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3)
-    p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape / downsample_factor)
+    p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, 
+            row_col_coords, overlap_shape // downsample_factor)
     #Rescale these translations to account for downsampling
     p_zyx_translations_optimized *= downsample_factor
 
