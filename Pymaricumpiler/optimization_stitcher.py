@@ -99,12 +99,12 @@ def intra_stack_alignment_graph(yx_translations, zyx_stack, fill_val, stack_lear
     optimize_op = optimizer.minimize(loss)
     return loss, optimize_op
 
-def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations, p_zyxc_stacks, row_col_coords, overlap_shape, fill_val, stitch_regularizaton=0.0):
+def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_stacks, row_col_coords, overlap_shape, fill_val, stitch_regularizaton=0.0):
     """
     Compute a loss function based on the overlap of different tiles
     """
 
-    p_zyx_translations = tf.reshape(p_zyx_translations, [-1, 3])
+    p_zyx_translations = tf.reshape(p_zyx_translations_flat, [-1, 3])
     translated_stacks = {pos_index: _interpolate_stack(p_zyxc_stacks[pos_index], fill_val=fill_val,
                     zyx_translations=p_zyx_translations[pos_index], yx_translations=p_yx_translations[pos_index])
                          for pos_index in p_zyxc_stacks.keys()}
@@ -137,7 +137,7 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations, p_zyxc_stack
     loss = loss + stitch_regularizaton * tf.reduce_mean(p_zyx_translations ** 2)
 
     grad = tf.gradients(loss, p_zyx_translations)[0]
-    hessian = tf.hessians(loss, tf.reshape(p_zyx_translations, [-1]))[0]
+    hessian = tf.hessians(loss, p_zyx_translations_flat)[0]
     newton_delta = tf.matmul(tf.matrix_inverse(hessian), grad[:, None])[:, 0]
     optimize_step = p_zyx_translations.assign(newton_delta + p_zyx_translations)
     return optimize_step, loss
