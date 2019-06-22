@@ -134,12 +134,12 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_
 
     loss = -loss
     #TODO: add anisotropic regularization
-    loss = loss + stitch_regularizaton * tf.reduce_mean(p_zyx_translations ** 2)
+    loss = loss + stitch_regularizaton * tf.reduce_mean(p_zyx_translations_flat ** 2)
 
-    grad = tf.gradients(loss, p_zyx_translations)[0]
+    grad = tf.gradients(loss, p_zyx_translations_flat)[0]
     hessian = tf.hessians(loss, p_zyx_translations_flat)[0]
     newton_delta = tf.matmul(tf.matrix_inverse(hessian), grad[:, None])[:, 0]
-    optimize_step = p_zyx_translations.assign(newton_delta + p_zyx_translations)
+    optimize_step = p_zyx_translations_flat.assign(newton_delta + p_zyx_translations_flat)
     return optimize_step, loss
 
 def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=None):
