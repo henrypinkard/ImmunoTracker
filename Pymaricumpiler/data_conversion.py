@@ -38,7 +38,7 @@ num_time_points = 4
 imaris_dir = '/media/hugespace/henry/lymphosight/imaris_files'
 for index in conversion_indices:
     data_path = get_dataset_path(index)
-    namestring = get_dataset_name_string(index) + 'a test'
+    namestring = get_dataset_name_string(index) + 'NewtonTest'
     magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/' + data_path
     
     if os.path.isfile(imaris_dir + os.sep + namestring + '.ims'):
