@@ -138,9 +138,17 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_
 
     grad = tf.gradients(loss, p_zyx_translations_flat)[0]
     hessian = tf.hessians(loss, p_zyx_translations_flat)[0]
-    newton_delta = tf.matmul(tf.matrix_inverse(hessian), grad[:, None])[:, 0]
-    optimize_step = p_zyx_translations_flat.assign(newton_delta + p_zyx_translations_flat)
-    return optimize_step, loss
+
+    newton_delta = tf.placeholder(tf.float32, p_zyx_translations_flat.shape)
+    assign_op = tf.assign_sub(p_zyx_translations_flat, newton_delta)
+
+    return loss, grad, hessian, newton_delta, assign_op
+
+    # hess_grad_prod = tf.matmul(inv_hess, tf.reshape(grad, [-1, 1]))
+    # newton_delta = tf.reshape(hess_grad_prod, [-1])
+    # optimize_step = p_zyx_translations_flat.assign(newton_delta + p_zyx_translations_flat)
+    # return loss, grad, hessian, inv_hess, hess_grad_prod, newton_delta, optimize_step
+    # return optimize_step, loss
 
 def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=None):
     """
@@ -207,18 +215,25 @@ def optimize_stack(arg_list):
             if new_min_iter == 10:
                 break
             iteration = iteration + 1
+            #TODO: remove
+            if iteration == 3:
+                break
         return sess.run(yx_translations)
 
 def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape):
-    optimize_step, loss_op = inter_stack_stitch_graph(p_yx_translations, p_zyx_translations,
-                                                      p_zyxc_stacks_stitch, row_col_coords, overlap_shape, fill_val=0)
+    loss_op, grad_op, hessian_op, newton_delta_op, assign_op = inter_stack_stitch_graph(
+        p_yx_translations, p_zyx_translations,
+        p_zyxc_stacks_stitch, row_col_coords, overlap_shape, fill_val=0)
     new_min_iter = 0
     min_loss = 1e40
     iteration = 0
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         while True:
-            loss, op = sess.run([loss_op, optimize_step])  # run iteration
+            loss, grad = sess.run([loss_op, grad_op])
+            hessian = sess.run([hessian_op])
+            newton_delta = np.dot(np.linalg.inv(hessian), grad)
+            sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
             stitch_rms_shift = np.sqrt(np.mean(sess.run(p_zyx_translations)) ** 2)
             print('Stack loss: {}  \t\tstack rms: {}'.format(loss, stitch_rms_shift))
             # check for stopping condition
@@ -240,8 +255,11 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
     mean_background = np.mean(backgrounds)
     arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
                         pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
-    with Pool(6) as p:
-        pos_raw_translations = p.map(optimize_stack, arg_lists)
+    # with Pool(6) as p:
+    #     pos_raw_translations = p.map(optimize_stack, arg_lists)
+    #TODO: remove serial version
+    pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
+
     #reformat and add in zeros for extra slices that weren't optimized
     p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
                 np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
