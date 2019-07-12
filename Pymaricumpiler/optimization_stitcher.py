@@ -91,7 +91,7 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
     interpolated_pixels = tf.reduce_sum(tf.cast(pixel_values, tf.float32) * corner_weights[:, :, None], axis=1)
     return tf.reshape(interpolated_pixels, image.shape)
 
-def intra_stack_alignment_graph(yx_translations, zyx_stack, fill_val, stack_learning_rate=2, stack_regularization=1e-4):
+def intra_stack_alignment_graph(yx_translations, zyx_stack, fill_val, stack_learning_rate=2, stack_regularization=1e-2):
     interpolated = _interpolate_stack(zyx_stack, fill_val=fill_val, yx_translations=yx_translations)
     loss = tf.reduce_mean((interpolated[1:, :, :] - interpolated[:-1, :, :]) ** 2)
     loss = loss + stack_regularization * tf.reduce_mean(yx_translations ** 2)
@@ -229,8 +229,8 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
         while True:
             loss, grad = sess.run([loss_op, grad_op])
             hessian = sess.run([hessian_op])
-            newton_delta = np.dot(np.linalg.inv(hessian), grad)
             sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
+            newton_delta = np.dot(np.linalg.inv(hessian), grad)
             stitch_rms_shift = np.sqrt(np.mean(sess.run(p_zyx_translations)) ** 2)
             print('Stitching loss: {}  \t\tstitch rms: {}'.format(loss, stitch_rms_shift))
             # check for stopping condition
@@ -247,50 +247,55 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
                        inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_learning_rate=0.02, downsample_factor=2,
                        stitch_regularization=1e-16, name='image',
                        optimization_log_dir='./', backgrounds=None):
-
-    # optimize yx_translations for each stack
-    mean_background = np.mean(backgrounds)
-    arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
-                        pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
-    with Pool(6) as p:
-        pos_raw_translations = p.map(optimize_stack, arg_lists)
-    # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
-
-    #reformat and add in zeros for extra slices that weren't optimized
-    p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
-                np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
-                np.where(nonempty_pixels[pos_index])[0][-1] - 1, 2]), np.float32)], axis=0)
-                         for pos_index in p_zyxc_stacks.keys()]
-
-    p_yx_translations = np.stack(p_yx_translations, axis=0)
-
-    # Now move on to optimizing stitching
-    means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
-    p_zyxc_stacks_stitch = {}
-    #downsample, mean subtract, remove unused channels
-    for pos_index in p_zyxc_stacks.keys():
-        stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
-        stack[np.logical_not(nonempty_pixels[pos_index])] = 0
-        #filter and downsample
-        for z in np.where(np.array(nonempty_pixels[pos_index]))[0]:
-            for c in range(stack.shape[3]):
-                stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2*downsample_factor / 6.0)
-        p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
-    #TODO: add in anisotropic regularization?
-
-    tf.reset_default_graph()
-    p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3)
-    p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, 
-            row_col_coords, overlap_shape // downsample_factor)
-    #Rescale these translations to account for downsampling
-    p_zyx_translations_optimized *= downsample_factor
-
-    p_zyx_translations = np.reshape(p_zyx_translations_optimized, [-1, 3])
-    #TODO: more optimization at full resolution or is this good?
-
-    #TODO: check that these params are right signs etc
-
-    np.savez('{}{}__yx_translations.npy'.format(optimization_log_dir, name),
-            p_yx_translations=p_yx_translations, p_zyx_translations=p_zyx_translations)
-
+    with np.load('{}{}__yx_translations.npz'.format(optimization_log_dir, name)) as loaded:
+        p_yx_translations = loaded['p_yx_translations']
+        p_zyx_translations = loaded['p_zyx_translations']
     return p_yx_translations, p_zyx_translations
+
+
+    # # optimize yx_translations for each stack
+    # mean_background = np.mean(backgrounds)
+    # arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
+    #                     pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
+    # with Pool(6) as p:
+    #     pos_raw_translations = p.map(optimize_stack, arg_lists)
+    # # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
+    #
+    # #reformat and add in zeros for extra slices that weren't optimized
+    # p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
+    #             np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
+    #             np.where(nonempty_pixels[pos_index])[0][-1] - 1, 2]), np.float32)], axis=0)
+    #                      for pos_index in p_zyxc_stacks.keys()]
+    #
+    # p_yx_translations = np.stack(p_yx_translations, axis=0)
+    #
+    # # Now move on to optimizing stitching
+    # means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
+    # p_zyxc_stacks_stitch = {}
+    # #downsample, mean subtract, remove unused channels
+    # for pos_index in p_zyxc_stacks.keys():
+    #     stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
+    #     stack[np.logical_not(nonempty_pixels[pos_index])] = 0
+    #     #filter and downsample
+    #     for z in np.where(np.array(nonempty_pixels[pos_index]))[0]:
+    #         for c in range(stack.shape[3]):
+    #             stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2*downsample_factor / 6.0)
+    #     p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
+    # #TODO: add in anisotropic regularization?
+    #
+    # tf.reset_default_graph()
+    # p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3)
+    # p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch,
+    #         row_col_coords, overlap_shape // downsample_factor)
+    # #Rescale these translations to account for downsampling
+    # p_zyx_translations_optimized *= downsample_factor
+    #
+    # p_zyx_translations = np.reshape(p_zyx_translations_optimized, [-1, 3])
+    # #TODO: more optimization at full resolution or is this good?
+    #
+    # #TODO: check that these params are right signs etc
+    #
+    # np.savez('{}{}__yx_translations.npy'.format(optimization_log_dir, name),
+    #         p_yx_translations=p_yx_translations, p_zyx_translations=p_zyx_translations)
+    #
+    # return p_yx_translations, p_zyx_translations

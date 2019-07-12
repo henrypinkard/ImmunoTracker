@@ -43,11 +43,11 @@ def apply_intra_stack_registration(single_channel_stack, registrations, backgrou
             reg_slice[:] = orig_slice[:]
         return registered_stack
 
-def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, metadata,
-            max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9, normalized_x_corr=False):
+def compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registrations, metadata,
+                                      max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9, normalized_x_corr=False):
     """
     Register stacks to one another using phase correlation and a least squares fit
-    :param stacks:
+    :param p_zyxc_stacks:
     :param channel_indices:
     :return:
     """
@@ -60,16 +60,16 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
     volumes_to_register = []
     registration_position_channel_indices = []
     for channel_index in channel_indices:
-        for position_index1 in range(len(stacks)):
+        for position_index1 in range(len(p_zyxc_stacks)):
             row1, col1 = row_col_coords[position_index1]
-            stack1_reg_channel = apply_intra_stack_registration(stacks[position_index1][channel_index],
-                                                    registrations[position_index1], background=backgrounds[channel_index])
+            stack1_reg_channel = apply_intra_stack_registration(p_zyxc_stacks[position_index1][..., channel_index],
+                                                                registrations[position_index1], background=backgrounds[channel_index])
             for position_index2 in range(position_index1):
                 row2, col2 = row_col_coords[position_index2]
                 if not ((row1 == row2 + 1 and col1 == col2) or (row1 == row2 and col1 == col2 + 1)):
                     continue #non adjacent tiles
-                stack2_reg_channel = apply_intra_stack_registration(stacks[position_index2][channel_index],
-                                                    registrations[position_index2], background=backgrounds[channel_index])
+                stack2_reg_channel = apply_intra_stack_registration(p_zyxc_stacks[position_index2][..., channel_index],
+                                                                    registrations[position_index2], background=backgrounds[channel_index])
 
                 #use only areas that are valid for both
                 both_nonempty = np.logical_and(nonempty_pixels[position_index1], nonempty_pixels[position_index2])
@@ -104,7 +104,7 @@ def compute_inter_stack_registrations(stacks, nonempty_pixels, registrations, me
     def least_squares_traslations(pairwise_registrations_and_weights, registration_position_channel_indices):
         #Put into least squares matrix to solve for tile translations up to additive constant
         # set absolute translations for position 0 equal to zero to define absolut coordiante system
-        num_positions = len(stacks)
+        num_positions = len(p_zyxc_stacks)
         # specify an absolute translation of position 1 as 0,0,0 (doesn't matter bc glabal coordinates arbitrary anyway)
         A = np.zeros((3, 3 * num_positions))
         A[0, 0] = 1
@@ -260,9 +260,9 @@ def stitch_single_channel(p_zyxc_stacks, translations, registrations, tile_overl
 
                 #add stuff from neighboring tile into strip if theres even anything to add
                 if np.ptp(axis0_neighbor_tile_coords) != 0 and np.ptp(axis1_neighbor_tile_coords) != 0:
-                    strip_destination[:, :] = p_zyxc_stacks[neighbor_p_index][channel_index][neighbor_stack_z,
+                    strip_destination[:, :] = p_zyxc_stacks[neighbor_p_index][neighbor_stack_z,
                                         axis0_neighbor_tile_coords[0]:axis0_neighbor_tile_coords[1],
-                                        axis1_neighbor_tile_coords[0]:axis1_neighbor_tile_coords[1]]
+                                        axis1_neighbor_tile_coords[0]:axis1_neighbor_tile_coords[1], channel_index]
 
         #add stuff from the other tile, or 0s if it didnt overlap, then recrop to correct shape
         original_size = inserted_tile.shape
@@ -288,9 +288,9 @@ def stitch_single_channel(p_zyxc_stacks, translations, registrations, tile_overl
             cropped_border_size[cropped_border_size < 0] = 0
             cropped_border_size[cropped_border_size > tile_overlap] = tile_overlap[cropped_border_size > tile_overlap]
 
-            tile_to_add = p_zyxc_stacks[p_index][channel_index][stack_z,
+            tile_to_add = p_zyxc_stacks[p_index][stack_z,
                           cropped_border_size[0]:cropped_border_size[0] + destination_size[0],
-                          cropped_border_size[1]:cropped_border_size[1] + destination_size[1]]
+                          cropped_border_size[1]:cropped_border_size[1] + destination_size[1], channel_index]
 
             #add in overlapping parts from other tiles if this tiel didn't fill the frame properly
             if border_size[0] < 0 or border_size[0] > tile_overlap[0]:
