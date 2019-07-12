@@ -215,9 +215,6 @@ def optimize_stack(arg_list):
             if new_min_iter == 10:
                 break
             iteration = iteration + 1
-            #TODO: remove
-            if iteration == 3:
-                break
         return sess.run(yx_translations)
 
 def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape):
@@ -235,7 +232,7 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
             newton_delta = np.dot(np.linalg.inv(hessian), grad)
             sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
             stitch_rms_shift = np.sqrt(np.mean(sess.run(p_zyx_translations)) ** 2)
-            print('Stack loss: {}  \t\tstack rms: {}'.format(loss, stitch_rms_shift))
+            print('Stitching loss: {}  \t\tstitch rms: {}'.format(loss, stitch_rms_shift))
             # check for stopping condition
             if min_loss > loss:
                 min_loss = loss
@@ -255,10 +252,9 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
     mean_background = np.mean(backgrounds)
     arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
                         pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
-    # with Pool(6) as p:
-    #     pos_raw_translations = p.map(optimize_stack, arg_lists)
-    #TODO: remove serial version
-    pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
+    with Pool(6) as p:
+        pos_raw_translations = p.map(optimize_stack, arg_lists)
+    # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
 
     #reformat and add in zeros for extra slices that weren't optimized
     p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
@@ -289,12 +285,12 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
     #Rescale these translations to account for downsampling
     p_zyx_translations_optimized *= downsample_factor
 
-    p_zyx_translations = np.reshape(p_zyx_translations, [-1, 3])
+    p_zyx_translations = np.reshape(p_zyx_translations_optimized, [-1, 3])
     #TODO: more optimization at full resolution or is this good?
 
     #TODO: check that these params are right signs etc
 
-    np.save('{}{}__yx_translations.npy'.format(optimization_log_dir, name),
+    np.savez('{}{}__yx_translations.npy'.format(optimization_log_dir, name),
             p_yx_translations=p_yx_translations, p_zyx_translations=p_zyx_translations)
 
     return p_yx_translations, p_zyx_translations
