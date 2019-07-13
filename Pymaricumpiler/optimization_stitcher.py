@@ -229,6 +229,8 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
         while True:
             loss, grad = sess.run([loss_op, grad_op])
             hessian = sess.run([hessian_op])
+            hess_grad_prod = np.dot(np.linalg.inv(hessian), tf.reshape(grad, [-1, 1]))
+            newton_delta = tf.reshape(hess_grad_prod, [-1])
             sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
             newton_delta = np.dot(np.linalg.inv(hessian), grad)
             stitch_rms_shift = np.sqrt(np.mean(sess.run(p_zyx_translations)) ** 2)
