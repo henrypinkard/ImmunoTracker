@@ -291,7 +291,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
     p_zyx_translations = np.reshape(p_zyx_translations_optimized, [-1, 3])
 
     #Rescale these translations to account for downsampling
-    p_zyx_translations_optimized[:, 1:] = downsample_factor * p_zyx_translations_optimized[:, 1:]
+    p_zyx_translations[:, 1:] = downsample_factor * p_zyx_translations[:, 1:]
     #TODO: more optimization at full resolution or is this good?
 
     #TODO: check that these params are right signs etc
