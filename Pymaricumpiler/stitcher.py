@@ -180,7 +180,7 @@ def stitch_single_channel(p_zyxc_stacks, translations, registrations, tile_overl
 
     def get_stitch_coords(stitched_z, p_index):
         stack_z = stitched_z + translations[p_index, 0]
-        if stack_z >= p_zyxc_stacks[p_index][0].shape[0]:
+        if stack_z >= p_zyxc_stacks[p_index].shape[0]:
             return None, None, None, None  # the z registration puts things out of bounds
         intra_stack_reg = registrations[p_index, stack_z, :]
         # compute destination coordinates, and coordinates in tile to extact
