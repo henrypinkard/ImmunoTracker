@@ -299,7 +299,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
     
     #TODO: check that these params are right signs etc
     
-    np.savez('{}{}__yx_translations.npy'.format(optimization_log_dir, name),
+    np.savez('{}{}__yx_translations'.format(optimization_log_dir, name),
             p_yx_translations=p_yx_translations, p_zyx_translations=p_zyx_translations)
     
     return p_yx_translations, p_zyx_translations
