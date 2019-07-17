@@ -215,6 +215,8 @@ def optimize_stack(arg_list):
             if new_min_iter == 10:
                 break
             iteration = iteration + 1
+            if iteration == 2:
+                break
         return sess.run(yx_translations)
 
 def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape):
@@ -241,6 +243,8 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
             if new_min_iter == 5:
                 break
             iteration = iteration + 1
+            if iteration == 2:
+                break
         return sess.run(p_zyx_translations)
 
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
@@ -258,9 +262,10 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
     arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
                         pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
 
-    tf.reset_default_graph()
-    with Pool(6) as p:
-        pos_raw_translations = p.map(optimize_stack, arg_lists)
+    # with Pool(6) as p:
+    #     pos_raw_translations = p.map(optimize_stack, arg_lists)
+    pos_raw_translations = [optimize_stack(a) for a in arg_lists]
+
     # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
     
     #reformat and add in zeros for extra slices that weren't optimized
