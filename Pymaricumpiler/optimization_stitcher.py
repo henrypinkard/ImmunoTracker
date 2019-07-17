@@ -215,8 +215,6 @@ def optimize_stack(arg_list):
             if new_min_iter == 10:
                 break
             iteration = iteration + 1
-            if iteration == 2:
-                break
         return sess.run(yx_translations)
 
 def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape):
@@ -243,8 +241,6 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
             if new_min_iter == 5:
                 break
             iteration = iteration + 1
-            if iteration == 2:
-                break
         return sess.run(p_zyx_translations)
 
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
