@@ -30,7 +30,7 @@ def write_imaris(directory, name, time_series, pixel_size_xy_um, pixel_size_z_um
 
 def stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata, registration_series,
                         translation_series, abs_timepoint_registrations, input_filter_sigma=None,
-                                 reverse_rank_filter=False, save_memory=False):
+                                 reverse_rank_filter=False):
     num_channels = metadata['num_channels']
     num_frames = abs_timepoint_registrations.shape[0]
     byte_depth = metadata['byte_depth']
@@ -42,18 +42,18 @@ def stitch_register_imaris_write(directory, name, imaris_size, magellan, metadat
         for time_index in range(num_frames):
             print('Frame {}'.format(time_index))
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=time_index,
-                reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma, save_ram=save_memory)
+                reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
             for channel_index in range(num_channels):
                 stitched = stitch_single_channel(raw_stacks, translations=translation_series[time_index],
                         registrations=registration_series[time_index], tile_overlap=metadata['tile_overlaps'],
-                        row_col_coords=metadata['row_col_coords'], channel_index=channel_index, save_memory=save_memory)
+                        row_col_coords=metadata['row_col_coords'], channel_index=channel_index)
                 #fit into the larger image to account for timepoint registrations
-                if save_memory:
-                    filename = path.join(mkdtemp(), 'stitched_tp_reggistered{}.dat'.format(channel_index))
-                    tp_registered = np.memmap(filename=filename, dtype=np.uint8 if int(byte_depth) == 1 else np.uint16,
-                                         shape=tuple(imaris_size), mode='w+')
-                else:
-                    tp_registered = np.zeros(imaris_size.astype(np.int), dtype=np.uint8 if int(byte_depth) == 1 else np.uint16)
+                # if save_memory:
+                #     filename = path.join(mkdtemp(), 'stitched_tp_reggistered{}.dat'.format(channel_index))
+                #     tp_registered = np.memmap(filename=filename, dtype=np.uint8 if int(byte_depth) == 1 else np.uint16,
+                #                          shape=tuple(imaris_size), mode='w+')
+                # else:
+                tp_registered = np.zeros(imaris_size.astype(np.int), dtype=np.uint8 if int(byte_depth) == 1 else np.uint16)
                 tp_registered[abs_timepoint_registrations[time_index, 0]:abs_timepoint_registrations[time_index, 0] + stitched.shape[0],
                         abs_timepoint_registrations[time_index, 1]:abs_timepoint_registrations[time_index, 1] + stitched.shape[1],
                        abs_timepoint_registrations[time_index, 2]:abs_timepoint_registrations[time_index, 2] + stitched.shape[2]] = stitched

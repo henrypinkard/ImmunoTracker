@@ -247,38 +247,43 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
                        inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_learning_rate=0.02, downsample_factor=2,
                        stitch_regularization=1e-16, name='image',
                        optimization_log_dir='./', backgrounds=None):
-    # with np.load('{}{}__yx_translations.npz'.format(optimization_log_dir, name)) as loaded:
-    #     p_yx_translations = loaded['p_yx_translations']
-    #     p_zyx_translations = loaded['p_zyx_translations']
+    with np.load('{}{}__yx_translations.npz'.format(optimization_log_dir, name)) as loaded:
+        p_yx_translations = loaded['p_yx_translations']
+        # p_zyx_translations = loaded['p_zyx_translations']
     # return p_yx_translations, p_zyx_translations
 
 
-    # optimize yx_translations for each stack
-    mean_background = np.mean(backgrounds)
-    arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
-                        pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
 
-    # with Pool(6) as p:
-    #     pos_raw_translations = p.map(optimize_stack, arg_lists)
-    pos_raw_translations = [optimize_stack(a) for a in arg_lists]
+    # ######## optimize yx_translations for each stack
+    # mean_background = np.mean(backgrounds)
+    # arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
+    #                     pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
 
-    # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
+    # # with Pool(6) as p:
+    # #     pos_raw_translations = p.map(optimize_stack, arg_lists)
+    # pos_raw_translations = [optimize_stack(a) for a in arg_lists]
+    # #zeros version for debugging
+    # # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
     
-    #reformat and add in zeros for extra slices that weren't optimized
-    p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
-                np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
-                np.where(nonempty_pixels[pos_index])[0][-1] - 1, 2]), np.float32)], axis=0)
-                         for pos_index in p_zyxc_stacks.keys()]
+    # #reformat and add in zeros for extra slices that weren't optimized
+    # p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
+    #             np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
+    #             np.where(nonempty_pixels[pos_index])[0][-1] - 1, 2]), np.float32)], axis=0)
+    #                      for pos_index in p_zyxc_stacks.keys()]
     
-    p_yx_translations = np.stack(p_yx_translations, axis=0)
+    # p_yx_translations = np.stack(p_yx_translations, axis=0)
     
-    # Now move on to optimizing stitching
-    means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
+
+
+    ########## Now optimizing stitching
+    # means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
     p_zyxc_stacks_stitch = {}
     #downsample, mean subtract, remove unused channels
     for pos_index in p_zyxc_stacks.keys():
-        stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
-        stack[np.logical_not(nonempty_pixels[pos_index])] = 0
+        # stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
+        stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)]
+
+        # stack[np.logical_not(nonempty_pixels[pos_index])] = 0
         #filter and downsample
         for z in np.where(np.array(nonempty_pixels[pos_index]))[0]:
             for c in range(stack.shape[3]):

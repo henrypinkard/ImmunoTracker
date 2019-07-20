@@ -46,7 +46,7 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
         backgrounds.append(np.mean(channel_pix[channel_pix <= np.percentile(channel_pix, 25)]))
     return np.array(backgrounds)
 
-def convert(magellan_dir, position_registrations=None, register_timepoints=True, save_memory=False, input_filter_sigma=None,
+def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             inter_stack_registration_channels=[0], num_time_points=None, inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
             reverse_rank_filter=False, optimization_log_dir='./'):
@@ -159,4 +159,4 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
     stitch_register_imaris_write(output_dir, output_basename, imaris_size, magellan, metadata, registration_series,
                                  translation_series, abs_timepoint_registrations, input_filter_sigma=input_filter_sigma,
-                                 reverse_rank_filter=reverse_rank_filter, save_memory=save_memory)
+                                 reverse_rank_filter=reverse_rank_filter)
