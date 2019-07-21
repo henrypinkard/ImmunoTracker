@@ -49,7 +49,7 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             inter_stack_registration_channels=[0], num_time_points=None, inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
-            reverse_rank_filter=False, optimization_log_dir='./', suffix='', swap_xy=False, invert_xy=False):
+            reverse_rank_filter=False, optimization_log_dir='./', suffix='', downsample_factor=3):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
     :param magellan_dir: directory of magellan data to be converted
@@ -110,7 +110,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                         intra_stack_channels=intra_stack_registration_channels, pixel_size_xy=magellan.pixel_size_xy_um,
                         pixel_size_z=magellan.pixel_size_z_um, inter_stack_channels=inter_stack_registration_channels,
                         optimization_log_dir=optimization_log_dir, name=output_basename + '_tp{}'.format(frame_index),
-                        backgrounds=backgrounds, swap_xy=swap_xy, invert_xy=invert_xy)
+                        backgrounds=backgrounds, downsample_factor=downsample_factor)
             elif position_registrations == 'fast_register':
                 #TODO: update this function to reflect new stack shape
                 translation_params = compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registration_params,

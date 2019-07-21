@@ -39,7 +39,6 @@ imaris_dir = '/media/hugespace/henry/lymphosight/imaris_files'
 for index in conversion_indices:
     data_path = get_dataset_path(index)
     namestring = get_dataset_name_string(index) + 'NewtonTest'
-    # namestring = 'NewtonNoMeanSub'
     magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/' + data_path
     
     # if os.path.isfile(imaris_dir + os.sep + namestring + '.ims'):
@@ -50,16 +49,34 @@ for index in conversion_indices:
             output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             inter_stack_registration_channels=[5], timepoint_registration_channel=5,
             reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/',
-            num_time_points=5, swap_xy=True, invert_xy=False, suffix='swap')
+            num_time_points=5,  suffix='Downsample', downsample=3)
+
+for index in conversion_indices:
+    data_path = get_dataset_path(index)
+    namestring = get_dataset_name_string(index) + 'NewtonTest'
+    magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/' + data_path
+
+    # if os.path.isfile(imaris_dir + os.sep + namestring + '.ims'):
+    #     print('skipping {} because its already converted'.format(namestring))
+    # else:
+    print('\n\nconverting: {}\n'.format(magellan_dir))
     convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
             output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            inter_stack_registration_channels=[5], timepoint_registration_channel=5,
+            inter_stack_registration_channels=[0, 5], timepoint_registration_channel=5,
             reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/',
-            num_time_points=5, swap_xy=True, invert_xy=True, suffix='invertandswap')
-    convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
-            output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            inter_stack_registration_channels=[5], timepoint_registration_channel=5,
-            reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/',
-            num_time_points=5, swap_xy=False, invert_xy=True, suffix='invert')
+            num_time_points=5, suffix='2Channel', downsample_factor=2)
 
+    for index in conversion_indices:
+        data_path = get_dataset_path(index)
+        namestring = get_dataset_name_string(index) + 'NewtonTest'
+        magellan_dir = '/media/hugespace/henry/lymphosight/raw_data/' + data_path
 
+        # if os.path.isfile(imaris_dir + os.sep + namestring + '.ims'):
+        #     print('skipping {} because its already converted'.format(namestring))
+        # else:
+        print('\n\nconverting: {}\n'.format(magellan_dir))
+        convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
+                output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
+                inter_stack_registration_channels=[0, 5], timepoint_registration_channel=5,
+                reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/',
+                num_time_points=5, suffix='2Channelanddownsample', downsample_factor=3)
