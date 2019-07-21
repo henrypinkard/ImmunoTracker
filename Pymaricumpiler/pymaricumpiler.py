@@ -49,7 +49,7 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             inter_stack_registration_channels=[0], num_time_points=None, inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
-            reverse_rank_filter=False, optimization_log_dir='./'):
+            reverse_rank_filter=False, optimization_log_dir='./', suffix='', swap_xy=False, invert_xy=False):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
     :param magellan_dir: directory of magellan data to be converted
@@ -83,7 +83,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     if output_dir is None:
         output_dir = os.sep.join(magellan_dir.split(os.sep)[:-1])  # parent directory of magellan
     if output_basename is None:
-        output_basename = magellan_dir.split(os.sep)[-1]  # same name as magellan acquisition
+        output_basename = magellan_dir.split(os.sep)[-1] # same name as magellan acquisition
 
     magellan, metadata = open_magellan(magellan_dir)
     #iterate through all time points to compute all needed stitching and registration params
@@ -110,7 +110,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                         intra_stack_channels=intra_stack_registration_channels, pixel_size_xy=magellan.pixel_size_xy_um,
                         pixel_size_z=magellan.pixel_size_z_um, inter_stack_channels=inter_stack_registration_channels,
                         optimization_log_dir=optimization_log_dir, name=output_basename + '_tp{}'.format(frame_index),
-                        backgrounds=backgrounds)
+                        backgrounds=backgrounds, swap_xy=swap_xy, invert_xy=invert_xy)
             elif position_registrations == 'fast_register':
                 #TODO: update this function to reflect new stack shape
                 translation_params = compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registration_params,
@@ -157,6 +157,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     #add in extra space for timepoint registrations
     imaris_size = np.array(stitched_image_size) + np.max(abs_timepoint_registrations, axis=0).astype(np.int)
 
+
+    output_basename = output_basename + suffix
     stitch_register_imaris_write(output_dir, output_basename, imaris_size, magellan, metadata, registration_series,
                                  translation_series, abs_timepoint_registrations, input_filter_sigma=input_filter_sigma,
                                  reverse_rank_filter=reverse_rank_filter)
