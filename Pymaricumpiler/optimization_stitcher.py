@@ -190,7 +190,7 @@ def export_stitched_tiff(raw_stacks, row_col_coords, overlap_shape, intra_stack_
 def optimize_stack(arg_list):
     nonempty_pix_at_position, zyxc_stack, background = arg_list
     tf.reset_default_graph()
-    yx_translations = tf.get_variable('yx_translations', [2 * sum(nonempty_pix_at_position)])
+    yx_translations = tf.get_variable('yx_translations', [2 * sum(nonempty_pix_at_position)], initializer=tf.zeros_initializer)
     loss_op, optimize_op = intra_stack_alignment_graph(yx_translations=yx_translations, zyx_stack=zyxc_stack, fill_val=background)
     new_min_iter = 0
     min_loss = 1e40
@@ -198,9 +198,9 @@ def optimize_stack(arg_list):
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         while True:
+            intra_stack_rms_shift = np.sqrt(np.mean(sess.run(yx_translations)) ** 2)
             loss, h = sess.run([loss_op, optimize_op]) #run iteration
             #print
-            intra_stack_rms_shift = np.sqrt(np.mean(sess.run(yx_translations)) ** 2)
             print('Stack loss: {}  \t\tstack rms: {}'.format(loss, intra_stack_rms_shift))
             # check for stopping condition
             if min_loss > loss:
@@ -226,10 +226,10 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
         while True:
             loss, grad = sess.run([loss_op, grad_op])
             hessian = sess.run([hessian_op])
-            newton_delta = np.dot(np.linalg.inv(hessian), grad)
-            sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
             stitch_rms_shift = np.sqrt(np.mean(sess.run(p_zyx_translations)) ** 2)
             print('Stitching loss: {}  \t\tstitch rms: {}'.format(loss, stitch_rms_shift))
+            newton_delta = np.dot(np.linalg.inv(hessian), grad)
+            sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
             # check for stopping condition
             if min_loss > loss:
                 min_loss = loss
@@ -286,7 +286,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
         p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
 
     tf.reset_default_graph()
-    p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3)
+    p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3, initializer=tf.zeros_initializer)
     p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch,
             row_col_coords, overlap_shape // downsample_factor, stitch_regularization, pixel_size_xy, pixel_size_z)
     
