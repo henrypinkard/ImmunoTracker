@@ -49,25 +49,11 @@ for index in conversion_indices:
             output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             inter_stack_registration_channels=[5], timepoint_registration_channel=5,
             reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/',
-            num_time_points=5, suffix='Stitchreg1e-1', downsample_factor=4, stitch_regularization=1e-1)
+            num_time_points=5, suffix='Stitchreg0', downsample_factor=4, stitch_regularization=1e-1)
 
     convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
             output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             inter_stack_registration_channels=[5], timepoint_registration_channel=5,
             reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/',
-            num_time_points=5,  suffix='Stitchreg1e-3', downsample_factor=4, stitch_regularization=1e-3)
-
-
-    convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
-            output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            inter_stack_registration_channels=[5], timepoint_registration_channel=5,
-            reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/',
-            num_time_points=5,  suffix='Stitchreg1e-5', downsample_factor=4, stitch_regularization=1e-5)
-
-
-    convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
-            output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            inter_stack_registration_channels=[5], timepoint_registration_channel=5,
-            reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/',
-            num_time_points=5,  suffix='Stitchreg1e-7', downsample_factor=4, stitch_regularization=1e-7)
+            num_time_points=5,  suffix='Stitchreg1e-13', downsample_factor=4, stitch_regularization=1e-13)
 

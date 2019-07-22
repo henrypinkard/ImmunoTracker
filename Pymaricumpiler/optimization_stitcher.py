@@ -134,9 +134,10 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_
             loss += numer / denom
 
     loss = -loss
-    loss = loss + stitch_regularization * tf.reduce_mean(p_zyx_translations[:, 0] ** 2) * z_to_xy_ratio + \
-                        tf.reduce_mean(p_zyx_translations[:, 1:] ** 2)
-
+    pixel_size_rescale = tf.convert_to_tensor(np.ravel(np.tile([[z_to_xy_ratio, 1.0, 1.0]], (len(row_col_coords), 1))),
+                                                tf.float32 )
+    rescaled_translations = pixel_size_rescale * p_zyx_translations_flat
+    loss = loss + stitch_regularization * tf.reduce_mean(rescaled_translations ** 2)
     grad = tf.gradients(loss, p_zyx_translations_flat)[0]
     hessian = tf.hessians(loss, p_zyx_translations_flat)[0]
 
