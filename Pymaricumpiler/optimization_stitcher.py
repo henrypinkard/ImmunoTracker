@@ -226,7 +226,7 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
         while True:
             loss, grad = sess.run([loss_op, grad_op])
             hessian = sess.run([hessian_op])
-	    translations = np.reshape(sess.run(p_zyx_translations),(-1, 3))  
+            translations = np.reshape(sess.run(p_zyx_translations),(-1, 3))  
             translations[:, 0] = translations[:, 0] * pixel_size_z
             translations[:, 1:] = translations[:, 1:] * pixel_size_xy  
             stitch_rms_shift_z = np.sqrt(np.mean(translations[:, 0] ** 2))
@@ -246,10 +246,9 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
 
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
                        inter_stack_channels, pixel_size_xy, pixel_size_z,
-                       downsample_factor=3,
-                       stitch_regularization=1e-2, name='image',
-                       optimization_log_dir='./', backgrounds=None):
-    with np.load('{}{}__yx_translations.npz'.format(optimization_log_dir, name)) as loaded:
+                       downsample_factor=3, param_cache_dir=None,
+                       stitch_regularization=1e-2, param_cache_name='.', backgrounds=None):
+    with np.load('{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)) as loaded:
         p_yx_translations = loaded['p_yx_translations']
         # p_zyx_translations = loaded['p_zyx_translations']
 
@@ -302,7 +301,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
     #Rescale these translations to account for downsampling
     p_zyx_translations[:, 1:] = downsample_factor * p_zyx_translations[:, 1:]
 
-    np.savez('{}{}__yx_translations'.format(optimization_log_dir, name),
+    np.savez('{}{}_optimized_params'.format(param_cache_dir, param_cache_name),
             p_yx_translations=p_yx_translations, p_zyx_translations=p_zyx_translations)
     
     return p_yx_translations, p_zyx_translations
