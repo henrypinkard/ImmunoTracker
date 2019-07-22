@@ -48,7 +48,8 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            inter_stack_registration_channels=[0], num_time_points=None, inter_stack_max_z=15, timepoint_registration_channel=0, n_cores=8,
+            inter_stack_registration_channels=[0], num_time_points=None, inter_stack_max_z=15,
+            timepoint_registration_channel=0, stitch_regularization=1e-2,
             reverse_rank_filter=False, optimization_log_dir='./', suffix='', downsample_factor=3):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
@@ -74,7 +75,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     :param inter_stack_registration_channel: Channel to use for registering different z stacks together
     :param inter_stack_max_z: Maximum z shift among different stacks. Set smaller to speed up computations
     :param timepoint_registration_channel: Channel to use for registering different timepoints to one another
-    :param n_cores: number of CPU cores to use when parallelizing inter-stack registrations.
     :return:
     """
 
@@ -107,15 +107,15 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             if position_registrations == 'optimize':
                 registration_params, translation_params = optimize_timepoint(p_zyxc_stacks, nonempty_pixels,
                         metadata['row_col_coords'], metadata['tile_overlaps'],
-                        intra_stack_channels=intra_stack_registration_channels, pixel_size_xy=magellan.pixel_size_xy_um,
+                        intra_stack_channels=intra_stack_registration_channels, pixel_size_xy=magellan.pixel_size_xy_um *downsample_factor,
                         pixel_size_z=magellan.pixel_size_z_um, inter_stack_channels=inter_stack_registration_channels,
                         optimization_log_dir=optimization_log_dir, name=output_basename + '_tp{}'.format(frame_index),
-                        backgrounds=backgrounds, downsample_factor=downsample_factor)
-            elif position_registrations == 'fast_register':
+                        backgrounds=backgrounds, downsample_factor=downsample_factor, stitch_regularization=stitch_regularization)
+            elif position_registrations == 'fourier':
                 #TODO: update this function to reflect new stack shape
                 translation_params = compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registration_params,
                                 metadata, max_shift_z=inter_stack_max_z, channel_indices=inter_stack_registration_channels,
-                                                                       backgrounds=backgrounds, n_cores=n_cores)
+                                                                       backgrounds=backgrounds)
 
         # Update the size of stitched image based on XYZ translations
         if stitched_image_size is None:
@@ -157,6 +157,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     #add in extra space for timepoint registrations
     imaris_size = np.array(stitched_image_size) + np.max(abs_timepoint_registrations, axis=0).astype(np.int)
 
+    for params in all_params:
+        print(params[1])
 
     output_basename = output_basename + suffix
     stitch_register_imaris_write(output_dir, output_basename, imaris_size, magellan, metadata, registration_series,

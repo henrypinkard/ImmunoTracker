@@ -99,7 +99,8 @@ def intra_stack_alignment_graph(yx_translations, zyx_stack, fill_val, stack_lear
     optimize_op = optimizer.minimize(loss)
     return loss, optimize_op
 
-def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_stacks, row_col_coords, overlap_shape, fill_val, stitch_regularizaton=0.0):
+def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_stacks, row_col_coords,
+                             overlap_shape,  stitch_regularization, z_to_xy_ratio, fill_val):
     """
     Compute a loss function based on the overlap of different tiles
     """
@@ -133,8 +134,8 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_
             loss += numer / denom
 
     loss = -loss
-    #TODO: add anisotropic regularization
-    loss = loss + stitch_regularizaton * tf.reduce_mean(p_zyx_translations_flat ** 2)
+    loss = loss + stitch_regularization * tf.reduce_mean(p_zyx_translations[:, 0] ** 2) * z_to_xy_ratio + \
+                        tf.reduce_mean(p_zyx_translations[:, 1:] ** 2)
 
     grad = tf.gradients(loss, p_zyx_translations_flat)[0]
     hessian = tf.hessians(loss, p_zyx_translations_flat)[0]
@@ -143,12 +144,6 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_
     assign_op = tf.assign_sub(p_zyx_translations_flat, newton_delta)
 
     return loss, grad, hessian, newton_delta, assign_op
-
-    # hess_grad_prod = tf.matmul(inv_hess, tf.reshape(grad, [-1, 1]))
-    # newton_delta = tf.reshape(hess_grad_prod, [-1])
-    # optimize_step = p_zyx_translations_flat.assign(newton_delta + p_zyx_translations_flat)
-    # return loss, grad, hessian, inv_hess, hess_grad_prod, newton_delta, optimize_step
-    # return optimize_step, loss
 
 def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=None):
     """
@@ -217,10 +212,12 @@ def optimize_stack(arg_list):
             iteration = iteration + 1
         return sess.run(yx_translations)
 
-def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape):
+def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape,
+                       stitch_regularization, pixel_size_xy, pixel_size_z):
+    z_to_xy_ratio = pixel_size_z / pixel_size_xy
     loss_op, grad_op, hessian_op, newton_delta_op, assign_op = inter_stack_stitch_graph(
         p_yx_translations, p_zyx_translations,
-        p_zyxc_stacks_stitch, row_col_coords, overlap_shape, fill_val=0)
+        p_zyxc_stacks_stitch, row_col_coords, overlap_shape,  stitch_regularization, z_to_xy_ratio, fill_val=0)
     new_min_iter = 0
     min_loss = 1e40
     iteration = 0
@@ -244,13 +241,13 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
         return sess.run(p_zyx_translations)
 
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
-                       inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_learning_rate=0.02, downsample_factor=3,
-                       stitch_regularization=1e-16, name='image',
+                       inter_stack_channels, pixel_size_xy, pixel_size_z,
+                       downsample_factor=3,
+                       stitch_regularization=1e-2, name='image',
                        optimization_log_dir='./', backgrounds=None):
     with np.load('{}{}__yx_translations.npz'.format(optimization_log_dir, name)) as loaded:
         p_yx_translations = loaded['p_yx_translations']
-    #     p_zyx_translations = loaded['p_zyx_translations']
-
+        # p_zyx_translations = loaded['p_zyx_translations']
 
     # ######## optimize yx_translations for each stack
     # mean_background = np.mean(backgrounds)
@@ -287,12 +284,11 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
             for c in range(stack.shape[3]):
                 stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2*downsample_factor / 6.0)
         p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
-    #TODO: add in anisotropic regularization?
-    
+
     tf.reset_default_graph()
     p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3)
     p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch,
-            row_col_coords, overlap_shape // downsample_factor)
+            row_col_coords, overlap_shape // downsample_factor, stitch_regularization, pixel_size_xy, pixel_size_z)
     
     p_zyx_translations = np.reshape(p_zyx_translations_optimized, [-1, 3])
     #flip sign as stitcher expects
