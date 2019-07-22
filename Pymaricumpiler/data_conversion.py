@@ -49,7 +49,7 @@ for index in conversion_indices:
             output_dir=imaris_dir, output_basename=namestring, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             inter_stack_registration_channels=[5], timepoint_registration_channel=5,
             reverse_rank_filter=True, optimization_log_dir='/media/hugespace/henry/lymphosight/optimization_logs/',
-            num_time_points=5,  suffix='Downsample', downsample=3)
+            num_time_points=5,  suffix='Downsample', downsample_factor=3)
 
 for index in conversion_indices:
     data_path = get_dataset_path(index)
