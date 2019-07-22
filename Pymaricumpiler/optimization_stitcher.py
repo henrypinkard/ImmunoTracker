@@ -226,8 +226,12 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
         while True:
             loss, grad = sess.run([loss_op, grad_op])
             hessian = sess.run([hessian_op])
-            stitch_rms_shift = np.sqrt(np.mean(sess.run(p_zyx_translations)) ** 2)
-            print('Stitching loss: {}  \t\tstitch rms: {}'.format(loss, stitch_rms_shift))
+	    translations = np.reshape(sess.run(p_zyx_translations),(-1, 3))  
+            translations[:, 0] = translations[:, 0] * pixel_size_z
+            translations[:, 1:] = translations[:, 1:] * pixel_size_xy  
+            stitch_rms_shift_z = np.sqrt(np.mean(translations[:, 0] ** 2))
+            stitch_rms_shift_xy = np.sqrt(np.mean(translations[:, 1:] ** 2)) 
+            print('Stitching loss: {}  \t\tstitch xy rms: {}  \t\tstitch z rms: {}'.format(loss, stitch_rms_shift_xy, stitch_rms_shift_z))
             newton_delta = np.dot(np.linalg.inv(hessian), grad)
             sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
             # check for stopping condition
