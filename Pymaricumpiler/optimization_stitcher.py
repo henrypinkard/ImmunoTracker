@@ -127,8 +127,10 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_
                 overlap2 = stack2[:, :, -overlap_shape[1]:]
             else:
                 raise Exception('This shouldnt happen!')
-            numer = tf.reduce_mean(overlap1 * overlap2) ** 2
-            denom = tf.reduce_mean(overlap1 ** 2) * tf.reduce_mean(overlap2 ** 2)
+            floverlap1 = tf.cast(overlap1, tf.float32)
+            floverlap2 = tf.cast(overlap2, tf.float32)
+            numer = tf.reduce_mean(floverlap1 * floverlap2) ** 2
+            denom = tf.reduce_mean(floverlap1 ** 2) * tf.reduce_mean(floverlap2 ** 2)
             loss += numer / denom
 
     loss = -loss
@@ -225,7 +227,7 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
         while True:
             loss, grad = sess.run([loss_op, grad_op])
             hessian = sess.run([hessian_op])
-            translations = np.reshape(sess.run(p_zyx_translations),(-1, 3))  
+            translations = np.reshape(sess.run(p_zyx_translations), (-1, 3))
             translations[:, 0] = translations[:, 0] * pixel_size_z
             translations[:, 1:] = translations[:, 1:] * pixel_size_xy  
             stitch_rms_shift_z = np.sqrt(np.mean(translations[:, 0] ** 2))
