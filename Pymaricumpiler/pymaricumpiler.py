@@ -84,6 +84,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         output_dir = os.sep.join(magellan_dir.split(os.sep)[:-1])  # parent directory of magellan
     if output_basename is None:
         output_basename = magellan_dir.split(os.sep)[-1] # same name as magellan acquisition
+    output_basename = str(output_basename) #since it might be an ID number
 
     magellan, metadata = open_magellan(magellan_dir)
     #iterate through all time points to compute all needed stitching and registration params

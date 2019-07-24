@@ -134,7 +134,8 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_
             loss += numer / denom
 
     loss = -loss
-    pixel_size_rescale = tf.reshape(tf.convert_to_tensor(np.tile([[z_to_xy_ratio, 1.0, 1.0]], (len(row_col_coords), 1)), tf.float32), [-1])
+    pixel_size_rescale = tf.reshape(tf.convert_to_tensor(np.tile([[
+        1.0, 1.0 / z_to_xy_ratio, 1.0 / z_to_xy_ratio]], (len(row_col_coords), 1)), tf.float32), [-1])
     rescaled_translations = pixel_size_rescale * p_zyx_translations_flat
     loss = loss + stitch_regularization * tf.reduce_mean(rescaled_translations ** 2)
     grad = tf.gradients(loss, p_zyx_translations_flat)[0]
@@ -231,7 +232,7 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
             translations[:, 1:] = translations[:, 1:] * pixel_size_xy  
             stitch_rms_shift_z = np.sqrt(np.mean(translations[:, 0] ** 2))
             stitch_rms_shift_xy = np.sqrt(np.mean(translations[:, 1:] ** 2)) 
-            print('Stitching loss: {}  \t\tstitch xy rms: {}  \t\tstitch z rms: {}'.format(loss, stitch_rms_shift_xy, stitch_rms_shift_z))
+            print('Stitching loss: {}  \txy rms (um): {}  \tz rms (um): {}'.format(loss, stitch_rms_shift_xy, stitch_rms_shift_z))
             newton_delta = np.dot(np.linalg.inv(hessian), grad)
             sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
             # check for stopping condition
@@ -277,6 +278,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
     # means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
     p_zyxc_stacks_stitch = {}
     #downsample, mean subtract, remove unused channels
+    pixel_size_xy = pixel_size_xy * downsample_factor
     for pos_index in p_zyxc_stacks.keys():
         # stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
         stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)]
