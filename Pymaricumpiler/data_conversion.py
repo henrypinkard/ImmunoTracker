@@ -63,10 +63,3 @@ for ID in conversion_ID:
             timepoint_registration_channel=5, reverse_rank_filter=True, param_cache_dir=param_cache_dir,
             num_time_points=num_time_points, 
             suffix='2x2_ch5_noreg', inter_stack_registration_channels=[5],downsample_factor=2, stitch_regularization=0)
-
-    convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
-            output_dir=imaris_dir, output_basename=ID, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            timepoint_registration_channel=5, reverse_rank_filter=True, param_cache_dir=param_cache_dir,
-            num_time_points=num_time_points,  
-            suffix='4x4_ch5_noreg', inter_stack_registration_channels=[5], downsample_factor=4, stitch_regularization=0)
-

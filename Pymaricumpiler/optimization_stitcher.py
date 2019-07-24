@@ -8,8 +8,6 @@ import os
 import scipy.ndimage as ndi
 from multiprocessing import Pool
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
-
 def _generate_grid(image, zyx_translations=None, yx_translations=None):
     """
     Generate Nx3 (# of pixels) x (zyx) gird of coordinates to sample new pixels
@@ -19,18 +17,18 @@ def _generate_grid(image, zyx_translations=None, yx_translations=None):
     :return:
     """
     #get zyx coords of all points
-    zyx = tf.meshgrid(*[tf.convert_to_tensor(np.arange(d)) for d in image.shape[:3]], indexing='ij')
+    zyx = tf.meshgrid(*[tf.convert_to_tensor(np.arange(d), dtype=tf.int16) for d in image.shape[:3]], indexing='ij')
     #flatten into nx3 vector
-    n_by_zyx = tf.cast(tf.stack([tf.reshape(d, [-1]) for d in zyx], axis=1), tf.float32)
+    n_by_zyx = tf.cast(tf.stack([tf.reshape(d, [-1]) for d in zyx], axis=1), tf.float16)
     if zyx_translations is not None:
         #apply globabl yxz translations
-        n_by_zyx = n_by_zyx + tf.cast(zyx_translations, tf.float32)
+        n_by_zyx = n_by_zyx + tf.cast(zyx_translations, tf.float16)
     if yx_translations is not None:
         #apply per image shifts
         #reshape to make first axis z again
         per_slice_coords = tf.reshape(n_by_zyx, [image.shape[0], -1, 3])
         #add in empty z coord
-        per_slice_shifts = tf.concat([tf.zeros((yx_translations.shape[0], 1)), tf.cast(yx_translations, tf.float32)], axis=1)
+        per_slice_shifts = tf.concat([tf.zeros((yx_translations.shape[0], 1), dtype=tf.float16), tf.cast(yx_translations, tf.float16)], axis=1)
         per_slice_coords += tf.reshape(per_slice_shifts, [yx_translations.shape[0], -1, 3])
         n_by_zyx = tf.reshape(per_slice_coords, [-1, 3])
     return n_by_zyx
@@ -45,7 +43,7 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
     #get pixel values of corners
     shape_array = np.array(image.shape)
     #split to bounding integer values N x 8 x 3. the 8 is every combination of floor and ceil values
-    floor_indices = tf.cast(tf.floor(n_by_zyx), tf.int32)
+    floor_indices = tf.cast(tf.floor(n_by_zyx), tf.float16)
     ceil_indices = 1 + floor_indices
     combos = [[floor_indices[:, 0], floor_indices[:, 1], floor_indices[:, 2]],
              [floor_indices[:, 0], floor_indices[:, 1], ceil_indices[:, 2]],
@@ -69,14 +67,14 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
     pix_val_list = []
     for c in ([0] if image.ndim == 3 else range(image.shape[3])):
         channel_image = image[..., c] if image.ndim == 4 else image
-        pixel_vals_flat = tf.gather_nd(channel_image, clipped_indices)
+        pixel_vals_flat = tf.gather_nd(channel_image, tf.cast(clipped_indices, tf.int32))
         #now replace values
         pixel_vals_flat = tf.where(out_of_bounds_mask, fill_val*tf.ones_like(pixel_vals_flat), pixel_vals_flat)
         pix_val_list.append(tf.reshape(pixel_vals_flat, [-1, 8]))
     pixel_values = tf.stack(pix_val_list, axis=2)
 
     #calculate weights: N x 8
-    ceil_weights = n_by_zyx - tf.cast(floor_indices, tf.float32)
+    ceil_weights = n_by_zyx - tf.cast(floor_indices, tf.float16)
     floor_weights = 1.0 - ceil_weights
     corner_weights = tf.stack([floor_weights[:, 0] * floor_weights[:, 1] * floor_weights[:, 2],
                                  floor_weights[:, 0] * floor_weights[:, 1] * ceil_weights[:, 2],
@@ -88,7 +86,7 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
                                  ceil_weights[:, 0] * ceil_weights[:, 1] * ceil_weights[:, 2]], axis=1)
 
     #add together to get pixels values
-    interpolated_pixels = tf.reduce_sum(tf.cast(pixel_values, tf.float32) * corner_weights[:, :, None], axis=1)
+    interpolated_pixels = tf.reduce_sum(tf.cast(pixel_values, tf.float16) * corner_weights[:, :, None], axis=1)
     return tf.reshape(interpolated_pixels, image.shape)
 
 def intra_stack_alignment_graph(yx_translations, zyx_stack, fill_val, stack_learning_rate=2, stack_regularization=1e-2):
@@ -137,7 +135,7 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_
     pixel_size_rescale = tf.reshape(tf.convert_to_tensor(np.tile([[
         1.0, 1.0 / z_to_xy_ratio, 1.0 / z_to_xy_ratio]], (len(row_col_coords), 1)), tf.float32), [-1])
     rescaled_translations = pixel_size_rescale * p_zyx_translations_flat
-    loss = loss + stitch_regularization * tf.reduce_mean(rescaled_translations ** 2)
+    loss = tf.cast(loss, tf.float32) + stitch_regularization * tf.reduce_mean(rescaled_translations ** 2)
     grad = tf.gradients(loss, p_zyx_translations_flat)[0]
     hessian = tf.hessians(loss, p_zyx_translations_flat)[0]
 
