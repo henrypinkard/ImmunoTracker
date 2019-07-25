@@ -19,34 +19,37 @@ else:
     raw_data_dir = '/global/home/users/hbp/data/lymphosight/raw_data/'
     param_cache_dir = '/global/home/users/hbp/data/lymphosight/optimized_params/'
 
-with open('LymphosightDatasets.csv', 'r') as f:
-    reader = csv.reader(f)
-    list_form = list(reader)
-str_array = np.array(list_form[1:])
-data_indices = str_array[:, 0].astype(np.int)
+with open(data_list, 'r') as f:
+    reader = csv.DictReader(f)
+    experiments = list(reader)
+    column_names = reader.fieldnames
+
 #remove data list if its beign redownloaded every time
 if data_list == './LymphosightDatasets.csv':
     os.remove(data_list)
 
-def get_dataset_path(ID):
-    dat_list_index = int((data_indices == ID).nonzero()[0])
-    date = str_array[dat_list_index, 1]
-    experiment = str_array[dat_list_index, 2]
-    dataset = str_array[dat_list_index, 3]
-    path = '{} {}{}{}'.format(date, experiment, os.sep, dataset)
-    return path
+# def get_dataset_path(ID):
+#     dat_list_index = int((data_indices == ID).nonzero()[0])
+#     date = str_array[dat_list_index, 1]
+#     experiment = str_array[dat_list_index, 2]
+#     dataset = str_array[dat_list_index, 3]
+#     path = '{} {}{}{}'.format(date, experiment, os.sep, dataset)
+#     return path
 
-def get_dataset_name_string(ID):
-    dat_list_index = int((data_indices == ID).nonzero()[0])
-    date = str_array[dat_list_index, 1]
-    experiment = str_array[dat_list_index, 2]
-    dataset = str_array[dat_list_index, 3]
-    path = '{}_{}{}{}'.format(date, experiment, '_', dataset)
-    return path
+# def get_dataset_name_string(ID):
+#     dat_list_index = int((data_indices == ID).nonzero()[0])
+#     date = str_array[dat_list_index, 1]
+#     experiment = str_array[dat_list_index, 2]
+#     dataset = str_array[dat_list_index, 3]
+#     path = '{}_{}{}{}'.format(date, experiment, '_', dataset)
+#     return path
+
+pass
+
+
 
 #test one
 conversion_ID = np.array([36])
-num_time_points = 5
 
 
 #convert all with no corrections

@@ -249,6 +249,8 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
                        downsample_factor=3, param_cache_dir=None,
                        stitch_regularization=1e-2, param_cache_name='.', backgrounds=None,
                        stack=True, stitch=True):
+    optimized_params = {}
+
     saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)
     if os.path.isfile(saved_name):
         with np.load(saved_name) as loaded:
@@ -260,8 +262,6 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
         raise Exception('Couldnt find stack params to load')
     if not stitch and 'p_zyx_translations' not in optimized_params:
         raise Exception('Couldnt find stitch params to load')
-
-    optimized_params = {}
 
     if stack:
         ######## optimize yx_translations for each stack
@@ -313,6 +313,6 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
         optimized_params['p_zyx_translations'] = p_zyx_translations
 
 
-    np.savez('{}{}_optimized_params'.format(param_cache_dir, param_cache_name), **to_save)
+    np.savez('{}{}_optimized_params'.format(param_cache_dir, param_cache_name), **optimized_params)
     
     return optimized_params
