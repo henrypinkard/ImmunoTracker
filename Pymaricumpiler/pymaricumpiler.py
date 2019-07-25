@@ -106,15 +106,19 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             backgrounds = estimate_background(p_zyxc_stacks, nonempty_pixels)
         if position_registrations is not None:
             if position_registrations == 'optimize':
-                registration_params, translation_params = optimize_timepoint(p_zyxc_stacks, nonempty_pixels,
+                optimized = optimize_timepoint(p_zyxc_stacks, nonempty_pixels,
                         metadata['row_col_coords'], metadata['tile_overlaps'], pixel_size_z=magellan.pixel_size_z_um,
-                        pixel_size_xy=magellan.pixel_size_xy_um * downsample_factor, backgrounds=backgrounds, 
+                        pixel_size_xy=magellan.pixel_size_xy_um, backgrounds=backgrounds, 
                         intra_stack_channels=intra_stack_registration_channels, 
                         inter_stack_channels=inter_stack_registration_channels,
                         param_cache_dir=param_cache_dir,
                         param_cache_name=output_basename + '_tp{}'.format(frame_index),
                         downsample_factor=downsample_factor, 
-                        stitch_regularization=stitch_regularization)
+                        stitch_regularization=stitch_regularization, stack=False, stitch=True)
+                if 'p_zyx_translations' in optimized:
+                    translation_params = optimized['p_zyx_translations']
+                if 'p_yx_translations' in optimized:        
+                    registration_params = optimized['p_yx_translations']
             elif position_registrations == 'fourier':
                 #TODO: update this function to reflect new stack shape
                 translation_params = compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registration_params,

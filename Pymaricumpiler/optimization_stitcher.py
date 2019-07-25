@@ -6,7 +6,6 @@ from stitcher import stitch_all_channels
 from PIL import Image
 import os
 import scipy.ndimage as ndi
-from multiprocessing import Pool
 
 def _generate_grid(image, zyx_translations=None, yx_translations=None):
     """
@@ -17,18 +16,18 @@ def _generate_grid(image, zyx_translations=None, yx_translations=None):
     :return:
     """
     #get zyx coords of all points
-    zyx = tf.meshgrid(*[tf.convert_to_tensor(np.arange(d), dtype=tf.int16) for d in image.shape[:3]], indexing='ij')
+    zyx = tf.meshgrid(*[tf.convert_to_tensor(np.arange(d), dtype=tf.int32) for d in image.shape[:3]], indexing='ij')
     #flatten into nx3 vector
-    n_by_zyx = tf.cast(tf.stack([tf.reshape(d, [-1]) for d in zyx], axis=1), tf.float16)
+    n_by_zyx = tf.cast(tf.stack([tf.reshape(d, [-1]) for d in zyx], axis=1), tf.float32)
     if zyx_translations is not None:
         #apply globabl yxz translations
-        n_by_zyx = n_by_zyx + tf.cast(zyx_translations, tf.float16)
+        n_by_zyx = n_by_zyx + tf.cast(zyx_translations, tf.float32)
     if yx_translations is not None:
         #apply per image shifts
         #reshape to make first axis z again
         per_slice_coords = tf.reshape(n_by_zyx, [image.shape[0], -1, 3])
         #add in empty z coord
-        per_slice_shifts = tf.concat([tf.zeros((yx_translations.shape[0], 1), dtype=tf.float16), tf.cast(yx_translations, tf.float16)], axis=1)
+        per_slice_shifts = tf.concat([tf.zeros((yx_translations.shape[0], 1), dtype=tf.float32), tf.cast(yx_translations, tf.float32)], axis=1)
         per_slice_coords += tf.reshape(per_slice_shifts, [yx_translations.shape[0], -1, 3])
         n_by_zyx = tf.reshape(per_slice_coords, [-1, 3])
     return n_by_zyx
@@ -43,7 +42,7 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
     #get pixel values of corners
     shape_array = np.array(image.shape)
     #split to bounding integer values N x 8 x 3. the 8 is every combination of floor and ceil values
-    floor_indices = tf.cast(tf.floor(n_by_zyx), tf.float16)
+    floor_indices = tf.cast(tf.floor(n_by_zyx), tf.float32)
     ceil_indices = 1 + floor_indices
     combos = [[floor_indices[:, 0], floor_indices[:, 1], floor_indices[:, 2]],
              [floor_indices[:, 0], floor_indices[:, 1], ceil_indices[:, 2]],
@@ -74,7 +73,7 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
     pixel_values = tf.stack(pix_val_list, axis=2)
 
     #calculate weights: N x 8
-    ceil_weights = n_by_zyx - tf.cast(floor_indices, tf.float16)
+    ceil_weights = n_by_zyx - tf.cast(floor_indices, tf.float32)
     floor_weights = 1.0 - ceil_weights
     corner_weights = tf.stack([floor_weights[:, 0] * floor_weights[:, 1] * floor_weights[:, 2],
                                  floor_weights[:, 0] * floor_weights[:, 1] * ceil_weights[:, 2],
@@ -86,7 +85,7 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
                                  ceil_weights[:, 0] * ceil_weights[:, 1] * ceil_weights[:, 2]], axis=1)
 
     #add together to get pixels values
-    interpolated_pixels = tf.reduce_sum(tf.cast(pixel_values, tf.float16) * corner_weights[:, :, None], axis=1)
+    interpolated_pixels = tf.reduce_sum(tf.cast(pixel_values, tf.float32) * corner_weights[:, :, None], axis=1)
     return tf.reshape(interpolated_pixels, image.shape)
 
 def intra_stack_alignment_graph(yx_translations, zyx_stack, fill_val, stack_learning_rate=2, stack_regularization=1e-2):
@@ -248,62 +247,72 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
                        inter_stack_channels, pixel_size_xy, pixel_size_z,
                        downsample_factor=3, param_cache_dir=None,
-                       stitch_regularization=1e-2, param_cache_name='.', backgrounds=None):
-    with np.load('{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)) as loaded:
-        p_yx_translations = loaded['p_yx_translations']
-        # p_zyx_translations = loaded['p_zyx_translations']
+                       stitch_regularization=1e-2, param_cache_name='.', backgrounds=None,
+                       stack=True, stitch=True):
+    saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)
+    if os.path.isfile(saved_name):
+        with np.load(saved_name) as loaded:
+            if 'p_yx_translations' in loaded and not stack:
+                optimized_params['p_yx_translations'] = loaded['p_yx_translations']
+            if 'p_zyx_translations' in loaded and not stitch: 
+                optimized_params['p_zyx_translations'] = loaded['p_zyx_translations']
+    if not stack and 'p_yx_translations' not in optimized_params:
+        raise Exception('Couldnt find stack params to load')
+    if not stitch and 'p_zyx_translations' not in optimized_params:
+        raise Exception('Couldnt find stitch params to load')
 
-    # ######## optimize yx_translations for each stack
-    # mean_background = np.mean(backgrounds)
-    # arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
-    #                     pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
-    #
-    # # with Pool(6) as p:
-    # #     pos_raw_translations = p.map(optimize_stack, arg_lists)
-    # pos_raw_translations = [optimize_stack(a) for a in arg_lists]
-    # #zeros version for debugging
-    # # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
-    #
-    # #reformat and add in zeros for extra slices that weren't optimized
-    # p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
-    #             np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
-    #             np.where(nonempty_pixels[pos_index])[0][-1] - 1, 2]), np.float32)], axis=0)
-    #                      for pos_index in p_zyxc_stacks.keys()]
-    #
-    # p_yx_translations = np.stack(p_yx_translations, axis=0)
+    optimized_params = {}
+
+    if stack:
+        ######## optimize yx_translations for each stack
+        mean_background = np.mean(backgrounds)
+        arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
+                            pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
+        
+        pos_raw_translations = [optimize_stack(a) for a in arg_lists]
+        #zeros version for debugging
+        # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
+        
+        #reformat and add in zeros for extra slices that weren't optimized
+        p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
+                    np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
+                    np.where(nonempty_pixels[pos_index])[0][-1] - 1, 2]), np.float32)], axis=0)
+                             for pos_index in p_zyxc_stacks.keys()]
+        optimized_params['p_yx_translations'] = np.stack(p_yx_translations, axis=0)
     
 
+    if stitch:
+        ########## Now optimizing stitching
+        # means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
+        p_zyxc_stacks_stitch = {}
+        #downsample, mean subtract, remove unused channels
+        pixel_size_xy = pixel_size_xy * downsample_factor
+        for pos_index in p_zyxc_stacks.keys():
+            # stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
+            stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)]
 
-    ########## Now optimizing stitching
-    # means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
-    p_zyxc_stacks_stitch = {}
-    #downsample, mean subtract, remove unused channels
-    pixel_size_xy = pixel_size_xy * downsample_factor
-    for pos_index in p_zyxc_stacks.keys():
-        # stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
-        stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)]
+            # stack[np.logical_not(nonempty_pixels[pos_index])] = 0
+            #filter and downsample
+            for z in np.where(np.array(nonempty_pixels[pos_index]))[0]:
+                for c in range(stack.shape[3]):
+                    stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2*downsample_factor / 6.0)
+            p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
 
-        # stack[np.logical_not(nonempty_pixels[pos_index])] = 0
-        #filter and downsample
-        for z in np.where(np.array(nonempty_pixels[pos_index]))[0]:
-            for c in range(stack.shape[3]):
-                stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2*downsample_factor / 6.0)
-        p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
+        tf.reset_default_graph()
+        p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3, initializer=tf.zeros_initializer)
+        p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch,
+                row_col_coords, overlap_shape // downsample_factor, stitch_regularization, pixel_size_xy, pixel_size_z)
+        
+        p_zyx_translations = np.reshape(p_zyx_translations_optimized, [-1, 3])
+        #flip sign as stitcher expects
+        p_zyx_translations[:, 1] = -p_zyx_translations[:, 1]
+        p_zyx_translations[:, 2] = -p_zyx_translations[:, 2]
 
-    tf.reset_default_graph()
-    p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3, initializer=tf.zeros_initializer)
-    p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch,
-            row_col_coords, overlap_shape // downsample_factor, stitch_regularization, pixel_size_xy, pixel_size_z)
+        #Rescale these translations to account for downsampling
+        p_zyx_translations[:, 1:] = downsample_factor * p_zyx_translations[:, 1:]
+        optimized_params['p_zyx_translations'] = p_zyx_translations
+
+
+    np.savez('{}{}_optimized_params'.format(param_cache_dir, param_cache_name), **to_save)
     
-    p_zyx_translations = np.reshape(p_zyx_translations_optimized, [-1, 3])
-    #flip sign as stitcher expects
-    p_zyx_translations[:, 1] = -p_zyx_translations[:, 1]
-    p_zyx_translations[:, 2] = -p_zyx_translations[:, 2]
-
-    #Rescale these translations to account for downsampling
-    p_zyx_translations[:, 1:] = downsample_factor * p_zyx_translations[:, 1:]
-
-    np.savez('{}{}_optimized_params'.format(param_cache_dir, param_cache_name),
-            p_yx_translations=p_yx_translations, p_zyx_translations=p_zyx_translations)
-    
-    return p_yx_translations, p_zyx_translations
+    return optimized_params
