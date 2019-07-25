@@ -63,4 +63,4 @@ for ID in conversion_ID:
             timepoint_registration_channel=5, reverse_rank_filter=True, param_cache_dir=param_cache_dir,
             num_time_points=num_time_points,
             suffix='2x2_ch05_noreg', inter_stack_registration_channels=[0, 5], downsample_factor=2,
-            stitch_regularization=0)
+            stitch_regularization=0, stack=False, stitch=False, export=True)

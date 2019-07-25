@@ -50,7 +50,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             inter_stack_registration_channels=[0], num_time_points=None, inter_stack_max_z=15,
             timepoint_registration_channel=0, stitch_regularization=1e-2, param_cache_dir='./',
-            reverse_rank_filter=False, suffix='', downsample_factor=3):
+            reverse_rank_filter=False, suffix='', downsample_factor=3, stitch=True, stack=True,
+            export=True):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
     :param magellan_dir: directory of magellan data to be converted
@@ -114,7 +115,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                         param_cache_dir=param_cache_dir,
                         param_cache_name=output_basename + '_tp{}'.format(frame_index),
                         downsample_factor=downsample_factor, 
-                        stitch_regularization=stitch_regularization, stack=False, stitch=True)
+                        stitch_regularization=stitch_regularization, stack=stack, stitch=stitch)
                 if 'p_zyx_translations' in optimized:
                     translation_params = optimized['p_zyx_translations']
                 if 'p_yx_translations' in optimized:        
@@ -124,6 +125,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                 translation_params = compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registration_params,
                                 metadata, max_shift_z=inter_stack_max_z, channel_indices=inter_stack_registration_channels,
                                                                        backgrounds=backgrounds)
+        if not export:
+            continue            
 
         # Update the size of stitched image based on XYZ translations
         if stitched_image_size is None:
@@ -154,6 +157,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                                              max_shift=np.array(stitched.shape) // 2)
             previous_stitched = stitched
         all_params.append((registration_params, translation_params, timepoint_registration))
+    if not export:
+        return
 
     registration_series = np.stack([p[0] for p in all_params])
     translation_series = np.stack([p[1] for p in all_params])
