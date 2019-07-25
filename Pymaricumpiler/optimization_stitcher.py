@@ -2,8 +2,8 @@ import numpy as np
 import tensorflow as tf
 # tf.enable_eager_execution()
 
+# from PIL import Image
 from stitcher import stitch_all_channels
-from PIL import Image
 import os
 import scipy.ndimage as ndi
 
@@ -163,29 +163,29 @@ def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=Non
         resampled = _sample_pixels(img, grid, fill_val=fill_val)
     return resampled
 
-def exporttiffstack(datacube, path, name='export'):
-    '''
-    Save 3D numpy array as a TIFF stack
-    :param datacube:
-    '''
-    if len(datacube.shape) == 2:
-        imlist = [Image.fromarray(datacube)]
-    else:
-        imlist = []
-        for i in range(datacube.shape[0]):
-            imlist.append(Image.fromarray(datacube[i,...]))
-    path = "{}{}.tif".format(path, name)
-    imlist[0].save(path, compression="tiff_deflate", save_all=True, append_images=imlist[1:])
+# def exporttiffstack(datacube, path, name='export'):
+#     '''
+#     Save 3D numpy array as a TIFF stack
+#     :param datacube:
+#     '''
+#     if len(datacube.shape) == 2:
+#         imlist = [Image.fromarray(datacube)]
+#     else:
+#         imlist = []
+#         for i in range(datacube.shape[0]):
+#             imlist.append(Image.fromarray(datacube[i,...]))
+#     path = "{}{}.tif".format(path, name)
+#     imlist[0].save(path, compression="tiff_deflate", save_all=True, append_images=imlist[1:])
 
-def export_stitched_tiff(raw_stacks, row_col_coords, overlap_shape, intra_stack_params, stitch_params, name,
-                             path='/media/hugespace/henry/lymphosight/optimization_testing/'):
-    print('stitching and exporting')
-    stitched = stitch_all_channels(raw_stacks, stitch_params, intra_stack_params, overlap_shape, row_col_coords)
-    #make channels and slices on same axis
-    stacked = np.stack(stitched, axis=0)
-    exporttiffstack(np.reshape(stacked, (stacked.shape[0] * stacked.shape[1],
-                                         stacked.shape[2], stacked.shape[3])).astype(np.uint8), path=path, name=name)
-    print('exported {}'.format(name))
+# def export_stitched_tiff(raw_stacks, row_col_coords, overlap_shape, intra_stack_params, stitch_params, name,
+#                              path='/media/hugespace/henry/lymphosight/optimization_testing/'):
+#     print('stitching and exporting')
+#     stitched = stitch_all_channels(raw_stacks, stitch_params, intra_stack_params, overlap_shape, row_col_coords)
+#     #make channels and slices on same axis
+#     stacked = np.stack(stitched, axis=0)
+#     exporttiffstack(np.reshape(stacked, (stacked.shape[0] * stacked.shape[1],
+#                                          stacked.shape[2], stacked.shape[3])).astype(np.uint8), path=path, name=name)
+#     print('exported {}'.format(name))
 
 def optimize_stack(arg_list):
     nonempty_pix_at_position, zyxc_stack, background = arg_list
