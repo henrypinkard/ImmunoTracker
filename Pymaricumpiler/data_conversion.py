@@ -54,8 +54,6 @@ for ID in ids:
     ntp = int(get_value(ID, 'Usable frames'))
 
 
-
-
     #TODO: remove
     ntp = 5
 
