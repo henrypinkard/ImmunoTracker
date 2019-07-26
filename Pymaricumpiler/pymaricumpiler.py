@@ -125,6 +125,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                 translation_params = compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registration_params,
                                 metadata, max_shift_z=inter_stack_max_z, channel_indices=inter_stack_registration_channels,
                                                                        backgrounds=backgrounds)
+        translation_params = np.round(translation_params).astype(np.int)
         if not export:
             continue            
 

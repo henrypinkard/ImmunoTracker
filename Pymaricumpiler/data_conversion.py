@@ -28,42 +28,40 @@ with open(data_list, 'r') as f:
 if data_list == './LymphosightDatasets.csv':
     os.remove(data_list)
 
-# def get_dataset_path(ID):
-#     dat_list_index = int((data_indices == ID).nonzero()[0])
-#     date = str_array[dat_list_index, 1]
-#     experiment = str_array[dat_list_index, 2]
-#     dataset = str_array[dat_list_index, 3]
-#     path = '{} {}{}{}'.format(date, experiment, os.sep, dataset)
-#     return path
 
-# def get_dataset_name_string(ID):
-#     dat_list_index = int((data_indices == ID).nonzero()[0])
-#     date = str_array[dat_list_index, 1]
-#     experiment = str_array[dat_list_index, 2]
-#     dataset = str_array[dat_list_index, 3]
-#     path = '{}_{}{}{}'.format(date, experiment, '_', dataset)
-#     return path
+def get_dataset_path(ID):
+    ex =[e for e in experiments if e['ID'] == ID][0]
+    path = '{} {}{}{}'.format(ex['Date'], ex['Folder'], os.sep, ex['Experiment'])
+    return path
 
-pass
+def get_value(ID, key):
+    ex = [e for e in experiments if e['ID'] == ID][0]
+    return ex[key]
 
-
-
-#test one
-conversion_ID = np.array([36])
-
-
+ids = [e['ID'] for e in experiments]
 #convert all with no corrections
-for ID in conversion_ID:
+for ID in ids:
+    #TODO: apply to all
+    if ID != '36':
+        continue
+
     data_path = get_dataset_path(ID)
     magellan_dir = raw_data_dir + data_path
 
-    # if os.path.isfile(imaris_dir + os.sep + namestring + '.ims'):
-    #     print('skipping {} because its already converted'.format(namestring))
-    # else:
     print('\n\nconverting: {}\n'.format(magellan_dir))
+    isr_ch = [int(v) for v in get_value(ID, 'ISR ch').split('+')]
+    tp_ch = int(get_value(ID, 'TPR ch'))
+    ntp = int(get_value(ID, 'Usable frames'))
+
+
+
+
+    #TODO: remove
+    ntp = 5
+
     convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
             output_dir=imaris_dir, output_basename=ID, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            timepoint_registration_channel=5, reverse_rank_filter=True, param_cache_dir=param_cache_dir,
-            num_time_points=num_time_points,
-            suffix='2x2_ch05_noreg', inter_stack_registration_channels=[0, 5], downsample_factor=2,
+            timepoint_registration_channel=tp_ch, reverse_rank_filter=True, param_cache_dir=param_cache_dir,
+            num_time_points=ntp, suffix='2x2_ch05_noreg',
+            inter_stack_registration_channels=isr_ch, downsample_factor=2,
             stitch_regularization=0, stack=False, stitch=False, export=True)
