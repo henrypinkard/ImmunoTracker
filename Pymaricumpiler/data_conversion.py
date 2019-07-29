@@ -15,9 +15,7 @@ parser.add_argument('--stitch_reg', type=float, default=0.0)
 parser.add_argument('--ids', type=str, nargs='*')
 parser.add_argument('--max_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
-# args = parser.parse_args()
-#TODO: for debuggin only
-args = parser.parse_args(['--stack', '--ids', '24'])
+args = parser.parse_args()
 
 print('Got arguments:')
 print(args)

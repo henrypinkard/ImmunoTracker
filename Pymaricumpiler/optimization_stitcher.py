@@ -206,10 +206,6 @@ def optimize_stack(arg_list):
             loss, h = sess.run([loss_op, optimize_op]) #run iteration
             if np.isnan(loss):
                 raise Exception('NAN encounterd in loss')
-            #TODO:
-            print('breaking early')
-            break
-            #print
             print('Stack loss: {}  \t\tstack rms: {}'.format(loss, intra_stack_rms_shift))
             # check for stopping condition
             if min_loss > loss:
