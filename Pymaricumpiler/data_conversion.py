@@ -8,14 +8,19 @@ import argparse
 
 #parse command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('--stitch', type=bool, default=True)
-parser.add_argument('--stack', type=bool, default=True)
-parser.add_argument('--export', type=bool, default=True)
+parser.add_argument('--stitch', action='store_true')
+parser.add_argument('--stack', action='store_true')
+parser.add_argument('--export', action='store_true')
 parser.add_argument('--stitch_reg', type=float, default=0.0)
 parser.add_argument('--ids', type=str, nargs='*')
 parser.add_argument('--max_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
-args = parser.parse_args()
+# args = parser.parse_args()
+#TODO: for debuggin only
+args = parser.parse_args(['--stack', '--ids', '24'])
+
+print('Got arguments:')
+print(args)
 
 home = str(Path.home())
 

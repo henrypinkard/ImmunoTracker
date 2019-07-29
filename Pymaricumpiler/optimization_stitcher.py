@@ -189,6 +189,10 @@ def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=Non
 
 def optimize_stack(arg_list):
     nonempty_pix_at_position, zyxc_stack, background = arg_list
+    if zyxc_stack.shape[0] == 0:
+        return np.zeros((0, 2))
+    elif zyxc_stack.shape[0] == 1:
+        return np.zeros((1, 2))
     tf.reset_default_graph()
     yx_translations = tf.get_variable('yx_translations', [2 * sum(nonempty_pix_at_position)], initializer=tf.zeros_initializer)
     loss_op, optimize_op = intra_stack_alignment_graph(yx_translations=yx_translations, zyx_stack=zyxc_stack, fill_val=background)
@@ -200,6 +204,11 @@ def optimize_stack(arg_list):
         while True:
             intra_stack_rms_shift = np.sqrt(np.mean(sess.run(yx_translations)) ** 2)
             loss, h = sess.run([loss_op, optimize_op]) #run iteration
+            if np.isnan(loss):
+                raise Exception('NAN encounterd in loss')
+            #TODO:
+            print('breaking early')
+            break
             #print
             print('Stack loss: {}  \t\tstack rms: {}'.format(loss, intra_stack_rms_shift))
             # check for stopping condition
@@ -210,6 +219,7 @@ def optimize_stack(arg_list):
             if new_min_iter == 10:
                 break
             iteration = iteration + 1
+
         return sess.run(yx_translations)
 
 def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape,
@@ -225,7 +235,11 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
         sess.run(tf.global_variables_initializer())
         while True:
             loss, grad = sess.run([loss_op, grad_op])
+            if np.isnan(loss):
+                raise Exception('NAN encounterd in loss')
             hessian = sess.run([hessian_op])
+            print('Eigenvalues')
+            print(np.linalg.eigvals(hessian))
             translations = np.reshape(sess.run(p_zyx_translations), (-1, 3))
             translations[:, 0] = translations[:, 0] * pixel_size_z
             translations[:, 1:] = translations[:, 1:] * pixel_size_xy  
@@ -258,26 +272,34 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
                 optimized_params['p_yx_translations'] = loaded['p_yx_translations']
             if 'p_zyx_translations' in loaded and not stitch: 
                 optimized_params['p_zyx_translations'] = loaded['p_zyx_translations']
-    if not stack and 'p_yx_translations' not in optimized_params:
-        raise Exception('Couldnt find stack params to load')
-    if not stitch and 'p_zyx_translations' not in optimized_params:
-        raise Exception('Couldnt find stitch params to load')
 
     if stack:
         ######## optimize yx_translations for each stack
         mean_background = np.mean(backgrounds)
-        arg_lists = [[np.array(nonempty_pixels[pos_index]), p_zyxc_stacks[pos_index][np.array(nonempty_pixels[
-                            pos_index])][..., intra_stack_channels], mean_background] for pos_index in p_zyxc_stacks.keys()]
+        arg_lists = [[np.array(nonempty_pixels[pos_index]),
+                       p_zyxc_stacks[pos_index][np.array(nonempty_pixels[pos_index])][..., intra_stack_channels],
+                       mean_background]
+                      for pos_index in p_zyxc_stacks.keys()]
         
         pos_raw_translations = [optimize_stack(a) for a in arg_lists]
         #zeros version for debugging
         # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
         
         #reformat and add in zeros for extra slices that weren't optimized
-        p_yx_translations = [np.concatenate([np.zeros(([np.where(nonempty_pixels[pos_index])[0][0], 2]), np.float32),
-                    np.reshape(pos_raw_translations[pos_index], [-1, 2]), np.zeros(([len(nonempty_pixels[pos_index]) -
-                    np.where(nonempty_pixels[pos_index])[0][-1] - 1, 2]), np.float32)], axis=0)
-                             for pos_index in p_zyxc_stacks.keys()]
+        p_yx_translations = []
+        for pos_index in p_zyxc_stacks.keys():
+            data_z_indices = np.where(nonempty_pixels[pos_index])[0]
+            if data_z_indices.size == 0:
+                first_z_index = 0
+                last_z_index = -1
+            else:
+                first_z_index = data_z_indices[0]
+                last_z_index = data_z_indices[-1]
+            front_padding = np.zeros(([first_z_index, 2]), np.float32)
+            optimized_translations = np.reshape(pos_raw_translations[pos_index], [-1, 2])
+            back_padding = np.zeros(([len(nonempty_pixels[pos_index]) - last_z_index - 1, 2]), np.float32)
+            p_yx_translations.append(np.concatenate([front_padding, optimized_translations, back_padding], axis=0))
+
         optimized_params['p_yx_translations'] = np.stack(p_yx_translations, axis=0)
     
 
