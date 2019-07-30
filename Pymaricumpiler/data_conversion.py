@@ -8,14 +8,20 @@ import argparse
 
 #parse command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('--stitch', action='store_true')
 parser.add_argument('--stack', action='store_true')
+parser.add_argument('--stitch', action='store_true')
 parser.add_argument('--export', action='store_true')
+parser.add_argument('--stack_lr', type=float, default=15.0)
+
 parser.add_argument('--stitch_reg', type=float, default=0.0)
 parser.add_argument('--ids', type=str, nargs='*')
 parser.add_argument('--max_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
-args = parser.parse_args()
+# args = parser.parse_args()
+
+#TODO:
+args = parser.parse_args(['--stack', '--ids', '36', '--stack_lr', 12.0])
+
 
 print('Got arguments:')
 print(args)
@@ -71,6 +77,6 @@ for ID in ids:
     convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
             output_dir=imaris_dir, output_basename=ID, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             timepoint_registration_channel=tp_ch, reverse_rank_filter=True, param_cache_dir=param_cache_dir,
-            num_time_points=ntp, suffix=args.suffix,
+            num_time_points=ntp, suffix=args.suffix, stack_learning_rate=args.stack_lr,
             inter_stack_registration_channels=isr_ch, downsample_factor=2,
             stitch_regularization=args.stitch_reg, stack=args.stack, stitch=args.stitch, export=args.export)
