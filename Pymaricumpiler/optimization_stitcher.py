@@ -187,7 +187,7 @@ def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=Non
 #                                          stacked.shape[2], stacked.shape[3])).astype(np.uint8), path=path, name=name)
 #     print('exported {}'.format(name))
 
-def optimize_stack(arg_list):
+def optimize_stack(arg_list, lr=):
     nonempty_pix_at_position, zyxc_stack, background = arg_list
     if zyxc_stack.shape[0] == 0:
         return np.zeros((0, 2))
@@ -234,8 +234,9 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
             if np.isnan(loss):
                 raise Exception('NAN encounterd in loss')
             hessian = sess.run([hessian_op])
-            print('Eigenvalues')
-            print(np.linalg.eigvals(hessian))
+            if np.any(np.linalg.eigvals(hessian)):
+                print('Eigenvalues')
+                np.linalg.eigvals(hessian)
             translations = np.reshape(sess.run(p_zyx_translations), (-1, 3))
             translations[:, 0] = translations[:, 0] * pixel_size_z
             translations[:, 1:] = translations[:, 1:] * pixel_size_xy  
@@ -262,11 +263,13 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
     optimized_params = {}
 
     saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)
+    print('Attempting to load params from: ' + saved_name)
     if os.path.isfile(saved_name):
         with np.load(saved_name) as loaded:
-            if 'p_yx_translations' in loaded and not stack:
+            if 'p_yx_translations' in loaded:
                 optimized_params['p_yx_translations'] = loaded['p_yx_translations']
-            if 'p_zyx_translations' in loaded and not stitch: 
+                p_yx_translations = optimized_params['p_yx_translations'] #so stitcher can use it
+            if 'p_zyx_translations' in loaded: 
                 optimized_params['p_zyx_translations'] = loaded['p_zyx_translations']
 
     if stack:
