@@ -12,15 +12,14 @@ parser.add_argument('--stack', action='store_true')
 parser.add_argument('--stitch', action='store_true')
 parser.add_argument('--export', action='store_true')
 parser.add_argument('--stack_lr', type=float, default=15.0)
-
 parser.add_argument('--stitch_reg', type=float, default=0.0)
 parser.add_argument('--ids', type=str, nargs='*')
 parser.add_argument('--max_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
-# args = parser.parse_args()
+parser.add_argument('--param_cache', type=str, default='optimized_params')
+args = parser.parse_args()
 
-#TODO:
-args = parser.parse_args(['--stack', '--ids', '36', '--stack_lr', 12.0])
+# args = parser.parse_args(['--stack', '--ids', '36', '--stack_lr', 12.0])
 
 
 print('Got arguments:')
@@ -32,7 +31,7 @@ storage_path = home + '/lymphosight_data/'
 
 imaris_dir = storage_path + 'imaris_files'
 raw_data_dir = storage_path + 'raw_data/'
-param_cache_dir = storage_path + 'optimized_params/'
+param_cache_dir = storage_path + args.param_cache + '/'
 #make sure they all exist
 for p in [imaris_dir, raw_data_dir, param_cache_dir]:
     if not os.path.exists(p):

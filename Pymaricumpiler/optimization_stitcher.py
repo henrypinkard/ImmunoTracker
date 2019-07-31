@@ -87,7 +87,7 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
     interpolated_pixels = tf.reduce_sum(tf.cast(pixel_values, tf.float32) * corner_weights[:, :, None], axis=1)
     return tf.reshape(interpolated_pixels, image.shape)
 
-def intra_stack_alignment_graph(yx_translations, zyxc_stack, fill_val, stack_learning_rate, stack_regularization=1e-2):
+def intra_stack_alignment_graph(yx_translations, zyxc_stack, fill_val, stack_learning_rate, stack_regularization=1e-3):
     interpolated = _interpolate_stack(zyxc_stack, fill_val=fill_val, yx_translations=yx_translations)
     mean_intensity = np.mean(zyxc_stack ** 2)
     loss = tf.reduce_mean((interpolated[1:, :, :] - interpolated[:-1, :, :]) ** 2)
@@ -239,9 +239,9 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
             if np.isnan(loss):
                 raise Exception('NAN encounterd in loss')
             hessian = sess.run([hessian_op])
-            if np.any(np.linalg.eigvals(hessian)):
-                print('Eigenvalues')
-                np.linalg.eigvals(hessian)
+            if np.any(np.linalg.eigvals(hessian) < 0):
+                print('Warning: negative eigenvalues')
+                print(np.linalg.eigvals(hessian))
             translations = np.reshape(sess.run(p_zyx_translations), (-1, 3))
             translations[:, 0] = translations[:, 0] * pixel_size_z
             translations[:, 1:] = translations[:, 1:] * pixel_size_xy  
