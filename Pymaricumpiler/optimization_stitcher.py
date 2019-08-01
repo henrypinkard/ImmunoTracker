@@ -239,10 +239,13 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
             loss, grad = sess.run([loss_op, grad_op])
             if np.isnan(loss):
                 raise Exception('NAN encounterd in loss')
-            hessian = sess.run([hessian_op])
+            hessian = sess.run([hessian_op])[0]
             if np.any(np.linalg.eigvals(hessian) < 0):
                 print('Warning: negative eigenvalues')
                 print(np.linalg.eigvals(hessian))
+                #add to diagonal
+                hessian += np.mean(np.linalg.eigvals(hessian)) * np.eye(hessian.shape[0])
+
             translations = np.reshape(sess.run(p_zyx_translations), (-1, 3))
             translations[:, 0] = translations[:, 0] * pixel_size_z
             translations[:, 1:] = translations[:, 1:] * pixel_size_xy  
@@ -328,11 +331,11 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
             p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
 
             #filter z axis
-            inter_stack_z_filters = [2, -1]
-            for channel_index, z_sigma in enumerate(inter_stack_z_filters):
-                if z_sigma != -1:
-                    p_zyxc_stacks_stitch[:, :, :, channel_index] = ndi.gaussian_filter1d(
-                        p_zyxc_stacks_stitch[:, :, :, channel_index], sigma=z_sigma, axis=0)
+            # inter_stack_z_filters = [2, -1]
+            # for channel_index, z_sigma in enumerate(inter_stack_z_filters):
+            #     if z_sigma != -1:
+            #         p_zyxc_stacks_stitch[:, :, :, channel_index] = ndi.gaussian_filter1d(
+            #             p_zyxc_stacks_stitch[:, :, :, channel_index], sigma=z_sigma, axis=0)
             #TODO: test
 
         tf.reset_default_graph()

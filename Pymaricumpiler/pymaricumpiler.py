@@ -52,7 +52,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             stack_learning_rate=15, inter_stack_registration_channels=[0], max_tp=None, min_tp=None, inter_stack_max_z=15,
             timepoint_registration_channel=0, stitch_regularization=1e-2, param_cache_dir='./', log_dir='./',
-            reverse_rank_filter=False, suffix='', downsample_factor=3, stitch=True, stack=True,
+            reverse_rank_filter=False, suffix='', stitch_downsample_factor=3, stitch=True, stack=True,
             export=True):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
@@ -90,7 +90,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     output_basename = str(output_basename) #since it might be an ID number
 
     #log to both the terminal and a file
-    sys.stdout = DualLogger(output_basename + suffix + '.txt')
+    sys.stdout = DualLogger(log_dir + output_basename + suffix + '.txt')
 
     magellan, metadata = open_magellan(magellan_dir)
     #iterate through all time points to compute all needed stitching and registration params
@@ -113,15 +113,15 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         if position_registrations is not None:
             if position_registrations == 'optimize':
                 optimized = optimize_timepoint(p_zyxc_stacks, nonempty_pixels,
-                        metadata['row_col_coords'], metadata['tile_overlaps'], pixel_size_z=magellan.pixel_size_z_um,
-                        pixel_size_xy=magellan.pixel_size_xy_um, backgrounds=backgrounds, 
-                        intra_stack_channels=intra_stack_registration_channels,
-                        stack_learning_rate=stack_learning_rate,
-                        inter_stack_channels=inter_stack_registration_channels,
-                        param_cache_dir=param_cache_dir,
-                        param_cache_name=output_basename + '_tp{}'.format(frame_index),
-                        downsample_factor=downsample_factor, 
-                        stitch_regularization=stitch_regularization, stack=stack, stitch=stitch)
+                                               metadata['row_col_coords'], metadata['tile_overlaps'], pixel_size_z=magellan.pixel_size_z_um,
+                                               pixel_size_xy=magellan.pixel_size_xy_um, backgrounds=backgrounds,
+                                               intra_stack_channels=intra_stack_registration_channels,
+                                               stack_learning_rate=stack_learning_rate,
+                                               inter_stack_channels=inter_stack_registration_channels,
+                                               param_cache_dir=param_cache_dir,
+                                               param_cache_name=output_basename + '_tp{}'.format(frame_index),
+                                               downsample_factor=stitch_downsample_factor,
+                                               stitch_regularization=stitch_regularization, stack=stack, stitch=stitch)
                 if 'p_zyx_translations' in optimized:
                     translation_params = optimized['p_zyx_translations']
                 if 'p_yx_translations' in optimized:        
