@@ -19,7 +19,7 @@ parser.add_argument('--min_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
-# #TODO:
+
 # args = parser.parse_args(['--ids', '36', '--min_tp', '3', '--max_tp', '4',
 #                           '--stitch_reg', '0.00001', '--stitch', '--ids', '36', '--max_tp', '5'])
 
