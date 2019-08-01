@@ -15,11 +15,13 @@ parser.add_argument('--stack_lr', type=float, default=15.0)
 parser.add_argument('--stitch_reg', type=float, default=0.0)
 parser.add_argument('--ids', type=str, nargs='*')
 parser.add_argument('--max_tp', type=int, default=-1)
+parser.add_argument('--min_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
-args = parser.parse_args()
-
-# args = parser.parse_args(['--stack', '--ids', '36', '--stack_lr', 12.0])
+# args = parser.parse_args()
+#TODO:
+args = parser.parse_args(['--ids', '36', '--min_tp', '3', '--max_tp', '4',
+                          '--stitch_reg', 'e-5', '--ids', '36', '--max_tp', '5'])
 
 
 print('Got arguments:')
@@ -32,8 +34,9 @@ storage_path = home + '/lymphosight_data/'
 imaris_dir = storage_path + 'imaris_files'
 raw_data_dir = storage_path + 'raw_data/'
 param_cache_dir = storage_path + args.param_cache + '/'
+log_dir = storage_path + 'conversion_log/'
 #make sure they all exist
-for p in [imaris_dir, raw_data_dir, param_cache_dir]:
+for p in [imaris_dir, raw_data_dir, param_cache_dir, log_dir]:
     if not os.path.exists(p):
         os.makedirs(p)
 
@@ -67,15 +70,22 @@ for ID in ids:
     print('\nconverting ID: {} \t {}\n'.format(ID, magellan_dir))
     isr_ch = [int(v) for v in get_value(ID, 'ISR ch').split('+')]
     tp_ch = int(get_value(ID, 'TPR ch'))
-    ntp = int(get_value(ID, 'Usable frames'))
 
     if (args.max_tp != -1):
         print('capping max_tp at: {}'.format(args.max_tp))
-        ntp = args.max_tp 
+        max_tp = args.max_tp
+    else:
+        max_tp = int(get_value(ID, 'Usable frames'))
+
+    if (args.min_tp != -1):
+        print('capping min_tp at: {}'.format(args.min_tp))
+        min_tp = args.min_tp
+    else:
+        min_tp = 0
 
     convert(magellan_dir, position_registrations='optimize', input_filter_sigma=2,
             output_dir=imaris_dir, output_basename=ID, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            timepoint_registration_channel=tp_ch, reverse_rank_filter=True, param_cache_dir=param_cache_dir,
-            num_time_points=ntp, suffix=args.suffix, stack_learning_rate=args.stack_lr,
+            timepoint_registration_channel=tp_ch, reverse_rank_filter=True, param_cache_dir=param_cache_dir, log_dir=log_dir,
+            min_tp=min_tp, max_tp=max_tp, suffix=args.suffix, stack_learning_rate=args.stack_lr,
             inter_stack_registration_channels=isr_ch, downsample_factor=2,
             stitch_regularization=args.stitch_reg, stack=args.stack, stitch=args.stitch, export=args.export)

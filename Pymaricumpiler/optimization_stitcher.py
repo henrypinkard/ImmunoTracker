@@ -192,7 +192,8 @@ def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=Non
 #     print('exported {}'.format(name))
 
 def optimize_stack(arg_list, stack_learning_rate):
-    nonempty_pix_at_position, zyxc_stack, background = arg_list
+    nonempty_pix_at_position, zyxc_stack, background, pos_index = arg_list
+    print('\nOptimizing stack for position {}'.format(pos_index))
     if zyxc_stack.shape[0] == 0:
         return np.zeros((0, 2))
     elif zyxc_stack.shape[0] == 1:
@@ -282,7 +283,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
         mean_background = np.mean(backgrounds)
         arg_lists = [[np.array(nonempty_pixels[pos_index]),
                        p_zyxc_stacks[pos_index][np.array(nonempty_pixels[pos_index])][..., intra_stack_channels],
-                       mean_background]
+                       mean_background, pos_index]
                       for pos_index in p_zyxc_stacks.keys()]
 
         pos_raw_translations = []
@@ -325,6 +326,14 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
                 for c in range(stack.shape[3]):
                     stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2*downsample_factor / 6.0)
             p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
+
+            #filter z axis
+            inter_stack_z_filters = [2, -1]
+            for channel_index, z_sigma in enumerate(inter_stack_z_filters):
+                if z_sigma != -1:
+                    p_zyxc_stacks_stitch[:, :, :, channel_index] = ndi.gaussian_filter1d(
+                        p_zyxc_stacks_stitch[:, :, :, channel_index], sigma=z_sigma, axis=0)
+            #TODO: test
 
         tf.reset_default_graph()
         p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3, initializer=tf.zeros_initializer)

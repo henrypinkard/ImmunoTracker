@@ -22,6 +22,8 @@ from utility import x_corr_register_3D
 from imaris_writing import stitch_register_imaris_write
 from data_reading import open_magellan, read_raw_data
 from optimization_stitcher import optimize_timepoint
+from dual_logging import DualLogger
+import sys
 
 def estimate_background(p_zyxc_stacks, nonempty_pixels):
     """
@@ -48,8 +50,8 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            stack_learning_rate=15, inter_stack_registration_channels=[0], num_time_points=None, inter_stack_max_z=15,
-            timepoint_registration_channel=0, stitch_regularization=1e-2, param_cache_dir='./',
+            stack_learning_rate=15, inter_stack_registration_channels=[0], max_tp=None, min_tp=None, inter_stack_max_z=15,
+            timepoint_registration_channel=0, stitch_regularization=1e-2, param_cache_dir='./', log_dir='./',
             reverse_rank_filter=False, suffix='', downsample_factor=3, stitch=True, stack=True,
             export=True):
     """
@@ -87,15 +89,18 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         output_basename = magellan_dir.split(os.sep)[-1] # same name as magellan acquisition
     output_basename = str(output_basename) #since it might be an ID number
 
+    #log to both the terminal and a file
+    sys.stdout = DualLogger(output_basename + suffix + '.txt')
+
     magellan, metadata = open_magellan(magellan_dir)
     #iterate through all time points to compute all needed stitching and registration params
     all_params = []
     previous_stitched = None
     backgrounds=None
     stitched_image_size=None
-    if num_time_points is None:
-        num_time_points=metadata['num_frames']
-    for frame_index in range(num_time_points):
+    # if max_tp is None:
+    #     max_tp = metadata['num_frames']
+    for frame_index in range(min_tp, max_tp):
         translation_params = np.zeros((metadata['num_positions'], 3), dtype=np.int)
         registration_params = metadata['num_positions'] * [np.zeros((metadata['max_z_index']
                                                                      - metadata['min_z_index'] + 1, 2))]
