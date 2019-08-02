@@ -265,8 +265,8 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
         return sess.run(p_zyx_translations)
 
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
-                       inter_stack_channels, pixel_size_xy, pixel_size_z,
-                       downsample_factor=3, param_cache_dir=None, stack_learning_rate=15,
+                       inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_z_filters=None,
+                       stitch_downsample_factor_xy=3, param_cache_dir=None, stack_learning_rate=15,
                        stitch_regularization=1e-2, param_cache_name='.', backgrounds=None,
                        stack=True, stitch=True):
     optimized_params = {}
@@ -318,7 +318,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
         # means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
         p_zyxc_stacks_stitch = {}
         #downsample, mean subtract, remove unused channels
-        pixel_size_xy = pixel_size_xy * downsample_factor
+        pixel_size_xy = pixel_size_xy * stitch_downsample_factor_xy
         for pos_index in p_zyxc_stacks.keys():
             # stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
             stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)]
@@ -327,21 +327,19 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
             #filter and downsample
             for z in np.where(np.array(nonempty_pixels[pos_index]))[0]:
                 for c in range(stack.shape[3]):
-                    stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2*downsample_factor / 6.0)
-            p_zyxc_stacks_stitch[pos_index] = stack[:, ::downsample_factor, ::downsample_factor, :]
+                    stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2 * stitch_downsample_factor_xy / 6.0)
+            p_zyxc_stacks_stitch[pos_index] = stack[:, ::stitch_downsample_factor_xy, ::stitch_downsample_factor_xy, :]
 
             #filter z axis
-            # inter_stack_z_filters = [2, -1]
-            # for channel_index, z_sigma in enumerate(inter_stack_z_filters):
-            #     if z_sigma != -1:
-            #         p_zyxc_stacks_stitch[:, :, :, channel_index] = ndi.gaussian_filter1d(
-            #             p_zyxc_stacks_stitch[:, :, :, channel_index], sigma=z_sigma, axis=0)
-            #TODO: test
+            for channel_index, z_sigma in enumerate(stitch_z_filters):
+                if z_sigma != -1:
+                    p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index] = ndi.gaussian_filter1d(
+                        p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index], sigma=z_sigma, axis=0)
 
         tf.reset_default_graph()
         p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3, initializer=tf.zeros_initializer)
         p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch,
-                row_col_coords, overlap_shape // downsample_factor, stitch_regularization, pixel_size_xy, pixel_size_z)
+                                                          row_col_coords, overlap_shape // stitch_downsample_factor_xy, stitch_regularization, pixel_size_xy, pixel_size_z)
         
         p_zyx_translations = np.reshape(p_zyx_translations_optimized, [-1, 3])
         #flip sign as stitcher expects
@@ -349,7 +347,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
         p_zyx_translations[:, 2] = -p_zyx_translations[:, 2]
 
         #Rescale these translations to account for downsampling
-        p_zyx_translations[:, 1:] = downsample_factor * p_zyx_translations[:, 1:]
+        p_zyx_translations[:, 1:] = stitch_downsample_factor_xy * p_zyx_translations[:, 1:]
         optimized_params['p_zyx_translations'] = p_zyx_translations
 
 
