@@ -155,11 +155,11 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             if previous_stitched is not None:
                 #expand the size of the shorter one to match the bigger one
                 if previous_stitched.shape[0] < stitched.shape[0]:
-                    previous_stitched_padded = np.ones(stitched.shape)*backgrounds[timepoint_registration_channel]
+                    previous_stitched_padded = np.ones(stitched.shape)*np.max([backgrounds[c] for c in inter_stack_registration_channels])
                     previous_stitched_padded[:previous_stitched.shape[0]] = previous_stitched
                     previous_stitched = previous_stitched_padded
                 elif previous_stitched.shape[0] > stitched.shape[0]:
-                    stitched_padded = np.ones(previous_stitched.shape)*backgrounds[timepoint_registration_channel]
+                    stitched_padded = np.ones(previous_stitched.shape)*np.max([backgrounds[c] for c in inter_stack_registration_channels])
                     stitched_padded[:stitched.shape[0]] = stitched
                     stitched = stitched_padded
                 timepoint_registration = x_corr_register_3D(previous_stitched, stitched,
