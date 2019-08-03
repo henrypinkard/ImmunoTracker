@@ -12,7 +12,7 @@ parser.add_argument('--stack', action='store_true')
 parser.add_argument('--stitch', action='store_true')
 parser.add_argument('--export', action='store_true')
 parser.add_argument('--z_smooth_stitch', action='store_true')
-parser.add_argument('--stack_lr', type=float, default=0.4)
+parser.add_argument('--stack_lr', type=float, default=1.0)
 parser.add_argument('--stitch_reg', type=float, default=0.0)
 parser.add_argument('--ids', type=str, nargs='*')
 parser.add_argument('--max_tp', type=int, default=-1)
@@ -20,9 +20,8 @@ parser.add_argument('--min_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
-
-# args = parser.parse_args(['--ids', '36', '--min_tp', '3', '--max_tp', '4',
-#                           '--stitch_reg', '0.00001', '--stitch', '--ids', '36', '--max_tp', '5'])
+# #TODO
+# args = parser.parse_args(['--ids', '36', '--export'])
 
 
 print('Got arguments:')
@@ -49,7 +48,7 @@ with open(data_list, 'r') as f:
     column_names = reader.fieldnames
 
 def get_dataset_path(ID):
-    ex =[e for e in experiments if e['ID'] == ID][0]
+    ex = [e for e in experiments if e['ID'] == ID][0]
     path = '{} {}{}{}'.format(ex['Date'], ex['Folder'], os.sep, ex['Experiment'])
     return path
 

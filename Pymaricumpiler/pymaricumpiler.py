@@ -149,8 +149,9 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         #create a stitched version for doing timepoint to timepoint registrations
         timepoint_registration = np.zeros(3)
         if metadata['num_frames'] > 1 and register_timepoints:
-            stitched = stitch_single_channel(p_zyxc_stacks, translation_params, registration_params, metadata['tile_overlaps'],
-                    metadata['row_col_coords'], channel_index=timepoint_registration_channel, backgrounds=backgrounds)
+            #take max intensity projecttion along all channels
+            stitched = np.max(np.stack([stitch_single_channel(p_zyxc_stacks, translation_params, registration_params, metadata['tile_overlaps'],
+                    metadata['row_col_coords'], channel_index=c, backgrounds=backgrounds) for c in inter_stack_registration_channels], axis=3), axis=3)
             if previous_stitched is not None:
                 #expand the size of the shorter one to match the bigger one
                 if previous_stitched.shape[0] < stitched.shape[0]:
