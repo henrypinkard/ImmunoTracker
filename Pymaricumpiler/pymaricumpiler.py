@@ -51,7 +51,7 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
             stack_learning_rate=15, inter_stack_registration_channels=[0], max_tp=None, min_tp=None, inter_stack_max_z=15,
-            timepoint_registration_channel=0, stitch_regularization=1e-2, param_cache_dir='./', log_dir='./',
+            stitch_regularization_xy=0, stitch_regularization_z=0, param_cache_dir='./', log_dir='./',
             reverse_rank_filter=False, suffix='', stitch_downsample_factor_xy=3, stitch_z_filters=None,
             stitch=True, stack=True, export=True):
     """
@@ -77,7 +77,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
       needs to be empirically tested
     :param inter_stack_registration_channel: Channel to use for registering different z stacks together
     :param inter_stack_max_z: Maximum z shift among different stacks. Set smaller to speed up computations
-    :param timepoint_registration_channel: Channel to use for registering different timepoints to one another
     :return:
     """
 
@@ -122,7 +121,9 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                                param_cache_name=output_basename + '_tp{}'.format(frame_index),
                                                stitch_downsample_factor_xy=stitch_downsample_factor_xy,
                                                stitch_z_filters=stitch_z_filters,
-                                               stitch_regularization=stitch_regularization, stack=stack, stitch=stitch)
+                                               stitch_regularization_xy=stitch_regularization_xy,
+                                               stitch_regularization_z=stitch_regularization_z,
+                                               stack=stack, stitch=stitch)
                 if 'p_zyx_translations' in optimized:
                     translation_params = optimized['p_zyx_translations']
                 if 'p_yx_translations' in optimized:        

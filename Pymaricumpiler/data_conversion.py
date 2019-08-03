@@ -13,7 +13,8 @@ parser.add_argument('--stitch', action='store_true')
 parser.add_argument('--export', action='store_true')
 parser.add_argument('--z_smooth_stitch', action='store_true')
 parser.add_argument('--stack_lr', type=float, default=1.0)
-parser.add_argument('--stitch_reg', type=float, default=0.0)
+parser.add_argument('--stitch_reg_xy', type=float, default=0.0)
+parser.add_argument('--stitch_reg_z', type=float, default=0.0)
 parser.add_argument('--ids', type=str, nargs='*')
 parser.add_argument('--max_tp', type=int, default=-1)
 parser.add_argument('--min_tp', type=int, default=-1)
@@ -21,7 +22,7 @@ parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
 # #TODO
-# args = parser.parse_args(['--ids', '36', '--export'])
+args = parser.parse_args(['--ids', '36', '--stitch'])
 
 
 print('Got arguments:')
@@ -69,7 +70,6 @@ for ID in ids:
 
     print('\nconverting ID: {} \t {}\n'.format(ID, magellan_dir))
     isr_ch = [int(v) for v in get_value(ID, 'ISR ch').split('+')]
-    tp_ch = int(get_value(ID, 'TPR ch'))
 
     if (args.max_tp != -1):
         print('capping max_tp at: {}'.format(args.max_tp))
@@ -89,7 +89,6 @@ for ID in ids:
             output_dir=imaris_dir,
             output_basename=ID,
             intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            timepoint_registration_channel=tp_ch,
             reverse_rank_filter=True,
             param_cache_dir=param_cache_dir,
             log_dir=log_dir,
@@ -100,7 +99,8 @@ for ID in ids:
             inter_stack_registration_channels=isr_ch,
             stitch_z_filters=[2 if c == 0 and args.z_smooth_stitch else -1 for c in isr_ch],
             stitch_downsample_factor_xy=2,
-            stitch_regularization=args.stitch_reg,
+            stitch_regularization_xy=args.stitch_reg_xy,
+            stitch_regularization_z=args.stitch_reg_z,
             stack=args.stack and get_value(ID, 'Explant') != 1,
             stitch=args.stitch,
             export=args.export)
