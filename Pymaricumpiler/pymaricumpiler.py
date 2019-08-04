@@ -50,7 +50,8 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            stack_learning_rate=15, inter_stack_registration_channels=[0], max_tp=None, min_tp=None, inter_stack_max_z=15,
+            stack_learning_rate=15, inter_stack_registration_channels=[0], max_tp=None, min_tp=None,
+            inter_stack_max_z=15, stack_reg=0,
             stitch_regularization_xy=0, stitch_regularization_z=0, param_cache_dir='./', log_dir='./',
             reverse_rank_filter=False, suffix='', stitch_downsample_factor_xy=3, stitch_z_filters=None,
             stitch=True, stack=True, export=True):
@@ -116,6 +117,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                                pixel_size_xy=magellan.pixel_size_xy_um, backgrounds=backgrounds,
                                                intra_stack_channels=intra_stack_registration_channels,
                                                stack_learning_rate=stack_learning_rate,
+                                               stack_reg=stack_reg,
                                                inter_stack_channels=inter_stack_registration_channels,
                                                param_cache_dir=param_cache_dir,
                                                param_cache_name=output_basename + '_tp{}'.format(frame_index),

@@ -87,12 +87,12 @@ def _sample_pixels(image, n_by_zyx, fill_val=128):
     interpolated_pixels = tf.reduce_sum(tf.cast(pixel_values, tf.float32) * corner_weights[:, :, None], axis=1)
     return tf.reshape(interpolated_pixels, image.shape)
 
-def intra_stack_alignment_graph(yx_translations, zyxc_stack, fill_val, stack_learning_rate, stack_regularization=1e-3):
+def intra_stack_alignment_graph(yx_translations, zyxc_stack, fill_val, stack_learning_rate, stack_reg=1e-3):
     interpolated = _interpolate_stack(zyxc_stack, fill_val=fill_val, yx_translations=yx_translations)
     mean_intensity = np.mean(zyxc_stack ** 2)
     loss = tf.reduce_mean((interpolated[1:, :, :] - interpolated[:-1, :, :]) ** 2)
     loss = loss / mean_intensity
-    loss = loss + stack_regularization * tf.reduce_mean(yx_translations ** 2)
+    loss = loss + stack_reg * tf.reduce_mean(yx_translations ** 2)
     optimizer = tf.train.AdamOptimizer(learning_rate=stack_learning_rate)
     optimize_op = optimizer.minimize(loss)
     return loss, optimize_op
@@ -197,7 +197,7 @@ def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=Non
 #                                          stacked.shape[2], stacked.shape[3])).astype(np.uint8), path=path, name=name)
 #     print('exported {}'.format(name))
 
-def optimize_stack(arg_list, stack_learning_rate):
+def optimize_stack(arg_list, stack_learning_rate, stack_reg):
     nonempty_pix_at_position, zyxc_stack, background, pos_index = arg_list
     print('\nOptimizing stack for position {}'.format(pos_index))
     if zyxc_stack.shape[0] == 0:
@@ -207,7 +207,8 @@ def optimize_stack(arg_list, stack_learning_rate):
     tf.reset_default_graph()
     yx_translations = tf.get_variable('yx_translations', [2 * sum(nonempty_pix_at_position)], initializer=tf.zeros_initializer)
     loss_op, optimize_op = intra_stack_alignment_graph(yx_translations=yx_translations, zyxc_stack=zyxc_stack,
-                                                       fill_val=background, stack_learning_rate=stack_learning_rate)
+                                                       fill_val=background, stack_learning_rate=stack_learning_rate,
+                                                       stack_reg=stack_reg)
     new_min_iter = 0
     min_loss = 1e40
     iteration = 0
@@ -274,7 +275,7 @@ def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stit
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
                        inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_z_filters=None,
                        stitch_downsample_factor_xy=3, param_cache_dir=None, stack_learning_rate=15,
-                       stitch_regularization_xy=0, stitch_regularization_z=0,
+                       stack_reg=0, stitch_regularization_xy=0, stitch_regularization_z=0,
                        param_cache_name='.', backgrounds=None,
                        stack=True, stitch=True):
     optimized_params = {}
@@ -299,7 +300,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
 
         pos_raw_translations = []
         for a in arg_lists:
-            pos_raw_translations.append(optimize_stack(a, stack_learning_rate=stack_learning_rate))
+            pos_raw_translations.append(optimize_stack(a, stack_learning_rate=stack_learning_rate, stack_reg=stack_reg))
         #zeros version for debugging
         # pos_raw_translations = [np.zeros((2 * np.sum(a[0]))) for a in arg_lists]
         
