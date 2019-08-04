@@ -97,7 +97,7 @@ for ID in ids:
             suffix=args.suffix,
             stack_learning_rate=args.stack_lr,
             inter_stack_registration_channels=isr_ch,
-            stitch_z_filters=[2 if c == 0 and args.z_smooth_stitch else -1 for c in isr_ch],
+            stitch_z_filters=[1.5 if c == 0 and args.z_smooth_stitch else -1 for c in isr_ch],
             stitch_downsample_factor_xy=2,
             stitch_regularization_xy=args.stitch_reg_xy,
             stitch_regularization_z=args.stitch_reg_z,
