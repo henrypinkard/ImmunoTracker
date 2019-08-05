@@ -6,8 +6,6 @@ from stitcher import stitch_all_channels
 from scipy.optimize import minimize
 import os
 import scipy.ndimage as ndi
-from joblib import Memory
-memory = Memory('./', verbose=0)
 
 def _generate_grid(image, zyx_translations=None, yx_translations=None):
     """
@@ -102,12 +100,13 @@ def intra_stack_alignment_graph(yx_translations, zyxc_stack, fill_val, stack_lea
 
 def inter_stack_stitch_graph(p_yx_translations, n_params, p_zyxc_stacks, row_col_coords,
                              overlap_shape,  stitch_regularization_xy, stitch_regularization_z,
-                             z_to_xy_ratio, fill_val):
+                             pixel_size_z, pixel_size_xy, fill_val):
     """
     Compute a loss function based on the overlap of different tiles
     """
-    p_zyx_translations_flat = tf.placeholder(dtype=tf.float32, shape=(n_params,), name='p_zyx_translations_flat')
-    p_zyx_translations = tf.reshape(p_zyx_translations_flat, [-1, 3])
+    p_zyx_translations_flat_um = tf.placeholder(dtype=tf.float32, shape=(n_params,), name='p_zyx_translations_flat_um')
+    p_zyx_translations_um = tf.reshape(p_zyx_translations_flat_um, [-1, 3]) #put into p_zyx shape
+    p_zyx_translations = p_zyx_translations_um / tf.tile([[pixel_size_z, pixel_size_xy, pixel_size_xy]], (len(row_col_coords), 1))
     translated_stacks = {pos_index: _interpolate_stack(p_zyxc_stacks[pos_index], fill_val=fill_val,
                     zyx_translations=p_zyx_translations[pos_index], yx_translations=p_yx_translations[pos_index])
                          for pos_index in p_zyxc_stacks.keys()}
@@ -140,20 +139,19 @@ def inter_stack_stitch_graph(p_yx_translations, n_params, p_zyxc_stacks, row_col
 
     loss = -tf.reduce_mean(overlap_losses)
 
-    pixel_size_rescale = tf.reshape(tf.convert_to_tensor(np.tile([[
-        np.sqrt(stitch_regularization_z),
-        np.sqrt(stitch_regularization_xy) / z_to_xy_ratio,
-        np.sqrt(stitch_regularization_xy) / z_to_xy_ratio]],  (len(row_col_coords), 1)), tf.float32), [-1])
-    rescaled_translations = pixel_size_rescale * p_zyx_translations_flat
+    anisotropic_penalty = tf.reshape(tf.convert_to_tensor(np.sqrt(np.tile(
+        [[stitch_regularization_z, stitch_regularization_xy, stitch_regularization_xy]],
+        (len(row_col_coords), 1))), tf.float32), [-1])
+    translation_penalty = p_zyx_translations_flat_um * anisotropic_penalty
 
-    loss = tf.cast(loss, tf.float32) + tf.reduce_mean(rescaled_translations ** 2)
-    grad = tf.gradients(loss, p_zyx_translations_flat)[0]
-    hessian = tf.hessians(loss, p_zyx_translations_flat)[0]
+    loss = tf.cast(loss, tf.float32) + tf.reduce_mean(translation_penalty ** 2)
+    grad = tf.gradients(loss, p_zyx_translations_flat_um)[0]
+    hessian = tf.hessians(loss, p_zyx_translations_flat_um)[0]
 
     # newton_delta = tf.placeholder(tf.float32, p_zyx_translations_flat.shape)
     # assign_op = tf.assign_sub(p_zyx_translations_flat, newton_delta)
 
-    return loss, grad, hessian, p_zyx_translations_flat
+    return loss, grad, hessian, p_zyx_translations_flat_um
         # , newton_delta, assign_op
 
 def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=None):
@@ -241,41 +239,36 @@ def optimize_stack(arg_list, stack_learning_rate, stack_reg):
 def optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape,
                        stitch_regularization_xy, stitch_regularization_z, pixel_size_xy, pixel_size_z):
     tf.reset_default_graph()
-    z_to_xy_ratio = pixel_size_z / pixel_size_xy
-    p_zyx_translations_flat = np.zeros((len(p_zyxc_stacks_stitch) * 3,))
+    p_zyx_translations_flat_um = np.zeros((len(p_zyxc_stacks_stitch) * 3,))
     loss_op, grad_op, hessian_op, param_input = inter_stack_stitch_graph(
-        p_yx_translations, p_zyx_translations_flat.size,
+        p_yx_translations, p_zyx_translations_flat_um.size,
         p_zyxc_stacks_stitch, row_col_coords, overlap_shape,
-        stitch_regularization_xy, stitch_regularization_z, z_to_xy_ratio, fill_val=0)
+        stitch_regularization_xy, stitch_regularization_z, pixel_size_z, pixel_size_xy, fill_val=0)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        @memory.cache
         def loss_fn(x):
-            return sess.run(loss_op, feed_dict={param_input: x})
+            loss = sess.run(loss_op, feed_dict={param_input: x})
+            translations = np.reshape(x, (-1, 3))
+            stitch_rms_shift_z = np.sqrt(np.mean(translations[:, 0] ** 2))
+            stitch_rms_shift_xy = np.mean(np.sqrt(np.sum(translations[:, 1:] ** 2, axis=1)) )
+            print('Stitching loss: {}  \txy rms (um): {}  \tz rms (um): {}'.format(
+                                                                loss, stitch_rms_shift_xy, stitch_rms_shift_z))
+            return loss
 
-        @memory.cache
         def grad_fn(x):
             return sess.run(grad_op, feed_dict={param_input: x})
 
-        @memory.cache
         def hessian_fn(x):
             return sess.run(hessian_op, feed_dict={param_input: x})
 
-        def callback(x):
-            translations = np.reshape(x, (-1, 3))
-            translations[:, 0] = translations[:, 0] * pixel_size_z
-            translations[:, 1:] = translations[:, 1:] * pixel_size_xy
-            stitch_rms_shift_z = np.sqrt(np.mean(translations[:, 0] ** 2))
-            stitch_rms_shift_xy = np.sqrt(np.mean(translations[:, 1:] ** 2))
-            loss = loss_fn(x)
-            print('Stitching loss: {}  \txy rms (um): {}  \tz rms (um): {}'.format(loss, stitch_rms_shift_xy, stitch_rms_shift_z))
+        p_zyx_translations_flat_um = minimize(loss_fn, p_zyx_translations_flat_um, method='trust-exact', jac=grad_fn, hess=hessian_fn,
+                       options={'gtol': 1e-4, 'disp': True, 'initial_trust_radius': 3, 'max_trust_radius': 6}).x
+        #convert to pixel coords
+        return np.reshape(p_zyx_translations_flat_um, [-1,3]) / np.tile(
+            [[pixel_size_z, pixel_size_xy, pixel_size_xy]], (len(row_col_coords), 1))
 
-        print('Initial loss: {}'.format(loss_fn(p_zyx_translations_flat)))
-        return minimize(loss_fn, p_zyx_translations_flat, method='trust-exact', jac=grad_fn, hess=hessian_fn,
-                        callback=callback,
-                       options={'gtol': 1e-4, 'disp': True, 'initial_trust_radius': 1, 'max_trust_radius': 4}).x
 
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
                        inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_z_filters=None,
@@ -350,12 +343,11 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
                     p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index] = ndi.gaussian_filter1d(
                         p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index], sigma=z_sigma, axis=0)
 
-        p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch,
+        p_zyx_translations = optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch,
                                                           row_col_coords, overlap_shape // stitch_downsample_factor_xy,
                                                           stitch_regularization_xy, stitch_regularization_z,
                                                           pixel_size_xy, pixel_size_z)
         
-        p_zyx_translations = np.reshape(p_zyx_translations_optimized, [-1, 3])
         #flip sign as stitcher expects
         p_zyx_translations[:, 1] = -p_zyx_translations[:, 1]
         p_zyx_translations[:, 2] = -p_zyx_translations[:, 2]
@@ -363,7 +355,6 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
         #Rescale these translations to account for downsampling
         p_zyx_translations[:, 1:] = stitch_downsample_factor_xy * p_zyx_translations[:, 1:]
         optimized_params['p_zyx_translations'] = p_zyx_translations
-
 
     np.savez('{}{}_optimized_params'.format(param_cache_dir, param_cache_name), **optimized_params)
     

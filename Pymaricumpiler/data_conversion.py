@@ -21,11 +21,10 @@ parser.add_argument('--max_tp', type=int, default=-1)
 parser.add_argument('--min_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
-args = parser.parse_args()
+# args = parser.parse_args()
 
-# print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-# args = parser.parse_args(['--ids', '36', '--stitch', '--min_tp', '3', '--stitch_reg_xy',
-#                           '0.0004', '--stitch_reg_z', '0.0'])
+print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
+args = parser.parse_args(['--ids', '36', '--stitch', '--min_tp', '-1', '--stitch_reg_xy', '0.03', '--stitch_reg_z', '0.03'])
 
 
 print('Got arguments:')
