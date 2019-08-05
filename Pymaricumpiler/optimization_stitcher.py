@@ -6,6 +6,8 @@ from stitcher import stitch_all_channels
 from scipy.optimize import minimize
 import os
 import scipy.ndimage as ndi
+from joblib import Memory
+memory = Memory('./', verbose=0)
 
 def _generate_grid(image, zyx_translations=None, yx_translations=None):
     """
@@ -249,12 +251,15 @@ def optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch, row_col_coords, 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
+        @memory.cache
         def loss_fn(x):
             return sess.run(loss_op, feed_dict={param_input: x})
 
+        @memory.cache
         def grad_fn(x):
             return sess.run(grad_op, feed_dict={param_input: x})
 
+        @memory.cache
         def hessian_fn(x):
             return sess.run(hessian_op, feed_dict={param_input: x})
 
@@ -266,44 +271,11 @@ def optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch, row_col_coords, 
             stitch_rms_shift_xy = np.sqrt(np.mean(translations[:, 1:] ** 2))
             loss = loss_fn(x)
             print('Stitching loss: {}  \txy rms (um): {}  \tz rms (um): {}'.format(loss, stitch_rms_shift_xy, stitch_rms_shift_z))
-        #TODO: use joblib to cache funciton calls
 
         print('Initial loss: {}'.format(loss_fn(p_zyx_translations_flat)))
         return minimize(loss_fn, p_zyx_translations_flat, method='trust-exact', jac=grad_fn, hess=hessian_fn,
                         callback=callback,
                        options={'gtol': 1e-4, 'disp': True, 'initial_trust_radius': 1, 'max_trust_radius': 4}).x
-
-        # new_min_iter = 0
-        # min_loss = 1e40
-        # iteration = 0
-        # while True:
-        #     loss, grad = sess.run([loss_op, grad_op])
-        #     if np.isnan(loss):
-        #         raise Exception('NAN encounterd in loss')
-        #     hessian = sess.run([hessian_op])[0]
-        #     if np.any(np.linalg.eigvals(hessian) < 0):
-        #         print('Warning: negative eigenvalues')
-        #         print(np.linalg.eigvals(hessian))
-        #         #add to diagonal
-        #         hessian += np.mean(np.linalg.eigvals(hessian)) * np.eye(hessian.shape[0])
-        #
-        #     translations = np.reshape(sess.run(p_zyx_translations), (-1, 3))
-        #     translations[:, 0] = translations[:, 0] * pixel_size_z
-        #     translations[:, 1:] = translations[:, 1:] * pixel_size_xy
-        #     stitch_rms_shift_z = np.sqrt(np.mean(translations[:, 0] ** 2))
-        #     stitch_rms_shift_xy = np.sqrt(np.mean(translations[:, 1:] ** 2))
-        #     print('Stitching loss: {}  \txy rms (um): {}  \tz rms (um): {}'.format(loss, stitch_rms_shift_xy, stitch_rms_shift_z))
-        #     newton_delta = np.dot(np.linalg.inv(hessian), grad)
-        #     sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
-        #     # check for stopping condition
-        #     if min_loss > loss:
-        #         min_loss = loss
-        #         new_min_iter = 0
-        #     new_min_iter = new_min_iter + 1
-        #     if new_min_iter == 5:
-        #         break
-        #     iteration = iteration + 1
-        # return sess.run(p_zyx_translations)
 
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
                        inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_z_filters=None,
