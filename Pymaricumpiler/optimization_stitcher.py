@@ -3,6 +3,7 @@ import tensorflow as tf
 # tf.enable_eager_execution()
 
 from stitcher import stitch_all_channels
+from scipy.optimize import minimize
 import os
 import scipy.ndimage as ndi
 
@@ -97,13 +98,13 @@ def intra_stack_alignment_graph(yx_translations, zyxc_stack, fill_val, stack_lea
     optimize_op = optimizer.minimize(loss)
     return loss, optimize_op
 
-def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_stacks, row_col_coords,
+def inter_stack_stitch_graph(p_yx_translations, n_params, p_zyxc_stacks, row_col_coords,
                              overlap_shape,  stitch_regularization_xy, stitch_regularization_z,
                              z_to_xy_ratio, fill_val):
     """
     Compute a loss function based on the overlap of different tiles
     """
-
+    p_zyx_translations_flat = tf.placeholder(dtype=tf.float32, shape=(n_params,), name='p_zyx_translations_flat')
     p_zyx_translations = tf.reshape(p_zyx_translations_flat, [-1, 3])
     translated_stacks = {pos_index: _interpolate_stack(p_zyxc_stacks[pos_index], fill_val=fill_val,
                     zyx_translations=p_zyx_translations[pos_index], yx_translations=p_yx_translations[pos_index])
@@ -147,10 +148,11 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_flat, p_zyxc_
     grad = tf.gradients(loss, p_zyx_translations_flat)[0]
     hessian = tf.hessians(loss, p_zyx_translations_flat)[0]
 
-    newton_delta = tf.placeholder(tf.float32, p_zyx_translations_flat.shape)
-    assign_op = tf.assign_sub(p_zyx_translations_flat, newton_delta)
+    # newton_delta = tf.placeholder(tf.float32, p_zyx_translations_flat.shape)
+    # assign_op = tf.assign_sub(p_zyx_translations_flat, newton_delta)
 
-    return loss, grad, hessian, newton_delta, assign_op
+    return loss, grad, hessian, p_zyx_translations_flat
+        # , newton_delta, assign_op
 
 def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=None):
     """
@@ -212,10 +214,12 @@ def optimize_stack(arg_list, stack_learning_rate, stack_reg):
     new_min_iter = 0
     min_loss = 1e40
     iteration = 0
+    min_loss_params = None
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         while True:
-            intra_stack_rms_shift = np.sqrt(np.mean(sess.run(yx_translations)) ** 2)
+            current_yx_translations = sess.run(yx_translations)
+            intra_stack_rms_shift = np.sqrt(np.mean(current_yx_translations ** 2))
             loss, h = sess.run([loss_op, optimize_op]) #run iteration
             if np.isnan(loss):
                 raise Exception('NAN encounterd in loss')
@@ -224,53 +228,82 @@ def optimize_stack(arg_list, stack_learning_rate, stack_reg):
             if min_loss > loss:
                 min_loss = loss
                 new_min_iter = 0
+                min_loss_params = current_yx_translations
             new_min_iter = new_min_iter + 1
             if new_min_iter == 10:
                 break
             iteration = iteration + 1
 
-        return sess.run(yx_translations)
+        return min_loss_params
 
-def optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape,
+def optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch, row_col_coords, overlap_shape,
                        stitch_regularization_xy, stitch_regularization_z, pixel_size_xy, pixel_size_z):
+    tf.reset_default_graph()
     z_to_xy_ratio = pixel_size_z / pixel_size_xy
-    loss_op, grad_op, hessian_op, newton_delta_op, assign_op = inter_stack_stitch_graph(
-        p_yx_translations, p_zyx_translations,
+    p_zyx_translations_flat = np.zeros((len(p_zyxc_stacks_stitch) * 3,))
+    loss_op, grad_op, hessian_op, param_input = inter_stack_stitch_graph(
+        p_yx_translations, p_zyx_translations_flat.size,
         p_zyxc_stacks_stitch, row_col_coords, overlap_shape,
         stitch_regularization_xy, stitch_regularization_z, z_to_xy_ratio, fill_val=0)
-    new_min_iter = 0
-    min_loss = 1e40
-    iteration = 0
+
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        while True:
-            loss, grad = sess.run([loss_op, grad_op])
-            if np.isnan(loss):
-                raise Exception('NAN encounterd in loss')
-            hessian = sess.run([hessian_op])[0]
-            if np.any(np.linalg.eigvals(hessian) < 0):
-                print('Warning: negative eigenvalues')
-                print(np.linalg.eigvals(hessian))
-                #add to diagonal
-                hessian += np.mean(np.linalg.eigvals(hessian)) * np.eye(hessian.shape[0])
 
-            translations = np.reshape(sess.run(p_zyx_translations), (-1, 3))
+        def loss_fn(x):
+            return sess.run(loss_op, feed_dict={param_input: x})
+
+        def grad_fn(x):
+            return sess.run(grad_op, feed_dict={param_input: x})
+
+        def hessian_fn(x):
+            return sess.run(hessian_op, feed_dict={param_input: x})
+
+        def callback(x):
+            translations = np.reshape(x, (-1, 3))
             translations[:, 0] = translations[:, 0] * pixel_size_z
-            translations[:, 1:] = translations[:, 1:] * pixel_size_xy  
+            translations[:, 1:] = translations[:, 1:] * pixel_size_xy
             stitch_rms_shift_z = np.sqrt(np.mean(translations[:, 0] ** 2))
-            stitch_rms_shift_xy = np.sqrt(np.mean(translations[:, 1:] ** 2)) 
+            stitch_rms_shift_xy = np.sqrt(np.mean(translations[:, 1:] ** 2))
+            loss = loss_fn(x)
             print('Stitching loss: {}  \txy rms (um): {}  \tz rms (um): {}'.format(loss, stitch_rms_shift_xy, stitch_rms_shift_z))
-            newton_delta = np.dot(np.linalg.inv(hessian), grad)
-            sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
-            # check for stopping condition
-            if min_loss > loss:
-                min_loss = loss
-                new_min_iter = 0
-            new_min_iter = new_min_iter + 1
-            if new_min_iter == 5:
-                break
-            iteration = iteration + 1
-        return sess.run(p_zyx_translations)
+        #TODO: use joblib to cache funciton calls
+
+        print('Initial loss: {}'.format(loss_fn(p_zyx_translations_flat)))
+        return minimize(loss_fn, p_zyx_translations_flat, method='trust-exact', jac=grad_fn, hess=hessian_fn,
+                        callback=callback,
+                       options={'gtol': 1e-4, 'disp': True, 'initial_trust_radius': 1, 'max_trust_radius': 4}).x
+
+        # new_min_iter = 0
+        # min_loss = 1e40
+        # iteration = 0
+        # while True:
+        #     loss, grad = sess.run([loss_op, grad_op])
+        #     if np.isnan(loss):
+        #         raise Exception('NAN encounterd in loss')
+        #     hessian = sess.run([hessian_op])[0]
+        #     if np.any(np.linalg.eigvals(hessian) < 0):
+        #         print('Warning: negative eigenvalues')
+        #         print(np.linalg.eigvals(hessian))
+        #         #add to diagonal
+        #         hessian += np.mean(np.linalg.eigvals(hessian)) * np.eye(hessian.shape[0])
+        #
+        #     translations = np.reshape(sess.run(p_zyx_translations), (-1, 3))
+        #     translations[:, 0] = translations[:, 0] * pixel_size_z
+        #     translations[:, 1:] = translations[:, 1:] * pixel_size_xy
+        #     stitch_rms_shift_z = np.sqrt(np.mean(translations[:, 0] ** 2))
+        #     stitch_rms_shift_xy = np.sqrt(np.mean(translations[:, 1:] ** 2))
+        #     print('Stitching loss: {}  \txy rms (um): {}  \tz rms (um): {}'.format(loss, stitch_rms_shift_xy, stitch_rms_shift_z))
+        #     newton_delta = np.dot(np.linalg.inv(hessian), grad)
+        #     sess.run([assign_op], feed_dict={newton_delta_op: np.ravel(newton_delta)})
+        #     # check for stopping condition
+        #     if min_loss > loss:
+        #         min_loss = loss
+        #         new_min_iter = 0
+        #     new_min_iter = new_min_iter + 1
+        #     if new_min_iter == 5:
+        #         break
+        #     iteration = iteration + 1
+        # return sess.run(p_zyx_translations)
 
 def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, intra_stack_channels,
                        inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_z_filters=None,
@@ -345,9 +378,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
                     p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index] = ndi.gaussian_filter1d(
                         p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index], sigma=z_sigma, axis=0)
 
-        tf.reset_default_graph()
-        p_zyx_translations = tf.get_variable('p_zyx_translations', len(p_zyxc_stacks) * 3, initializer=tf.zeros_initializer)
-        p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyx_translations, p_zyxc_stacks_stitch,
+        p_zyx_translations_optimized = optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch,
                                                           row_col_coords, overlap_shape // stitch_downsample_factor_xy,
                                                           stitch_regularization_xy, stitch_regularization_z,
                                                           pixel_size_xy, pixel_size_z)
