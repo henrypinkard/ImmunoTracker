@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--stack', action='store_true')
 parser.add_argument('--stitch', action='store_true')
 parser.add_argument('--export', action='store_true')
-parser.add_argument('--z_smooth_stitch', action='store_true')
+parser.add_argument('--z_smooth_stitch', type=float, default=1.5)
 parser.add_argument('--stack_lr', type=float, default=1.0)
 parser.add_argument('--stack_reg', type=float, default=1e-2)
 parser.add_argument('--stitch_reg_xy', type=float, default=0.004)
@@ -101,7 +101,7 @@ for ID in ids:
             stack_learning_rate=args.stack_lr,
             stack_reg=args.stack_reg,
             inter_stack_registration_channels=isr_ch,
-            stitch_z_filters=[1.5 if c == 0 and args.z_smooth_stitch else -1 for c in isr_ch],
+            stitch_z_filters=[args.z_smooth_stitch if c == 0 else -1 for c in isr_ch],
             stitch_downsample_factor_xy=2,
             stitch_regularization_xy=args.stitch_reg_xy,
             stitch_regularization_z=args.stitch_reg_z,
