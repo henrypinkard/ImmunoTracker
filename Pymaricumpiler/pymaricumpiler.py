@@ -124,7 +124,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                                stitch_downsample_factor_xy=stitch_downsample_factor_xy,
                                                stitch_z_filters=stitch_z_filters,
                                                stitch_regularization_xy=stitch_regularization_xy,
-                                               stitch_regularization_z=stitch_regularization_z,
+                                               stitch_regularization_z=stitch_regularization_z * 6 / len(p_zyxc_stacks.keys()),
                                                stack=stack, stitch=stitch)
                 if 'p_zyx_translations' in optimized:
                     translation_params = optimized['p_zyx_translations']
