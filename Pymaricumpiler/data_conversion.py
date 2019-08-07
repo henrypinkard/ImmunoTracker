@@ -21,10 +21,10 @@ parser.add_argument('--max_tp', type=int, default=-1)
 parser.add_argument('--min_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
-# args = parser.parse_args()
+args = parser.parse_args()
 
-print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-args = parser.parse_args(['--ids', '34', '--stack'])
+# print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
+# args = parser.parse_args(['--ids', '34', '--stack'])
 
 
 print('Got arguments:')
@@ -34,8 +34,6 @@ home = str(Path.home())
 
 storage_path = home + '/lymphosight_data/'
 
-#TODO:
-storage_path = '/media/hugespace/henry/lymphosight/'
 
 imaris_dir = storage_path + 'imaris_files'
 raw_data_dir = storage_path + 'raw_data/'
