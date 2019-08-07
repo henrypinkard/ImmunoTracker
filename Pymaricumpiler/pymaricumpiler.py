@@ -33,7 +33,7 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
     """
     print('Computing background')
     all_pix = {}
-    for position_index in range(len(p_zyxc_stacks)):
+    for position_index in p_zyxc_stacks.keys():
         for channel_index in range(p_zyxc_stacks[position_index].shape[-1]):
             if channel_index not in all_pix:
                 all_pix[channel_index] = np.ravel(p_zyxc_stacks[position_index][..., channel_index][nonempty_pixels[position_index]])
@@ -96,8 +96,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     #iterate through all time points to compute all needed stitching and registration params
     all_params = []
     previous_stitched = None
-    backgrounds=None
-    stitched_image_size=None
+    backgrounds = None
+    stitched_image_size = None
     # if max_tp is None:
     #     max_tp = metadata['num_frames']
     for frame_index in range(min_tp, max_tp):

@@ -24,7 +24,7 @@ parser.add_argument('--param_cache', type=str, default='optimized_params')
 # args = parser.parse_args()
 
 print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-args = parser.parse_args(['--ids', '36', '--stitch', '--min_tp', '-1', '--stitch_reg_xy', '0.03', '--stitch_reg_z', '0.03'])
+args = parser.parse_args(['--ids', '34', '--stack'])
 
 
 print('Got arguments:')
@@ -33,6 +33,9 @@ print(args)
 home = str(Path.home())
 
 storage_path = home + '/lymphosight_data/'
+
+#TODO:
+storage_path = '/media/hugespace/henry/lymphosight/'
 
 imaris_dir = storage_path + 'imaris_files'
 raw_data_dir = storage_path + 'raw_data/'

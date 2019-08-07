@@ -107,9 +107,9 @@ def inter_stack_stitch_graph(p_yx_translations, n_params, p_zyxc_stacks, row_col
     p_zyx_translations_flat_um = tf.placeholder(dtype=tf.float32, shape=(n_params,), name='p_zyx_translations_flat_um')
     p_zyx_translations_um = tf.reshape(p_zyx_translations_flat_um, [-1, 3]) #put into p_zyx shape
     p_zyx_translations = p_zyx_translations_um / tf.tile([[pixel_size_z, pixel_size_xy, pixel_size_xy]], (len(row_col_coords), 1))
-    translated_stacks = {pos_index: _interpolate_stack(p_zyxc_stacks[pos_index], fill_val=fill_val,
+    translated_stacks = [_interpolate_stack(p_zyxc_stacks[pos_index], fill_val=fill_val,
                     zyx_translations=p_zyx_translations[pos_index], yx_translations=p_yx_translations[pos_index])
-                         for pos_index in p_zyxc_stacks.keys()}
+                         for pos_index in p_zyxc_stacks.keys()]
 
     # make sure z translations are all positive
     overlap_losses = []

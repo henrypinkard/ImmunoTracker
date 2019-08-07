@@ -31,7 +31,7 @@ def open_magellan(path):
     num_rows, num_cols = magellan.get_num_rows_and_cols()
     metadata['num_rows'] = num_rows
     metadata['num_cols'] = num_cols
-    metadata['row_col_coords'] = np.array(magellan.row_col_tuples)
+    metadata['row_col_coords'] = np.array(magellan.row_col_tuples)[np.array(list(magellan.p_t_z_c_tree.keys()))]
     return magellan, metadata
 
 def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, input_filter_sigma=None):
@@ -47,7 +47,7 @@ def read_raw_data(magellan, metadata, time_index, reverse_rank_filter=False, inp
     elapsed_time_ms = ''
     raw_stacks = {}
     nonempty_pixels = {}
-    for position_index in range(metadata['num_positions']):
+    for position_index in magellan.p_t_z_c_tree.keys():
         raw_stacks[position_index] = np.zeros((metadata['max_z_index'] - metadata['min_z_index'] + 1,
                                                *metadata['tile_shape'], metadata['num_channels']),
                                               np.uint8 if metadata['byte_depth'] == 1 else np.uint16)
