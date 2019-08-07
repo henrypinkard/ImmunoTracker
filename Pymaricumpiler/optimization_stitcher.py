@@ -352,6 +352,9 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
         p_zyx_translations[:, 1] = -p_zyx_translations[:, 1]
         p_zyx_translations[:, 2] = -p_zyx_translations[:, 2]
 
+        #TODO: experimental: flip sign of z reg
+        p_zyx_translations[:, 0] = -p_zyx_translations[:, 0]
+
         #Rescale these translations to account for downsampling
         p_zyx_translations[:, 1:] = stitch_downsample_factor_xy * p_zyx_translations[:, 1:]
         optimized_params['p_zyx_translations'] = p_zyx_translations
