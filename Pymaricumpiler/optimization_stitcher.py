@@ -304,7 +304,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
         
         #reformat and add in zeros for extra slices that weren't optimized
         p_yx_translations = []
-        for pos_index in p_zyxc_stacks.keys():
+        for index, pos_index in enumerate(list(p_zyxc_stacks.keys())):
             data_z_indices = np.where(nonempty_pixels[pos_index])[0]
             if data_z_indices.size == 0:
                 first_z_index = 0
@@ -313,7 +313,7 @@ def optimize_timepoint(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_s
                 first_z_index = data_z_indices[0]
                 last_z_index = data_z_indices[-1]
             front_padding = np.zeros(([first_z_index, 2]), np.float32)
-            optimized_translations = np.reshape(pos_raw_translations[pos_index], [-1, 2])
+            optimized_translations = np.reshape(pos_raw_translations[index], [-1, 2])
             back_padding = np.zeros(([len(nonempty_pixels[pos_index]) - last_z_index - 1, 2]), np.float32)
             p_yx_translations.append(np.concatenate([front_padding, optimized_translations, back_padding], axis=0))
 
