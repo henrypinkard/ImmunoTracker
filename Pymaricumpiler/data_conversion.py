@@ -24,7 +24,7 @@ parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
 
 # print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-# args = parser.parse_args(['--ids', '24', '--stack', '--export'])
+# args = parser.parse_args(['--ids', '24', '--export'])
 
 
 print('Got arguments:')
@@ -44,7 +44,7 @@ for p in [imaris_dir, raw_data_dir, param_cache_dir, log_dir]:
     if not os.path.exists(p):
         os.makedirs(p)
 
-data_list = '/opt/LymphosightDatasets.csv'
+data_list = home + 'GitRepos/LymphoSight/LymphosightDatasets.csv'
 
 with open(data_list, 'r') as f:
     reader = csv.DictReader(f)
