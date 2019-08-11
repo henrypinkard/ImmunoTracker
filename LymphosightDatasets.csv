@@ -1,4 +1,4 @@
-Use,,stitch done,ID,Date,Folder,vim,acq time,frames,positions,z_range,Usable frames,ISR ch,Explant,total stacks,Max GB (2x2),Notes,HEVs,OT1,OT2,Polyclonal,P14,XCR1,CD11c,B cells
+Use,,stitch done,ID,Date,Folder,Explant,acq time,frames,positions,z_range,Usable frames,ISR ch,Explant,total stacks,Max GB (2x2),Notes,HEVs,OT1,OT2,Polyclonal,P14,XCR1,CD11c,B cells
 ,,,1,2018-5-1,24 hours post LPS OT1 OT2 MECA XCR1orB6,xcr1 32 post LPS restart_1,22:35:03,5,46,145,3,0,0,138,1150,LN moved really far,,CFP+VPD450,GFP,,,VENUS,,CMTMR
 ,,,3,2018-5-6,24 hours post LPS Xcr1 OT1 OT2 poly B Meca,whole timelapse_3,11:48:52,2,53,142,1,0+5,0,53,2650,,MECAA647,CFP+VPD450,cmTMR,CFSE,,VENUS,,CFP+ef670
 ,,,4,2018-5-6,24 hours post LPS Xcr1 OT1 OT2 poly B Meca,subregion fast timelapse_1,12:05:03,5,9,124,4,0+5,0,36,450,,MECAA647,CFP+VPD450,cmTMR,CFSE,,VENUS,,CFP+ef670
