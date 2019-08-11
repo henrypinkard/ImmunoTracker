@@ -44,7 +44,7 @@ for p in [imaris_dir, raw_data_dir, param_cache_dir, log_dir]:
     if not os.path.exists(p):
         os.makedirs(p)
 
-data_list = home + 'GitRepos/LymphoSight/LymphosightDatasets.csv'
+data_list = home + '/GitRepos/LymphoSight/LymphosightDatasets.csv'
 
 with open(data_list, 'r') as f:
     reader = csv.DictReader(f)
