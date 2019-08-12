@@ -24,7 +24,7 @@ parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
 
 # print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-# args = parser.parse_args(['--ids', '24', '--export'])
+# args = parser.parse_args(['--ids', '59', '--stitch', '--min_tp', '18', '--export'])
 
 
 print('Got arguments:')

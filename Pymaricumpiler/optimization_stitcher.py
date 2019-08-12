@@ -133,7 +133,7 @@ def inter_stack_stitch_graph(p_yx_translations, n_params, p_zyxc_stacks, row_col
             floverlap1 = tf.cast(overlap1, tf.float32)
             floverlap2 = tf.cast(overlap2, tf.float32)
             numer = tf.reduce_mean(floverlap1 * floverlap2) ** 2
-            denom = tf.reduce_mean(floverlap1 ** 2) * tf.reduce_mean(floverlap2 ** 2)
+            denom = tf.maximum(tf.convert_to_tensor(1e-10), tf.reduce_mean(floverlap1 ** 2) * tf.reduce_mean(floverlap2 ** 2))
             #multiply by number of channels so stitching when more info used puts less weight on regularization
             overlap_losses.append(numer / denom * (1.0 if len(floverlap1.shape) == 3 else floverlap1.shape[3].value))
 
