@@ -240,12 +240,12 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                                           p_zyx_intitial=tp0_p_zyx_residual_shifts,
                                                           pixel_size_z=magellan.pixel_size_z_um,
                                                           pixel_size_xy=magellan.pixel_size_xy_um,
-                                                          inter_stack_channels=xy_register_channels,
+                                                          inter_stack_channels=z_register_channels + xy_register_channels,
                                                           stitch_downsample_factor_xy=stitch_downsample_factor_xy,
                                                           stitch_z_filters=stitch_z_filters,
                                                           stitch_regularization_xy=stitch_regularization_xy,
-                                                          stitch_regularization_z=stitch_regularization_z * 6 / len(
-                                                              p_zyxc_stacks.keys()))
+                                                          stitch_regularization_z=stitch_regularization_z * 6 / metadata['num_positions'],
+                                                          invert_z='invert' in suffix)
 
         elif 'fourier' in stitch_method:
             if backgrounds is None:
@@ -264,7 +264,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
 
     #merge stitch and other one
-    #TODO: Pick to invert or not once correct sign convention known
     t_p_zyx_translations = t_p_zyx_residual_shifts + p_zyx_stitch
 
     if not export:

@@ -1,7 +1,9 @@
 from pymaricumpiler import convert
 import os
 import csv
+import numpy as np
 from pathlib import Path
+import sys
 import argparse
 
 #parse command line arguments
@@ -10,7 +12,6 @@ parser.add_argument('--stack', action='store_true')
 parser.add_argument('--stitch', action='store_true')
 parser.add_argument('--export', action='store_true')
 parser.add_argument('--time_reg', action='store_true')
-parser.add_argument('--z_smooth_stitch', type=float, default=1.5)
 parser.add_argument('--stack_lr', type=float, default=1.0)
 parser.add_argument('--stack_reg', type=float, default=1e-2)
 parser.add_argument('--stitch_reg_xy', type=float, default=0.004)
@@ -22,8 +23,8 @@ parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
 
-print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-args = parser.parse_args(['--ids', '49', '--time_reg', '--max_tp', '1', '--export', '--suffix', 'optimizetp0_stitch'])
+# print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
+# args = parser.parse_args(['--ids', '24', '--export'])
 
 
 print('Got arguments:')
@@ -85,6 +86,9 @@ for ID in ids:
     else:
         min_tp = 0
 
+    xy_reg_channels = [2, 5]
+    z_reg_channels = [0]
+
     convert(magellan_dir,
             input_filter_sigma=2,
             output_dir=imaris_dir,
@@ -101,13 +105,11 @@ for ID in ids:
             xy_register_channels=[2, 5],
             z_register_channels=[0],
             stitch_method='optimize',
-            stitch_z_filters=[args.z_smooth_stitch if c == 0 else -1 for c in isr_ch],
+            stitch_z_filters=[1.0 if c == 0 else -1 for c in z_reg_channels + xy_reg_channels],
             stitch_downsample_factor_xy=2,
             stitch_regularization_xy=args.stitch_reg_xy,
             stitch_regularization_z=args.stitch_reg_z,
             stack=args.stack and int(get_value(ID, 'Explant')) != 1,
-            stitch=True,
-            time_reg=False,
+            stitch=args.stitch,
+            time_reg=args.time_reg,
             export=args.export)
-
-
