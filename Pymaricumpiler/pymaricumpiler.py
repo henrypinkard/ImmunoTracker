@@ -18,7 +18,7 @@ import os
 # plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 from stitcher import stitch_single_channel, apply_intra_stack_registration
 from stitcher import compute_inter_stack_registrations
-from utility import x_corr_register_3D
+from utility import x_corr_register_3D, anisotropic_x_corr_register_3D
 from imaris_writing import stitch_register_imaris_write
 from data_reading import open_magellan, read_raw_data
 from optimization_stitcher import optimize_timepoint_stacks, optimize_timepoint_stitching
@@ -50,30 +50,32 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 
 
 
-from PIL import Image
-
-def exporttiffstack(datacube, path, name='export'):
-    '''
-    Save 3D numpy array as a TIFF stack
-    :param datacube:
-    '''
-    if len(datacube.shape) == 2:
-        imlist = [Image.fromarray(datacube)]
-    else:
-        imlist = []
-        for i in range(datacube.shape[0]):
-            imlist.append(Image.fromarray(datacube[i,...]))
-    path = "{}{}.tif".format(path, name)
-    imlist[0].save(path, compression="tiff_deflate", save_all=True, append_images=imlist[1:])
+# from PIL import Image
+#
+# def exporttiffstack(datacube, path, name='export'):
+#     '''
+#     Save 3D numpy array as a TIFF stack
+#     :param datacube:
+#     '''
+#     if len(datacube.shape) == 2:
+#         imlist = [Image.fromarray(datacube)]
+#     else:
+#         imlist = []
+#         for i in range(datacube.shape[0]):
+#             imlist.append(Image.fromarray(datacube[i,...]))
+#     path = "{}{}.tif".format(path, name)
+#     imlist[0].save(path, compression="tiff_deflate", save_all=True, append_images=imlist[1:])
 
 
 
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
-            output_dir=None, output_basename=None, intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            stack_learning_rate=15, inter_stack_registration_channels=[0], max_tp=None, min_tp=None,
-            inter_stack_max_z=15, stack_reg=0,
-            stitch_regularization_xy=0, stitch_regularization_z=0, param_cache_dir='./', log_dir='./',
-            reverse_rank_filter=False, suffix='', stitch_downsample_factor_xy=3, stitch_z_filters=None,
+            output_dir=None, output_basename=None, max_tp=None, min_tp=None,
+            intra_stack_registration_channels=[1, 2, 3, 4, 5], stack_learning_rate=15, stack_reg=0,
+            xy_register_channels=[2, 5], z_register_channels=[0],
+            stitch_method='optimize',
+            stitch_regularization_xy=0, stitch_regularization_z=0, stitch_downsample_factor_xy=3, stitch_z_filters=None,
+            param_cache_dir='./', log_dir='./',
+            reverse_rank_filter=False, suffix='',
             stitch=True, stack=True, time_reg=True, export=True):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
@@ -130,23 +132,27 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                 print('Loaded params from: ' + saved_name)
                 t_zyx_global_shifts = loaded['t_zyx_global_shifts']  # so stitcher can use it
                 t_p_zyx_residual_shifts = loaded['t_p_zyx_residual_shifts']
+    #load stack params if possible
+    p_yx_list = []
+    for frame_index in range(min_tp, max_tp):
+        # initialize to a default of 0
+        p_yx_translations = metadata['num_positions'] * [np.zeros((metadata['max_z_index']
+                                                                   - metadata['min_z_index'] + 1, 2))]
+        # load parameters from saved file if preset
+        param_cache_name = output_basename + '_tp{}'.format(frame_index)
+        saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)
+        if os.path.isfile(saved_name):
+            with np.load(saved_name) as loaded:
+                if 'p_yx_translations' in loaded:
+                    print('Loaded params from: ' + saved_name)
+                    p_yx_translations = loaded['p_yx_translations']
+        p_yx_list.append(p_yx_translations)
+    t_p_yx_translations = np.stack(p_yx_list)
 
     if stack or time_reg:
         pos_shift_list = []
         ##### stack + timepoint registration loop ######
         for frame_index in range(min_tp, max_tp):
-                #initialize to a default of 0
-                p_yx_translations = metadata['num_positions'] * [np.zeros((metadata['max_z_index']
-                                                                             - metadata['min_z_index'] + 1, 2))]
-                # load parameters from saved file if preset
-                param_cache_name = output_basename + '_tp{}'.format(frame_index)
-                saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)
-                if os.path.isfile(saved_name):
-                    with np.load(saved_name) as loaded:
-                        if 'p_yx_translations' in loaded:
-                            print('Loaded params from: ' + saved_name)
-                            p_yx_translations = loaded['p_yx_translations']  # so stitcher can use it
-
 
                 p_zyxc_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=frame_index,
                             reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
@@ -160,7 +166,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                                stack_learning_rate=stack_learning_rate, stack_reg=stack_reg, backgrounds=backgrounds)
                     np.savez('{}{}_optimized_params'.format(param_cache_dir, param_cache_name),
                              **{'p_yx_translations': p_yx_translations})
-                p_yx_series.append(p_yx_translations)
+                    p_yx_series.append(p_yx_translations)
 
                 if time_reg: #use temporal information to register from timepoint to timepoint, and to initialize stitching
                     #apply yx_translations and save the result on registration channels
@@ -169,19 +175,25 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                     for pos_index in p_zyxc_stacks:
                         zyxc_stack = p_zyxc_stacks[pos_index]
                         if np.any(nonempty_pixels[pos_index]):
-                            reg_stack = np.max(np.stack([apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
+                            reg_stack_xy = np.min(np.stack([apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
                                                    background=np.mean(backgrounds), mode='float')
-                                                   for c in inter_stack_registration_channels], axis=3), axis=3)
+                                                   for c in xy_register_channels], axis=3), axis=3)
+                            reg_stack_z = np.min(np.stack(
+                                [apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
+                                                                background=np.mean(backgrounds), mode='float')
+                                 for c in z_register_channels], axis=3), axis=3)
                             if pos_index not in reg_ref_stacks:
-                                reg_ref_stacks[pos_index] = reg_stack
+                                reg_ref_stacks[pos_index] = (reg_stack_xy, reg_stack_z)
                                 pos_shift_list[-1][pos_index] = np.array([0, 0, 0])  # init with shift of 0p
                             else:
-                                shifts = x_corr_register_3D(reg_ref_stacks[pos_index], reg_stack,
-                                                            max_shift=np.array(reg_ref_stacks[0].shape) // 2)
+                                shifts = anisotropic_x_corr_register_3D(reg_ref_stacks[pos_index][0], reg_stack_xy,
+                                                            reg_ref_stacks[pos_index][1], reg_stack_z)
                                 pos_shift_list[-1][pos_index] = shifts
 
+        if stack:
+            t_p_yx_translations = np.round(np.stack(p_yx_series)).astype(np.int)
+
     if time_reg:
-        t_p_yx_translations = np.round(np.stack(p_yx_series)).astype(np.int)
         #compile fourier translations into useful form
         t_p_zyx_fourier_translations = np.zeros((max_tp - min_tp, len(p_zyxc_stacks.keys()), 3))
         for tp, pos_shifts in enumerate(pos_shift_list):
@@ -191,58 +203,69 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         #Make all shifts relative to a timepoint in the middle? because the timelapses seem to stabilize by then
         t_p_zyx_fourier_translations = t_p_zyx_fourier_translations - t_p_zyx_fourier_translations[t_p_zyx_fourier_translations.shape[0] // 2, :, :]
         #take median shift at each timepoint as the global shift
-        t_zyx_global_shifts = np.mean(t_p_zyx_fourier_translations, axis=1).astype(np.int)
+        t_zyx_global_shifts = np.round(np.mean(t_p_zyx_fourier_translations, axis=1)).astype(np.int)
         #include the residual as a starting point for the stitching
-        t_p_zyx_residual_shifts = t_p_zyx_fourier_translations - t_zyx_global_shifts[:, None, :]
+        t_p_zyx_residual_shifts = np.round((t_p_zyx_fourier_translations - t_zyx_global_shifts[:, None, :])).astype(np.int)
 
         #pcache these values so they don't need to be recomputed
         np.savez('{}{}_optimized_params'.format(param_cache_dir, output_basename + '_time_reg'),
                  **{'t_zyx_global_shifts': t_zyx_global_shifts, 't_p_zyx_residual_shifts': t_p_zyx_residual_shifts})
 
+    # make z negative as the stitching code expects
+    t_p_zyx_residual_shifts[:, :, 0] = -t_p_zyx_residual_shifts[:, :, 0]
 
-    #TODO: add param caching and loading for stitching in a seperate file
 
-    #TODO: add in mechanism to initialize with residual shifts
     ##### Stitching loop #####
-    # if stitch:
-    #     # for frame_index in range(min_tp, max_tp):
-    #     p_zyx_translations = np.zeros((metadata['num_positions'], 3), dtype=np.int)
-    #
-    #     p_zyxc_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=frame_index,
-    #                 reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
-    #
-    #     # TODO: need to rethink this based on new registation
-    #     if position_registrations == 'optimize':
-    #     p_zyx_translations = optimize_timepoint_stitching(p_zyxc_stacks, nonempty_pixels,
-    #                                                       metadata['row_col_coords'], metadata['tile_overlaps'],
-    #                                                       p_yx_translations=p_yx_translations,
-    #                                                       pixel_size_z=magellan.pixel_size_z_um,
-    #                                                       pixel_size_xy=magellan.pixel_size_xy_um,
-    #                                                       inter_stack_channels=inter_stack_registration_channels,
-    #                                                       stitch_downsample_factor_xy=stitch_downsample_factor_xy,
-    #                                                       stitch_z_filters=stitch_z_filters,
-    #                                                       stitch_regularization_xy=stitch_regularization_xy,
-    #                                                       stitch_regularization_z=stitch_regularization_z * 6 / len(
-    #                                                           p_zyxc_stacks.keys()))
+    param_cache_name = output_basename
+    saved_name = '{}{}_optimized_stitch_params.npz'.format(param_cache_dir, param_cache_name)
+    if os.path.isfile(saved_name):
+        with np.load(saved_name) as loaded:
+            if 'p_zyx_stitch' in loaded:
+                print('Loaded params from: ' + saved_name)
+                p_zyx_stitch = loaded['p_zyx_stitch']
 
-        # elif position_registrations == 'fourier':
-        #     # TODO: update this function to reflect new stack shape
-        #     p_zyx_translations = compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, p_yx_translations,
-        #                                                        metadata, max_shift_z=inter_stack_max_z,
-        #                                                        channel_indices=inter_stack_registration_channels,
-        #                                                        backgrounds=backgrounds)
+    if stitch:
+        print('Stitching timepoints')
+        # for frame_index in range(min_tp, max_tp):
+        p_zyx_stitch = np.zeros((metadata['num_positions'], 3), dtype=np.int)
 
-    #TODO: merge optimized params and others
-    # t_p_zyx_residual_shifts
-    # t_p_zyx_translations = np.round(np.stack(p_zyx_series)).astype(np.int)
+        tp0_zyxc_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=0,
+                    reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
+        tp0_p_zyx_residual_shifts = t_p_zyx_residual_shifts[0]
 
-#TODO: pick the write one
-    if 'tp_only' in suffix:
-        t_p_zyx_translations = np.zeros_like(t_p_zyx_residual_shifts)
-    if 'resid_only' in suffix:
-        t_p_zyx_translations = t_p_zyx_residual_shifts
-    if 'neg_resid_only' in suffix:
-        t_p_zyx_translations = -t_p_zyx_residual_shifts
+        if stitch_method == 'optimize':
+            p_zyx_stitch = optimize_timepoint_stitching(tp0_zyxc_stacks, nonempty_pixels,
+                                                          metadata['row_col_coords'], metadata['tile_overlaps'],
+                                                          p_yx_translations=p_yx_translations,
+                                                          p_zyx_intitial=tp0_p_zyx_residual_shifts,
+                                                          pixel_size_z=magellan.pixel_size_z_um,
+                                                          pixel_size_xy=magellan.pixel_size_xy_um,
+                                                          inter_stack_channels=xy_register_channels,
+                                                          stitch_downsample_factor_xy=stitch_downsample_factor_xy,
+                                                          stitch_z_filters=stitch_z_filters,
+                                                          stitch_regularization_xy=stitch_regularization_xy,
+                                                          stitch_regularization_z=stitch_regularization_z * 6 / len(
+                                                              p_zyxc_stacks.keys()))
+
+        elif 'fourier' in stitch_method:
+            if backgrounds is None:
+                backgrounds = estimate_background(tp0_zyxc_stacks, nonempty_pixels)
+            p_zyx_stitch_xys = compute_inter_stack_registrations(tp0_zyxc_stacks, nonempty_pixels, p_yx_translations,
+                                                             tp0_p_zyx_residual_shifts, metadata,
+                                                               channel_indices=xy_register_channels,
+                                                               backgrounds=backgrounds, invert=(stitch_method[-1] == '1' or stitch_method[-1] == '3'))
+            p_zyx_stitch_zs = compute_inter_stack_registrations(tp0_zyxc_stacks, nonempty_pixels, p_yx_translations,
+                                                                 tp0_p_zyx_residual_shifts, metadata,
+                                                                 channel_indices=z_register_channels,
+                                                                 backgrounds=backgrounds, invert=(stitch_method[-1] == '1' or stitch_method[-1] == '3'))
+            p_zyx_stitch = np.concatenate([p_zyx_stitch_zs[:, 0][: ,None], p_zyx_stitch_xys[:, 1:]], axis=1)
+        # cache these values so they don't need to be recomputed
+        np.savez('{}{}_optimized_stitch_params'.format(param_cache_dir, output_basename), **{'p_zyx_stitch': p_zyx_stitch})
+
+
+    #merge stitch and other one
+    #TODO: Pick to invert or not once correct sign convention known
+    t_p_zyx_translations = t_p_zyx_residual_shifts + p_zyx_stitch
 
     if not export:
         return
@@ -263,6 +286,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
 
     output_basename = output_basename + suffix
-    stitch_register_imaris_write(output_dir, output_basename, imaris_size, magellan, metadata, t_p_yx_translations,
+    stitch_register_imaris_write(output_dir, output_basename, imaris_size, max_tp - min_tp, magellan, metadata, t_p_yx_translations,
                                     t_p_zyx_translations, t_zyx_global_shifts, input_filter_sigma=input_filter_sigma,
                                  reverse_rank_filter=reverse_rank_filter)

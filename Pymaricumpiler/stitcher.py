@@ -43,8 +43,8 @@ def apply_intra_stack_registration(single_channel_stack, registrations, backgrou
             reg_slice[:] = orig_slice[:]
         return registered_stack
 
-def compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registrations, metadata,
-                                      max_shift_z, channel_indices, backgrounds, n_cores=8, max_shift_percentage=0.9, normalized_x_corr=False):
+def compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, p_yx_translations,
+                                      tp0_p_zyx_residual_shifts, metadata, channel_indices, backgrounds, invert=False):
     """
     Register stacks to one another using phase correlation and a least squares fit
     :param p_zyxc_stacks:
@@ -53,8 +53,7 @@ def compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registrati
     """
     row_col_coords = metadata['row_col_coords']
     tile_overlaps = metadata['tile_overlaps']
-    max_shift = np.array([max_shift_z, int(max_shift_percentage * tile_overlaps[0]),
-            int(max_shift_percentage * tile_overlaps[1])]).astype(np.int)
+
 
     #Calculate pairwise correspondences by phase correlation for all adjacent tiles
     volumes_to_register = []
@@ -63,41 +62,47 @@ def compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registrati
         for position_index1 in range(len(p_zyxc_stacks)):
             row1, col1 = row_col_coords[position_index1]
             stack1_reg_channel = apply_intra_stack_registration(p_zyxc_stacks[position_index1][..., channel_index],
-                                                                registrations[position_index1], background=backgrounds[channel_index])
+                                                                p_yx_translations[position_index1] + tp0_p_zyx_residual_shifts[position_index1][1:], background=backgrounds[channel_index], mode='float')
             for position_index2 in range(position_index1):
                 row2, col2 = row_col_coords[position_index2]
                 if not ((row1 == row2 + 1 and col1 == col2) or (row1 == row2 and col1 == col2 + 1)):
                     continue #non adjacent tiles
                 stack2_reg_channel = apply_intra_stack_registration(p_zyxc_stacks[position_index2][..., channel_index],
-                                                                    registrations[position_index2], background=backgrounds[channel_index])
+                                                                    p_yx_translations[position_index2] + tp0_p_zyx_residual_shifts[position_index2][1:], background=backgrounds[channel_index], mode='float')
 
                 #use only areas that are valid for both
                 both_nonempty = np.logical_and(nonempty_pixels[position_index1], nonempty_pixels[position_index2])
                 stack1_valid = stack1_reg_channel[both_nonempty, :, :]
                 stack2_valid = stack2_reg_channel[both_nonempty, :, :]
 
+                #apply shifts relative to eachother
+                z_difference = tp0_p_zyx_residual_shifts[position_index1][0] - tp0_p_zyx_residual_shifts[position_index2][0]
+                # TODO: should this be inverted
+                if invert:
+                    z_difference *= -1
+                if z_difference < 0:
+                    stack1_valid = stack1_valid[np.abs(z_difference):]
+                    stack2_valid = stack2_valid[:-np.abs(z_difference)]
+                elif z_difference > 0:
+                    stack1_valid = stack1_valid[:-z_difference]
+                    stack2_valid = stack2_valid[z_difference:]
+
+
+                #register regions twice the size of the overlap, and add extra padding to make the regions symettric around expected shift
                 if row1 == row2 + 1 and col1 == col2:
-                    overlap1 = stack1_valid[:, :tile_overlaps[0], :]
-                    overlap2 = stack2_valid[:, -tile_overlaps[0]:, :]
+                    overlap1 = stack1_valid[:, :2 * tile_overlaps[0], :]
+                    overlap1 = np.concatenate([backgrounds[channel_index] * np.ones([overlap1.shape[0], tile_overlaps[0], overlap1.shape[2]]), overlap1], axis=1)
+                    overlap2 = stack2_valid[:, -2 * tile_overlaps[0]:, :]
+                    overlap2 = np.concatenate([overlap2, backgrounds[channel_index] * np.ones([overlap2.shape[0], tile_overlaps[0], overlap2.shape[2]])], axis=1)
                 elif row1 == row2 and col1 == col2 + 1:
-                    overlap1 = stack1_valid[:, :, :tile_overlaps[1]]
-                    overlap2 = stack2_valid[:, :, -tile_overlaps[1]:]
+                    overlap1 = stack1_valid[:, :, :2 * tile_overlaps[1]]
+                    overlap1 = np.concatenate([backgrounds[channel_index] * np.ones([overlap1.shape[0], overlap1.shape[1], tile_overlaps[1]]), overlap1], axis=2)
+                    overlap2 = stack2_valid[:, :, -2 * tile_overlaps[1]:]
+                    overlap2 = np.concatenate([overlap2, backgrounds[channel_index] * np.ones([overlap2.shape[0], overlap2.shape[1], tile_overlaps[1]])], axis=2)
                 volumes_to_register.append((overlap1, overlap2))
                 registration_position_channel_indices.append((position_index1, position_index2, channel_index))
 
-    if normalized_x_corr:
-        shift_and_weight = lambda v1, v2, max_shift: (normalized_x_corr_register_3D(v1,v2,max_shift),
-                                                min(np.mean(np.ravel(v1)), np.mean(np.ravel(v2))))
-        raise Exception('Normalized cross correlation no longer supported, use optimization version instead')
-        # with Parallel(n_jobs=n_cores) as parallel:
-        #     pairwise_registrations_and_weights = parallel(delayed(shift_and_weight)(overlaps[0], overlaps[1], max_shift)
-        #                                             for overlaps in volumes_to_register)
-
-        # pairwise_registrations_and_weights = [(normalized_x_corr_register_3D(overlaps[0], overlaps[1], max_shift),
-        #                                        min(np.mean(np.ravel(overlaps[0])), np.mean(np.ravel(overlaps[1]))) for
-        #                                       overlaps in volumes_to_register]
-    else:
-        pairwise_registrations_and_weights = [(x_corr_register_3D(overlaps[0], overlaps[1], max_shift),
+    pairwise_registrations_and_weights = [(x_corr_register_3D(overlaps[0], overlaps[1], np.array([10, tile_overlaps[0], tile_overlaps[1]])),
                                                min(np.mean(np.ravel(overlaps[0])), np.mean(np.ravel(overlaps[1])))) for
                                                overlaps in volumes_to_register]
 
@@ -145,11 +150,11 @@ def compute_inter_stack_registrations(p_zyxc_stacks, nonempty_pixels, registrati
     # zero center translation params, since offset is arbitrary
     ls_traslations[:, 1:] -= np.round((np.max(ls_traslations[:, 1:], axis=0) + np.min(ls_traslations[:, 1:], axis=0)) / 2).astype(np.int)
     #invert xy translations so they work correctly
-    ls_traslations[:, 1:] *= -1
+    # ls_traslations[:, 1:] *= -1
     return ls_traslations
 
 
-def stitch_single_channel(p_zyxc_stacks, translations, registrations, tile_overlap, row_col_coords, channel_index,
+def stitch_single_channel(p_zyxc_stacks, p_zyx_translations, p_yx_translations, tile_overlap, row_col_coords, channel_index,
                           backgrounds=None, save_memory=False):
     """
     Stitch raw stacks into single volume
@@ -160,15 +165,15 @@ def stitch_single_channel(p_zyxc_stacks, translations, registrations, tile_overl
     stack_shape = p_zyxc_stacks[list(p_zyxc_stacks.keys())[0]].shape[:3]
     byte_depth = 1 if p_zyxc_stacks[list(p_zyxc_stacks.keys())[0]].dtype == np.uint8 else 2
     #convert possibly floats to ints
-    registrations = np.round(registrations).astype(np.int)
-    translations = np.round(translations).astype(np.int)
+    p_yx_translations = np.round(p_yx_translations).astype(np.int)
+    p_zyx_translations = np.round(p_zyx_translations).astype(np.int)
     # make z coordinate 0-based
-    translations[:, 0] -= np.min(translations[:, 0])
+    p_zyx_translations[:, 0] -= np.min(p_zyx_translations[:, 0])
     # Figure out size of stitched image
     # image size is range between biggest and smallest translation + 1/2 tile size on either side
-    stitched_image_size = [np.ptp(translations[:, 0]) + stack_shape[0],
-                   (1 + np.ptp(row_col_coords[:, 0], axis=0)) * (stack_shape[1] - tile_overlap[0]),
-                   (1 + np.ptp(row_col_coords[:, 1], axis=0)) * (stack_shape[2] - tile_overlap[1])]
+    stitched_image_size = [np.ptp(p_zyx_translations[:, 0]) + stack_shape[0],
+                           (1 + np.ptp(row_col_coords[:, 0], axis=0)) * (stack_shape[1] - tile_overlap[0]),
+                           (1 + np.ptp(row_col_coords[:, 1], axis=0)) * (stack_shape[2] - tile_overlap[1])]
     if save_memory:
         filename = path.join(mkdtemp(), 'stitched{}.dat'.format(channel_index))
         stitched = np.memmap(filename=filename, dtype=np.uint8 if byte_depth == 1 else np.uint16,
@@ -179,10 +184,10 @@ def stitch_single_channel(p_zyxc_stacks, translations, registrations, tile_overl
         stitched[:] = backgrounds[channel_index]
 
     def get_stitch_coords(stitched_z, p_index):
-        stack_z = stitched_z + translations[p_index, 0]
+        stack_z = stitched_z + p_zyx_translations[p_index, 0]
         if stack_z >= p_zyxc_stacks[list(p_zyxc_stacks.keys())[p_index]].shape[0]:
             return None, None, None, None  # the z registration puts things out of bounds
-        intra_stack_reg = registrations[p_index, stack_z, :]
+        intra_stack_reg = p_yx_translations[p_index, stack_z, :]
         # compute destination coordinates, and coordinates in tile to extact
         # destination coordinates are fixed
         destination_corners = np.array([row_col_coords[p_index] * (stack_shape[1:] - tile_overlap),
@@ -276,7 +281,7 @@ def stitch_single_channel(p_zyxc_stacks, translations, registrations, tile_overl
     # print('stitching channel {}'.format(channel_index))
     for stitched_z in np.arange(stitched.shape[0]):
         # print('stitching slice {}'.format(stitched_z))
-        tile_center_translations = translations[:, 1:]
+        tile_center_translations = p_zyx_translations[:, 1:]
         #add in each tile to appropriate place in stitched image
         for p_index in range(len(p_zyxc_stacks.keys())):
             stack_z, destination_corners, destination_size, border_size = get_stitch_coords(stitched_z, p_index)

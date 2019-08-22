@@ -1,10 +1,10 @@
 function [  ] = plotInterpolatedSurface( points, bounds )
 %interpolate surface
 interpN = 1000;
-% [xSurf, ySurf] = meshgrid(linspace(min(points(:,1)),max(points(:,1)),interpN),...
-%     linspace(min(points(:,2)),max(points(:,2)),interpN));
-[xSurf, ySurf] = meshgrid(linspace(bounds(1,1),bounds(1,2),interpN),...
-    linspace(bounds(2,1),bounds(2,2),interpN));
+[xSurf, ySurf] = meshgrid(linspace(min(points(:,1)),max(points(:,1)),interpN),...
+    linspace(min(points(:,2)),max(points(:,2)),interpN));
+% [xSurf, ySurf] = meshgrid(linspace(bounds(1,1),bounds(1,2),interpN),...
+%     linspace(bounds(2,1),bounds(2,2),interpN));
 
 zVals = dtInterp(delaunay(points(:,1),points(:,2)), points(:,1),points(:,2),points(:,3),xSurf,ySurf);
 

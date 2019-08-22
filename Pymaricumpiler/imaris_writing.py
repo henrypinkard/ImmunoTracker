@@ -28,25 +28,24 @@ def write_imaris(directory, name, time_series, pixel_size_xy_um, pixel_size_z_um
                     writer.write_z_slice(image, z_index, channel_index, time_index, elapsed_time_ms)
     print('Finshed!')
 
-def stitch_register_imaris_write(directory, name, imaris_size, magellan, metadata, registration_series,
-                        translation_series, abs_timepoint_registrations, input_filter_sigma=None,
+def stitch_register_imaris_write(directory, name, imaris_size, n_time_points, magellan, metadata, t_p_yx_translations,
+                                 t_p_zyx_translations, abs_timepoint_registrations, input_filter_sigma=None,
                                  reverse_rank_filter=False):
     num_channels = metadata['num_channels']
-    num_frames = abs_timepoint_registrations.shape[0]
     byte_depth = metadata['byte_depth']
     print('Imaris file: {}'.format(name))
     print('Imaris directory: {}'.format(directory))
     with ImarisJavaWrapper(directory, name, (int(imaris_size[2]), int(imaris_size[1]), int(imaris_size[0])),
-                           int(byte_depth), int(num_channels), int(num_frames), metadata['pixel_size_xy_um'],
+                           int(byte_depth), int(num_channels), int(n_time_points), metadata['pixel_size_xy_um'],
                            float(metadata['pixel_size_z_um'])) as writer:
-        for time_index in range(num_frames):
+        for time_index in range(n_time_points):
             print('Frame {}'.format(time_index))
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=time_index,
                 reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
             for channel_index in range(num_channels):
-                stitched = stitch_single_channel(raw_stacks, translations=translation_series[time_index],
-                        registrations=registration_series[time_index], tile_overlap=metadata['tile_overlaps'],
-                        row_col_coords=metadata['row_col_coords'], channel_index=channel_index)
+                stitched = stitch_single_channel(raw_stacks, p_zyx_translations=t_p_zyx_translations[time_index],
+                                                 p_yx_translations=t_p_yx_translations[time_index], tile_overlap=metadata['tile_overlaps'],
+                                                 row_col_coords=metadata['row_col_coords'], channel_index=channel_index)
                 #fit into the larger image to account for timepoint registrations
                 # if save_memory:
                 #     filename = path.join(mkdtemp(), 'stitched_tp_reggistered{}.dat'.format(channel_index))

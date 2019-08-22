@@ -23,7 +23,7 @@ parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
 
 print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-args = parser.parse_args(['--ids', '49', '--max_tp', '5', '--export', '--suffix', 'new_reg'])
+args = parser.parse_args(['--ids', '49', '--time_reg', '--max_tp', '1', '--export', '--suffix', 'optimizetp0_stitch'])
 
 
 print('Got arguments:')
@@ -85,34 +85,7 @@ for ID in ids:
     else:
         min_tp = 0
 
-    # convert(magellan_dir,
-    #         position_registrations='optimize',
-    #         input_filter_sigma=2,
-    #         output_dir=imaris_dir,
-    #         output_basename=ID,
-    #         intra_stack_registration_channels=[1, 2, 3, 4, 5],
-    #         reverse_rank_filter=True,
-    #         param_cache_dir=param_cache_dir,
-    #         log_dir=log_dir,
-    #         min_tp=min_tp,
-    #         max_tp=max_tp,
-    #         suffix=args.suffix,
-    #         stack_learning_rate=args.stack_lr,
-    #         stack_reg=args.stack_reg,
-    #         inter_stack_registration_channels=isr_ch,
-    #         stitch_z_filters=[args.z_smooth_stitch if c == 0 else -1 for c in isr_ch],
-    #         stitch_downsample_factor_xy=2,
-    #         stitch_regularization_xy=args.stitch_reg_xy,
-    #         stitch_regularization_z=args.stitch_reg_z,
-    #         stack=args.stack and int(get_value(ID, 'Explant')) != 1,
-    #         stitch=args.stitch and int(get_value(ID, 'Explant')) != 1,
-    #         time_reg=args.time_reg,
-    #         export=args.export)
-
-
-
     convert(magellan_dir,
-            position_registrations='optimize',
             input_filter_sigma=2,
             output_dir=imaris_dir,
             output_basename=ID,
@@ -122,63 +95,19 @@ for ID in ids:
             log_dir=log_dir,
             min_tp=min_tp,
             max_tp=max_tp,
-            suffix=args.suffix + 'tp_only',
+            suffix=args.suffix,
             stack_learning_rate=args.stack_lr,
             stack_reg=args.stack_reg,
-            inter_stack_registration_channels=isr_ch,
+            xy_register_channels=[2, 5],
+            z_register_channels=[0],
+            stitch_method='optimize',
             stitch_z_filters=[args.z_smooth_stitch if c == 0 else -1 for c in isr_ch],
             stitch_downsample_factor_xy=2,
             stitch_regularization_xy=args.stitch_reg_xy,
             stitch_regularization_z=args.stitch_reg_z,
             stack=args.stack and int(get_value(ID, 'Explant')) != 1,
-            stitch=args.stitch and int(get_value(ID, 'Explant')) != 1,
-            time_reg=True,
-            export=args.export)
-
-    convert(magellan_dir,
-            position_registrations='optimize',
-            input_filter_sigma=2,
-            output_dir=imaris_dir,
-            output_basename=ID,
-            intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            reverse_rank_filter=True,
-            param_cache_dir=param_cache_dir,
-            log_dir=log_dir,
-            min_tp=min_tp,
-            max_tp=max_tp,
-            suffix=args.suffix + 'resid_only',
-            stack_learning_rate=args.stack_lr,
-            stack_reg=args.stack_reg,
-            inter_stack_registration_channels=isr_ch,
-            stitch_z_filters=[args.z_smooth_stitch if c == 0 else -1 for c in isr_ch],
-            stitch_downsample_factor_xy=2,
-            stitch_regularization_xy=args.stitch_reg_xy,
-            stitch_regularization_z=args.stitch_reg_z,
-            stack=args.stack and int(get_value(ID, 'Explant')) != 1,
-            stitch=args.stitch and int(get_value(ID, 'Explant')) != 1,
+            stitch=True,
             time_reg=False,
             export=args.export)
 
-    convert(magellan_dir,
-            position_registrations='optimize',
-            input_filter_sigma=2,
-            output_dir=imaris_dir,
-            output_basename=ID,
-            intra_stack_registration_channels=[1, 2, 3, 4, 5],
-            reverse_rank_filter=True,
-            param_cache_dir=param_cache_dir,
-            log_dir=log_dir,
-            min_tp=min_tp,
-            max_tp=max_tp,
-            suffix=args.suffix + 'neg_resid_only',
-            stack_learning_rate=args.stack_lr,
-            stack_reg=args.stack_reg,
-            inter_stack_registration_channels=isr_ch,
-            stitch_z_filters=[args.z_smooth_stitch if c == 0 else -1 for c in isr_ch],
-            stitch_downsample_factor_xy=2,
-            stitch_regularization_xy=args.stitch_reg_xy,
-            stitch_regularization_z=args.stitch_reg_z,
-            stack=args.stack and int(get_value(ID, 'Explant')) != 1,
-            stitch=args.stitch and int(get_value(ID, 'Explant')) != 1,
-            time_reg=False,
-            export=args.export)
+

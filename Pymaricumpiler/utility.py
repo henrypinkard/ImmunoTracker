@@ -1,4 +1,47 @@
 import numpy as np
+from scipy import interpolate
+
+
+def anisotropic_x_corr_register_3D(volume1_xy, volume2_xy, volume1_z, volume2_z, max_shift=None):
+    """
+    Cross correlation 3d register with different channels for XY and Z
+    :param volume1:
+    :param volume2:
+    :param max_shift:
+    :return:
+    """
+    if max_shift is None:
+        max_shift = np.array(volume1_xy.shape) // 2
+    src_ft = np.fft.fftn(volume1_xy)
+    target_ft = np.fft.fftn(volume2_xy)
+    cross_corr = np.fft.ifftn((src_ft * target_ft.conj()))
+    cross_corr_mag = np.abs(np.fft.fftshift(cross_corr))
+    search_offset = (np.array(cross_corr.shape) // 2 - max_shift).astype(np.int)
+    search_volume = cross_corr_mag[search_offset[0]:search_offset[0] + 2 * max_shift[0],
+                    search_offset[1]:search_offset[1] + 2 * max_shift[1],
+                    search_offset[2]:search_offset[2] + 2 * max_shift[2]]
+    shifts = np.array(np.unravel_index(np.argmax(search_volume), search_volume.shape)).astype(np.int)
+    shifts -= np.array(search_volume.shape) // 2
+    shifts_yx = shifts[1:]
+
+    src_ft = np.fft.fftn(volume1_z)
+    target_ft = np.fft.fftn(volume2_z)
+    cross_corr = np.fft.ifftn((src_ft * target_ft.conj()))
+    cross_corr_mag = np.abs(np.fft.fftshift(cross_corr))
+    search_offset = (np.array(cross_corr.shape) // 2 - max_shift).astype(np.int)
+    search_line = cross_corr_mag[search_offset[0]:search_offset[0] + 2 * max_shift[0],
+                                 np.array(cross_corr.shape)[1] // 2 + shifts_yx[0],
+                                 np.array(cross_corr.shape)[2] // 2 + shifts_yx[1]]
+    # interpolate to get sub z pixel registration
+    f = interpolate.interp1d(np.arange(search_line.size), search_line, kind='quadratic')
+    z_fine = np.arange(0.1, search_line.size - 1.1, 0.01)
+    ys = f(z_fine)
+    shifts_z = z_fine[np.argmax(ys)]
+
+    # shifts_z = np.argmax(search_line)
+    shifts_z -= np.array(search_line.shape[0]) // 2
+
+    return np.array([shifts_z, *shifts_yx])
 
 def x_corr_register_3D(volume1, volume2, max_shift):
     """
