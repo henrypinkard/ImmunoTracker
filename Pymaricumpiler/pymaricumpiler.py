@@ -119,7 +119,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     backgrounds = None
     p_yx_series = []
     p_zyx_series = []
-    reg_ref_stacks = {}
+    last_reg_stacks = {}
 
     #initilize to 0 and load from file if possible
     t_zyx_global_shifts = np.zeros((max_tp - min_tp, 3), np.int)
@@ -175,21 +175,16 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                     for pos_index in p_zyxc_stacks:
                         zyxc_stack = p_zyxc_stacks[pos_index]
                         if np.any(nonempty_pixels[pos_index]):
-                            reg_stack_xy = np.min(np.stack([apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
+                            reg_stack = np.min(np.stack([apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
                                                    background=np.mean(backgrounds), mode='float')
                                                    for c in xy_register_channels], axis=3), axis=3)
-                            reg_stack_z = np.min(np.stack(
-                                [apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
-                                                                background=np.mean(backgrounds), mode='float')
-                                 for c in z_register_channels], axis=3), axis=3)
-                            if pos_index not in reg_ref_stacks:
-                                reg_ref_stacks[pos_index] = (reg_stack_xy, reg_stack_z)
+                            if pos_index not in last_reg_stacks:
                                 pos_shift_list[-1][pos_index] = np.array([0, 0, 0])  # init with shift of 0p
+                                last_reg_stacks[pos_index] = reg_stack
                             else:
-                                # shifts = anisotropic_x_corr_register_3D(reg_ref_stacks[pos_index][0], reg_stack_xy,
-                                #                             reg_ref_stacks[pos_index][1], reg_stack_z)
-                                shifts = x_corr_register_3D(reg_ref_stacks[pos_index][0], reg_stack_xy, np.array(reg_stack_xy.shape) // 2)
+                                shifts = x_corr_register_3D(last_reg_stacks[pos_index], reg_stack, np.array(reg_stack.shape) // 2)
                                 pos_shift_list[-1][pos_index] = shifts
+                                last_reg_stacks[pos_index] = reg_stack
 
         if stack:
             t_p_yx_translations = np.round(np.stack(p_yx_series)).astype(np.int)
@@ -200,6 +195,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         for tp, pos_shifts in enumerate(pos_shift_list):
             for pos_index in p_zyxc_stacks.keys(): #iterate through all positions
                 t_p_zyx_fourier_translations[tp, pos_index] = pos_shifts[pos_index]
+        #compute timepoint relative shifts to cumulative shifts
+        t_p_zyx_fourier_translations = np.cumsum(t_p_zyx_fourier_translations, axis=0)
 
         #Make all shifts relative to a timepoint in the middle? because the timelapses seem to stabilize by then
         t_p_zyx_fourier_translations = t_p_zyx_fourier_translations - t_p_zyx_fourier_translations[t_p_zyx_fourier_translations.shape[0] // 2, :, :]
