@@ -26,6 +26,7 @@ args = parser.parse_args()
 # print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
 # args = parser.parse_args(['--stitch', '--ids', '49', '--export', '--suffix', 'all_tp_reg_test', '--max_tp', '5'])
 
+
 print('Got arguments:')
 print(args)
 

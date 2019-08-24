@@ -240,13 +240,15 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             # get backgrounds from first time point
             backgrounds = estimate_background(t_p_zyxc_stacks[0], t_p_nonempty_pixels[0])
 
-        t_p_z_positive_z_offset = t_p_zyx_residual_shifts[:, :, 0] - np.min(t_p_zyx_residual_shifts[:, :, 0])
+        total_shifts = t_zyx_global_shifts[:, None,:] - t_p_zyx_residual_shifts
+        t_p_z_positive_z_offset = total_shifts[:, :, 0] - np.min(total_shifts[:, :, 0])
         shifted_z_size = np.ptp(np.ravel(t_p_z_positive_z_offset)) + 1
 
         p_zyxc_preprocessed_stacks = {}
         for pos_index in t_p_zyxc_stacks[0].keys():
             time_series = []
-            for time_index, p_zyxc_stacks in enumerate(t_p_zyxc_stacks):
+            for time_index in range(len(t_p_zyxc_stacks)):
+                p_zyxc_stacks = t_p_zyxc_stacks[time_index]
                 #apply yx translation and get only the registration channels
                 zyxc_registered_stack = np.stack([apply_intra_stack_registration(p_zyxc_stacks[pos_index][..., c],
                                 t_p_yx_translations[time_index][pos_index] - t_p_zyx_residual_shifts[time_index][pos_index][1:],
@@ -259,10 +261,10 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                 time_series.append(registered_stack)
 
             p_zyxc_preprocessed_stacks[pos_index] = np.mean(time_series, axis=0)
-            # TODO: visualize this
+
 
         if stitch_method == 'optimize':
-            p_zyx_stitch = optimize_timepoint_stitching(t_p_zyxc_stacks,
+            p_zyx_stitch = optimize_timepoint_stitching(p_zyxc_preprocessed_stacks,
                                               row_col_coords=metadata['row_col_coords'],
                                               overlap_shape=metadata['tile_overlaps'],
                                               p_yx_translations=None,
