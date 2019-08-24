@@ -24,8 +24,7 @@ parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
 
 # print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-# args = parser.parse_args(['--ids', '24', '--export'])
-
+# args = parser.parse_args(['--stitch', '--ids', '49', '--export', '--suffix', 'all_tp_reg_test', '--max_tp', '5'])
 
 print('Got arguments:')
 print(args)
@@ -86,7 +85,7 @@ for ID in ids:
     else:
         min_tp = 0
 
-    xy_reg_channels = [2, 5]
+    xy_reg_channels = [1, 4]
     z_reg_channels = [0]
 
     convert(magellan_dir,
@@ -102,10 +101,10 @@ for ID in ids:
             suffix=args.suffix,
             stack_learning_rate=args.stack_lr,
             stack_reg=args.stack_reg,
-            xy_register_channels=[2, 5],
-            z_register_channels=[0],
+            xy_register_channels=xy_reg_channels,
+            z_register_channels=z_reg_channels,
             stitch_method='optimize',
-            stitch_z_filters=[1.0 if c == 0 else -1 for c in z_reg_channels + xy_reg_channels],
+            stitch_z_filters=[1.0 if c == 0 else -1 for c in xy_reg_channels],
             stitch_downsample_factor_xy=2,
             stitch_regularization_xy=args.stitch_reg_xy,
             stitch_regularization_z=args.stitch_reg_z,

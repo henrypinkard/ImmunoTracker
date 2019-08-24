@@ -148,11 +148,7 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_initial, p_zy
     grad = tf.gradients(loss, p_zyx_translations_flat_um)[0]
     hessian = tf.hessians(loss, p_zyx_translations_flat_um)[0]
 
-    # newton_delta = tf.placeholder(tf.float32, p_zyx_translations_flat.shape)
-    # assign_op = tf.assign_sub(p_zyx_translations_flat, newton_delta)
-
     return loss, grad, hessian, p_zyx_translations_flat_um
-        # , newton_delta, assign_op
 
 def _interpolate_stack(img, fill_val, zyx_translations=None, yx_translations=None):
     """
@@ -256,7 +252,6 @@ def _optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch, p_zyx_initial, 
             [[pixel_size_z, pixel_size_xy, pixel_size_xy]], (len(row_col_coords), 1))
         return p_zyx_initial + p_zyx_translations_pixel
 
-
 def optimize_timepoint_stacks(p_zyxc_stacks, nonempty_pixels, intra_stack_channels,
                         stack_learning_rate=15, stack_reg=0, backgrounds=None):
 
@@ -291,29 +286,29 @@ def optimize_timepoint_stacks(p_zyxc_stacks, nonempty_pixels, intra_stack_channe
     return p_yx_translations
 
 
-def optimize_timepoint_stitching(p_zyxc_stacks, nonempty_pixels, row_col_coords, overlap_shape, p_yx_translations,
+def optimize_timepoint_stitching(p_zyxc_stacks, row_col_coords, overlap_shape, p_yx_translations,
                         p_zyx_intitial, inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_z_filters=None,
-                       stitch_downsample_factor_xy=3, stitch_regularization_xy=0, stitch_regularization_z=0, invert_z=False):
+                       stitch_downsample_factor_xy=3, stitch_regularization_xy=0, stitch_regularization_z=0):
 
     #invert xy and y so it has correct sign
-    p_zyx_initial_downsampled = np.copy(p_zyx_intitial)
+    p_zyx_initial_downsampled = np.copy(p_zyx_intitial) if p_zyx_intitial is not None else np.zeros(
+        [len(p_zyxc_stacks.keys()), 3])
     p_zyx_initial_downsampled[:, 1] = -p_zyx_initial_downsampled[:, 1]
     p_zyx_initial_downsampled[:, 2] = -p_zyx_initial_downsampled[:, 2]
-    if invert_z:
-        p_zyx_initial_downsampled[:, 0] = -p_zyx_initial_downsampled[:, 0]
-
 
     # means = np.mean(np.concatenate([p_zyxc_stacks[pos_index][nonempty_pixels[pos_index]] for pos_index in p_zyxc_stacks.keys()], axis=0), axis=(0, 1, 2))
     p_zyxc_stacks_stitch = {}
     # downsample, mean subtract, remove unused channels
     pixel_size_xy = pixel_size_xy * stitch_downsample_factor_xy
     for pos_index in p_zyxc_stacks.keys():
-        # stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)] - means[None, None, None, np.array(inter_stack_channels)]
-        stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)]
+        if inter_stack_channels is None:
+            stack = p_zyxc_stacks[pos_index]
+        else:
+            stack = p_zyxc_stacks[pos_index][..., np.array(inter_stack_channels)]
 
         # stack[np.logical_not(nonempty_pixels[pos_index])] = 0
         # filter and downsample
-        for z in np.where(np.array(nonempty_pixels[pos_index]))[0]:
+        for z in stack.shape[0]:
             for c in range(stack.shape[3]):
                 stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2 * stitch_downsample_factor_xy / 6.0)
         p_zyxc_stacks_stitch[pos_index] = stack[:, ::stitch_downsample_factor_xy, ::stitch_downsample_factor_xy, :]
@@ -335,8 +330,6 @@ def optimize_timepoint_stitching(p_zyxc_stacks, nonempty_pixels, row_col_coords,
     # flip sign as stitcher expects
     p_zyx_translations[:, 1] = -p_zyx_translations[:, 1]
     p_zyx_translations[:, 2] = -p_zyx_translations[:, 2]
-    if invert_z:
-        p_zyx_translations[:, 0] = -p_zyx_translations[:, 0]
 
     # Rescale these translations to account for downsampling
     p_zyx_translations[:, 1:] = stitch_downsample_factor_xy * p_zyx_translations[:, 1:]
