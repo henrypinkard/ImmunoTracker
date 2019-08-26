@@ -287,9 +287,11 @@ def optimize_timepoint_stacks(p_zyxc_stacks, nonempty_pixels, intra_stack_channe
 
 
 def optimize_timepoint_stitching(p_zyxc_stacks, row_col_coords, overlap_shape, p_yx_translations,
-                        p_zyx_intitial, inter_stack_channels, pixel_size_xy, pixel_size_z, stitch_z_filters=None,
+                        p_zyx_intitial, inter_stack_channels, pixel_size_xy, pixel_size_z,
                        stitch_downsample_factor_xy=3, stitch_regularization_xy=0, stitch_regularization_z=0):
 
+    if p_yx_translations is None:
+        p_yx_translations = np.zeros((len(p_zyxc_stacks.keys()), 2))
     #invert xy and y so it has correct sign
     p_zyx_initial_downsampled = np.copy(p_zyx_intitial) if p_zyx_intitial is not None else np.zeros(
         [len(p_zyxc_stacks.keys()), 3])
@@ -308,18 +310,18 @@ def optimize_timepoint_stitching(p_zyxc_stacks, row_col_coords, overlap_shape, p
 
         # stack[np.logical_not(nonempty_pixels[pos_index])] = 0
         # filter and downsample
-        for z in stack.shape[0]:
+        for z in range(stack.shape[0]):
             for c in range(stack.shape[3]):
                 stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2 * stitch_downsample_factor_xy / 6.0)
         p_zyxc_stacks_stitch[pos_index] = stack[:, ::stitch_downsample_factor_xy, ::stitch_downsample_factor_xy, :]
 
         p_zyx_initial_downsampled[pos_index, 1:] = p_zyx_initial_downsampled[pos_index, 1:] / stitch_downsample_factor_xy
 
-        # filter z axis
-        for channel_index, z_sigma in enumerate(stitch_z_filters):
-            if z_sigma != -1:
-                p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index] = ndi.gaussian_filter1d(
-                    p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index], sigma=z_sigma, axis=0)
+        # # filter z axis
+        # for channel_index, z_sigma in enumerate(stitch_z_filters):
+        #     if z_sigma != -1:
+        #         p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index] = ndi.gaussian_filter1d(
+        #             p_zyxc_stacks_stitch[pos_index][:, :, :, channel_index], sigma=z_sigma, axis=0)
 
 
     p_zyx_translations = _optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch, p_zyx_initial_downsampled,

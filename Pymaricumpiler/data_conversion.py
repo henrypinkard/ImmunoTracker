@@ -86,8 +86,8 @@ for ID in ids:
     else:
         min_tp = 0
 
-    xy_reg_channels = [1, 4]
-    z_reg_channels = [0]
+    af_reg_channels = [1, 4]
+    other_reg_channels = [0, 5]
 
     convert(magellan_dir,
             input_filter_sigma=2,
@@ -102,10 +102,9 @@ for ID in ids:
             suffix=args.suffix,
             stack_learning_rate=args.stack_lr,
             stack_reg=args.stack_reg,
-            xy_register_channels=xy_reg_channels,
-            z_register_channels=z_reg_channels,
+            af_register_channels=af_reg_channels, 
+            other_register_channels=other_reg_channels,
             stitch_method='optimize',
-            stitch_z_filters=[1.0 if c == 0 else -1 for c in xy_reg_channels],
             stitch_downsample_factor_xy=2,
             stitch_regularization_xy=args.stitch_reg_xy,
             stitch_regularization_z=args.stitch_reg_z,

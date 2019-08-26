@@ -71,9 +71,9 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, max_tp=None, min_tp=None,
             intra_stack_registration_channels=[1, 2, 3, 4, 5], stack_learning_rate=15, stack_reg=0,
-            xy_register_channels=[2, 5], z_register_channels=[0],
+            af_register_channels=[2, 5], other_register_channels=[0, 5],
             stitch_method='optimize',
-            stitch_regularization_xy=0, stitch_regularization_z=0, stitch_downsample_factor_xy=3, stitch_z_filters=None,
+            stitch_regularization_xy=0, stitch_regularization_z=0, stitch_downsample_factor_xy=3,
             param_cache_dir='./', log_dir='./',
             reverse_rank_filter=False, suffix='',
             stitch=True, stack=True, time_reg=True, export=True):
@@ -177,7 +177,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                         if np.any(nonempty_pixels[pos_index]):
                             reg_stack = np.min(np.stack([apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
                                                    background=np.mean(backgrounds), mode='float')
-                                                   for c in xy_register_channels], axis=3), axis=3)
+                                                   for c in af_register_channels], axis=3), axis=3)
                             if pos_index not in last_reg_stacks:
                                 pos_shift_list[-1][pos_index] = np.array([0, 0, 0])  # init with shift of 0p
                                 last_reg_stacks[pos_index] = reg_stack
@@ -249,7 +249,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                 #apply yx translation and get only the registration channels
                 zyxc_registered_stack = np.stack([apply_intra_stack_registration(p_zyxc_stacks[pos_index][..., c],
                                 t_p_yx_translations[time_index][pos_index] - t_p_zyx_residual_shifts[time_index][pos_index][1:],
-                            background=np.mean(backgrounds[c]), mode='float') for c in xy_register_channels], axis=3)
+                            background=np.mean(backgrounds[c]), mode='float') for c in range(p_zyxc_stacks[0].shape[3])], axis=3)
+
                 registered_stack = np.zeros([shifted_z_size + zyxc_registered_stack.shape[0], zyxc_registered_stack.shape[1],
                                              zyxc_registered_stack.shape[2], zyxc_registered_stack.shape[3]])
                 registered_stack[t_p_z_positive_z_offset[time_index, pos_index]:
@@ -257,7 +258,13 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                                     zyxc_registered_stack.shape[0]] = zyxc_registered_stack
                 time_series.append(registered_stack)
 
-            p_zyxc_preprocessed_stacks[pos_index] = np.mean(time_series, axis=0)
+            zyxc_preprocessed_stack = np.mean(time_series, axis=0)
+            #take min of autofluor channels, and use the full parts of others
+            zyxc_preprocessed_stack = np.stack([np.min([zyxc_preprocessed_stack[..., c] for c in af_register_channels], axis=0)] + 
+                                        [zyxc_preprocessed_stack[..., c] for c in other_register_channels], axis=3)
+
+            p_zyxc_preprocessed_stacks[pos_index] = zyxc_preprocessed_stack
+
 
 
         if stitch_method == 'optimize':
@@ -269,7 +276,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                               inter_stack_channels=None,
                                               pixel_size_z=magellan.pixel_size_z_um,
                                               pixel_size_xy=magellan.pixel_size_xy_um,
-                                              stitch_z_filters=stitch_z_filters,
                                               stitch_downsample_factor_xy=stitch_downsample_factor_xy,
                                               stitch_regularization_xy=0,
                                               stitch_regularization_z=0)
@@ -283,7 +289,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             #                                               pixel_size_xy=magellan.pixel_size_xy_um,
             #                                               inter_stack_channels=z_register_channels + xy_register_channels,
             #                                               stitch_downsample_factor_xy=stitch_downsample_factor_xy,
-            #                                               stitch_z_filters=stitch_z_filters,
             #                                               stitch_regularization_xy=stitch_regularization_xy,
             #                                               stitch_regularization_z=stitch_regularization_z * 6 / metadata['num_positions'],
             #                                               invert_z='invert' in suffix)
@@ -307,13 +312,13 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
     #merge stitch and other one
     #TODO: do you need to invert z on the stitch one?
-    t_p_zyx_translations = t_p_zyx_residual_shifts + p_zyx_stitch
+    t_p_zyx_translations = np.round(t_p_zyx_residual_shifts + p_zyx_stitch).astype(np.int)
 
     if not export:
         return
 
     #make all global shifts positive
-    t_zyx_global_shifts -= np.min(t_zyx_global_shifts, axis=0)
+    t_zyx_global_shifts -= np.round(np.min(t_zyx_global_shifts, axis=0))
 
     #compute the size of teh stiched image accounting for movements in z
     stitched_image_size = [
