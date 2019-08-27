@@ -175,16 +175,33 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                     for pos_index in p_zyxc_stacks:
                         zyxc_stack = p_zyxc_stacks[pos_index]
                         if np.any(nonempty_pixels[pos_index]):
-                            reg_stack = np.min(np.stack([apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
-                                                   background=np.mean(backgrounds), mode='float')
-                                                   for c in af_register_channels], axis=3), axis=3)
-                            if pos_index not in last_reg_stacks:
+                            # reg_stack = np.min(np.stack([apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
+                            #                        background=np.mean(backgrounds), mode='float')
+                            #                        for c in af_register_channels], axis=3), axis=3)
+                            # if pos_index not in last_reg_stacks:
+                            #     pos_shift_list[-1][pos_index] = np.array([0, 0, 0])  # init with shift of 0p
+                            #     last_reg_stacks[pos_index] = reg_stack
+                            # else:
+                            #     shifts = x_corr_register_3D(last_reg_stacks[pos_index], reg_stack, np.array(reg_stack.shape) // 2)
+                            #     pos_shift_list[-1][pos_index] = shifts
+                            #     last_reg_stacks[pos_index] = reg_stack
+
+                            #TODO: bring back formal stitch z param if helpful
+                            reg_stack_xy = np.min(np.stack(
+                                [apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
+                                                              background=np.mean(backgrounds), mode='float')
+                                 for c in af_register_channels], axis=3), axis=3)
+                            reg_stack_z = np.min(np.stack(
+                                [apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
+                                                                background=np.mean(backgrounds), mode='float')
+                                 for c in [0]], axis=3), axis=3)
+                            if pos_index not in reg_stack_xy:
+                                last_reg_stacks[pos_index] = (reg_stack_xy, reg_stack_z)
                                 pos_shift_list[-1][pos_index] = np.array([0, 0, 0])  # init with shift of 0p
-                                last_reg_stacks[pos_index] = reg_stack
                             else:
-                                shifts = x_corr_register_3D(last_reg_stacks[pos_index], reg_stack, np.array(reg_stack.shape) // 2)
+                                shifts = anisotropic_x_corr_register_3D(last_reg_stacks[pos_index][0], reg_stack_xy,
+                                                                        last_reg_stacks[pos_index][1], reg_stack_z)
                                 pos_shift_list[-1][pos_index] = shifts
-                                last_reg_stacks[pos_index] = reg_stack
 
         if stack:
             t_p_yx_translations = np.round(np.stack(p_yx_series)).astype(np.int)
@@ -313,6 +330,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     #merge stitch and other one
     #TODO: do you need to invert z on the stitch one?
     t_p_zyx_translations = np.round(t_p_zyx_residual_shifts + p_zyx_stitch).astype(np.int)
+    t_p_zyx_translations[:, :, 0] -= np.min(t_p_zyx_translations[:, :, 0])
 
     if not export:
         return
@@ -328,7 +346,9 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         (1 + np.ptp(metadata['row_col_coords'][:, 1], axis=0)) * (
                     metadata['tile_shape'][1] - metadata['tile_overlaps'][1])]
     #add in time point to timepoint registrations for the final imaris size
-    imaris_size = np.array(stitched_image_size) + np.max(t_zyx_global_shifts, axis=0).astype(np.int)
+    imaris_size = np.array(stitched_image_size) + np.max(t_zyx_global_shifts, axis=0).astype(np.int) + \
+                    np.max(t_p_zyx_translations[:, :, 0]).astype(np.int)
+
 
 
 
