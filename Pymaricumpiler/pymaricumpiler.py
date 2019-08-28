@@ -202,6 +202,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                 shifts = anisotropic_x_corr_register_3D(last_reg_stacks[pos_index][0], reg_stack_xy,
                                                                         last_reg_stacks[pos_index][1], reg_stack_z)
                                 pos_shift_list[-1][pos_index] = shifts
+                                last_reg_stacks[pos_index] = (reg_stack_xy, reg_stack_z)
 
         if stack:
             t_p_yx_translations = np.round(np.stack(p_yx_series)).astype(np.int)
