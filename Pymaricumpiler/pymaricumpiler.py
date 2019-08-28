@@ -195,7 +195,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                 [apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
                                                                 background=np.mean(backgrounds), mode='float')
                                  for c in [0]], axis=3), axis=3)
-                            if pos_index not in reg_stack_xy:
+                            if pos_index not in last_reg_stacks:
                                 last_reg_stacks[pos_index] = (reg_stack_xy, reg_stack_z)
                                 pos_shift_list[-1][pos_index] = np.array([0, 0, 0])  # init with shift of 0p
                             else:
