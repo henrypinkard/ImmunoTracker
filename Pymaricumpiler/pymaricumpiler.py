@@ -71,7 +71,7 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, max_tp=None, min_tp=None,
             intra_stack_registration_channels=[1, 2, 3, 4, 5], stack_learning_rate=15, stack_reg=0,
-            af_register_channels=[2, 5], other_register_channels=[0, 5],
+            af_register_channels=[2, 5], other_register_channels=[0, 5], z_register_channels = [0],
             stitch_method='optimize',
             stitch_regularization_xy=0, stitch_regularization_z=0, stitch_downsample_factor_xy=3,
             param_cache_dir='./', log_dir='./',
@@ -186,7 +186,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                             #     pos_shift_list[-1][pos_index] = shifts
                             #     last_reg_stacks[pos_index] = reg_stack
 
-                            #TODO: bring back formal stitch z param if helpful
                             reg_stack_xy = np.min(np.stack(
                                 [apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
                                                               background=np.mean(backgrounds), mode='float')
@@ -194,7 +193,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                             reg_stack_z = np.min(np.stack(
                                 [apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
                                                                 background=np.mean(backgrounds), mode='float')
-                                 for c in [0]], axis=3), axis=3)
+                                 for c in z_register_channels], axis=3), axis=3)
                             if pos_index not in last_reg_stacks:
                                 last_reg_stacks[pos_index] = (reg_stack_xy, reg_stack_z)
                                 pos_shift_list[-1][pos_index] = np.array([0, 0, 0])  # init with shift of 0p
@@ -299,18 +298,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                               stitch_regularization_z=0)
 
 
-            # p_zyx_stitch = optimize_timepoint_stitching(tp0_zyxc_stacks, nonempty_pixels,
-            #                                               metadata['row_col_coords'], metadata['tile_overlaps'],
-            #                                               p_yx_translations=p_yx_translations,
-            #                                               p_zyx_intitial=tp0_p_zyx_residual_shifts,
-            #                                               pixel_size_z=magellan.pixel_size_z_um,
-            #                                               pixel_size_xy=magellan.pixel_size_xy_um,
-            #                                               inter_stack_channels=z_register_channels + xy_register_channels,
-            #                                               stitch_downsample_factor_xy=stitch_downsample_factor_xy,
-            #                                               stitch_regularization_xy=stitch_regularization_xy,
-            #                                               stitch_regularization_z=stitch_regularization_z * 6 / metadata['num_positions'],
-            #                                               invert_z='invert' in suffix)
-
         # elif 'fourier' in stitch_method:
         #     if backgrounds is None:
         #         backgrounds = estimate_background(tp0_zyxc_stacks, nonempty_pixels)
@@ -329,7 +316,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
 
     #merge stitch and other one
-    #TODO: do you need to invert z on the stitch one?
     t_p_zyx_translations = np.round(t_p_zyx_residual_shifts + p_zyx_stitch).astype(np.int)
     t_p_zyx_translations[:, :, 0] -= np.min(t_p_zyx_translations[:, :, 0])
 
