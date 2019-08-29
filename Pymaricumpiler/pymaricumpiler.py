@@ -76,7 +76,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             stitch_regularization_xy=0, stitch_regularization_z=0, stitch_downsample_factor_xy=3,
             param_cache_dir='./', log_dir='./',
             reverse_rank_filter=False, suffix='',
-            stitch=True, stack=True, time_reg=True, export=True):
+            stitch=True, stack=True, time_reg=True, export=True, load_params=True):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
     :param magellan_dir: directory of magellan data to be converted
@@ -126,7 +126,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     t_p_zyx_residual_shifts = np.zeros((max_tp - min_tp, metadata['num_positions'], 3), dtype=np.int)
     # load time reg params if possible
     saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, output_basename + '_time_reg')
-    if os.path.isfile(saved_name):
+    if os.path.isfile(saved_name) and load_params:
         with np.load(saved_name) as loaded:
             if 't_zyx_global_shifts' in loaded and 't_p_zyx_residual_shifts' in loaded:
                 print('Loaded params from: ' + saved_name)
@@ -141,7 +141,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         # load parameters from saved file if preset
         param_cache_name = output_basename + '_tp{}'.format(frame_index)
         saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)
-        if os.path.isfile(saved_name):
+        if os.path.isfile(saved_name) and load_params:
             with np.load(saved_name) as loaded:
                 if 'p_yx_translations' in loaded:
                     print('Loaded params from: ' + saved_name)
@@ -236,7 +236,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
     param_cache_name = output_basename
     saved_name = '{}{}_optimized_stitch_params.npz'.format(param_cache_dir, param_cache_name)
-    if os.path.isfile(saved_name):
+    if os.path.isfile(saved_name) and load_params:
         with np.load(saved_name) as loaded:
             if 'p_zyx_stitch' in loaded:
                 print('Loaded params from: ' + saved_name)
