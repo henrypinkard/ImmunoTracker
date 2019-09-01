@@ -24,8 +24,8 @@ parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
 
-#print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-#args = parser.parse_args(['--ids', '49', '--export', '--suffix', 'stitch_all_at_once_ch14af05other'])
+print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
+args = parser.parse_args(['--ids', '46', '--export', '--suffix', 'test_z_bug'])
 
 
 print('Got arguments:')
@@ -75,8 +75,8 @@ for ID in ids:
     print('\nconverting ID: {} \t {}\n'.format(ID, magellan_dir))
     # isr_ch = [int(v) for v in get_value(ID, 'ISR ch').split('+')]
 
-    af_reg_channels= [int(v) for v in get_value(ID, 'af reg channels').split('+')]
-    other_reg_channels= [int(v) for v in get_value(ID, 'other reg channels').split('+')]
+    af_reg_channels = [int(v) for v in get_value(ID, 'af reg channels').split('+')]
+    other_reg_channels = [int(v) for v in get_value(ID, 'other reg channels').split('+')]
 
     # af_reg_channels = [1, 4]
     # other_reg_channels = [0, 5]

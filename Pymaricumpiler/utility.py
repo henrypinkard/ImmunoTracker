@@ -2,7 +2,7 @@ import numpy as np
 from scipy import interpolate
 
 
-def anisotropic_x_corr_register_3D(volume1_xy, volume2_xy, volume1_z, volume2_z, max_shift=None):
+def anisotropic_x_corr_register_3D(volume1_xy, volume2_xy, volume1_z, volume2_z, max_shift=None, max_shift_z=10):
     """
     Cross correlation 3d register with different channels for XY and Z
     :param volume1:
@@ -12,6 +12,7 @@ def anisotropic_x_corr_register_3D(volume1_xy, volume2_xy, volume1_z, volume2_z,
     """
     if max_shift is None:
         max_shift = np.array(volume1_xy.shape) // 2
+        max_shift[0] = max_shift_z
     src_ft = np.fft.fftn(volume1_xy)
     target_ft = np.fft.fftn(volume2_xy)
     cross_corr = np.fft.ifftn((src_ft * target_ft.conj()))
