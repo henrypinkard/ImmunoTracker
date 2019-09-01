@@ -12,6 +12,7 @@ parser.add_argument('--stack', action='store_true')
 parser.add_argument('--stitch', action='store_true')
 parser.add_argument('--export', action='store_true')
 parser.add_argument('--time_reg', action='store_true')
+parser.add_argument('--no_param_load', action='store_true')
 parser.add_argument('--stack_lr', type=float, default=1.0)
 parser.add_argument('--stack_reg', type=float, default=1e-2)
 parser.add_argument('--stitch_reg_xy', type=float, default=0.004)
@@ -23,8 +24,8 @@ parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
 
-# print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-# args = parser.parse_args([ '--ids', '49', '--export', '--suffix', 'stitch_all_at_once_ch14af05other'])
+#print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
+#args = parser.parse_args(['--ids', '49', '--export', '--suffix', 'stitch_all_at_once_ch14af05other'])
 
 
 print('Got arguments:')
@@ -72,7 +73,13 @@ for ID in ids:
     magellan_dir = raw_data_dir + data_path
 
     print('\nconverting ID: {} \t {}\n'.format(ID, magellan_dir))
-    isr_ch = [int(v) for v in get_value(ID, 'ISR ch').split('+')]
+    # isr_ch = [int(v) for v in get_value(ID, 'ISR ch').split('+')]
+
+    af_reg_channels= [int(v) for v in get_value(ID, 'af reg channels').split('+')]
+    other_reg_channels= [int(v) for v in get_value(ID, 'other reg channels').split('+')]
+
+    # af_reg_channels = [1, 4]
+    # other_reg_channels = [0, 5]
 
     if (args.max_tp != -1):
         print('capping max_tp at: {}'.format(args.max_tp))
@@ -86,8 +93,6 @@ for ID in ids:
     else:
         min_tp = 0
 
-    af_reg_channels = [1, 4]
-    other_reg_channels = [0, 5]
 
     convert(magellan_dir,
             input_filter_sigma=2,
@@ -104,6 +109,7 @@ for ID in ids:
             stack_reg=args.stack_reg,
             af_register_channels=af_reg_channels, 
             other_register_channels=other_reg_channels,
+            z_register_channels=[0],
             stitch_method='optimize',
             stitch_downsample_factor_xy=2,
             stitch_regularization_xy=args.stitch_reg_xy,
@@ -111,4 +117,5 @@ for ID in ids:
             stack=args.stack and int(get_value(ID, 'Explant')) != 1,
             stitch=args.stitch,
             time_reg=args.time_reg,
-            export=args.export)
+            export=args.export,
+            load_params=not args.no_param_load)
