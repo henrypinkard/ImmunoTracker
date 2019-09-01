@@ -253,7 +253,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             backgrounds = estimate_background(t_p_zyxc_stacks[0], t_p_nonempty_pixels[0])
 
         total_shifts = -t_zyx_global_shifts[:, None,:] - t_p_zyx_residual_shifts
-        #TODO: probably want to try flipping the sign of this and visualizing result
         t_p_z_positive_z_offset = total_shifts[:, :, 0] - np.min(total_shifts[:, :, 0])
         shifted_z_size = np.ptp(np.ravel(t_p_z_positive_z_offset)) + 1
 
@@ -280,7 +279,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                                         [zyxc_preprocessed_stack[..., c] for c in other_register_channels], axis=3)
 
             p_zyxc_preprocessed_stacks[pos_index] = zyxc_preprocessed_stack
-
 
 
         if stitch_method == 'optimize':
