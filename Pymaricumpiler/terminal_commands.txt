@@ -65,22 +65,48 @@ for idx in 1; do sbatch stack_reg.sh "python3 /opt/LymphoSight/Pymaricumpiler/da
 
 
 
+timelapse priority
+39 36 45 13 14 16 18 19 4 5 49 52 54 41 43 57 59 60 9 10 32
+
+39 13 18 5  54 57 9 59 10, 
+36 14 19 49 41 32  
+45 16 4        52         
+
+60, 43
+
+
 
 whole LN priority:
-25 46 47 48 51 53 31 37 38 34 35 21 1 7 44 40 42 56 58 12 15 17 3 8
-timelapse priority
-39 36 45 13 14 16 18 19 4 5 49 52 54 41 43 57 59 60 9 10
-
-39 13 18 5 54 57 9
-36 14 19 49 41 59 10
-45 16 4 52 43 60
+25 46 47 48 51 53 31 37 38 34 35 21 1 7 44 40 42 56 58 12 15 17 8
 
 
-singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --export --ids 39 13 18 5 54 57 9 --suffix _corrected
+python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --export --ids 39 13 18 5 54 57 9 --suffix _corrected
 
-singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --export --ids 36 14 19 49 41 59 10 --suffix _corrected
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --export --ids 59 --suffix _corrected
 
-singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --export --ids 45 16 4 52 43 60 --suffix _corrected
+python3 data_conversion.py --stitch --export --ids 49 --suffix _global_stitch_1tp
+
+python3 data_conversion.py --stitch --export --ids 49 --suffix _global_stitch_1tp_invert_z
+
+
+
+Datasets to convert for analysis
+timelapses
+49
+52 54 45 36 32 16
+
+Whole LN timelapses
+46 47 25 31 34 21
+
+static LNs
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 52 54 --suffix _corrected_new
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 45 36 --suffix _corrected_new
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 32 16 --suffix _corrected_new
+
+
 
 
 
