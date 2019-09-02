@@ -220,7 +220,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         #negate so it works properly with stitching code
         t_p_zyx_fourier_translations[:, :, 0] = -t_p_zyx_fourier_translations[:, :, 0]
         #take median shift at each timepoint as the global shift
-        #TODO: make this median to fix global shifts?
         t_zyx_global_shifts = np.round(np.mean(t_p_zyx_fourier_translations, axis=1)).astype(np.int)
         #include the residual as a starting point for the stitching
         t_p_zyx_residual_shifts = np.round((t_p_zyx_fourier_translations - t_zyx_global_shifts[:, None, :])).astype(np.int)
