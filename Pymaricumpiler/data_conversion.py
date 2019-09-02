@@ -26,7 +26,7 @@ args = parser.parse_args()
 
 if len(sys.argv) == 1:
     print('OVERRIDING THE DEFULAT ARGS!!!! ARE YOU SURE YOU WNAT THIS????\n\nHENRY!!\nARE YOU SURE?!?!')
-    args = parser.parse_args(['--ids', '46', '--time_reg', '--export', '--suffix', 'test_z_bug'])
+    args = parser.parse_args(['--ids', '46', '--export', '--suffix', 'test_z_bug'])
 
 
 print('Got arguments:')
