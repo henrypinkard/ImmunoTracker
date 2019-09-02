@@ -172,9 +172,11 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                     #apply yx_translations and save the result on registration channels
                     pos_shift_list.append({})
                     print('applying yx_translations and registering stacks')
-                    for pos_index in p_zyxc_stacks:
+                    for index, pos_index in enumerate(p_zyxc_stacks.keys()):
                         zyxc_stack = p_zyxc_stacks[pos_index]
                         if np.any(nonempty_pixels[pos_index]):
+                            yx_translations = p_yx_translations[index]
+
                             # reg_stack = np.min(np.stack([apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
                             #                        background=np.mean(backgrounds), mode='float')
                             #                        for c in af_register_channels], axis=3), axis=3)
@@ -185,13 +187,12 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                             #     shifts = x_corr_register_3D(last_reg_stacks[pos_index], reg_stack, np.array(reg_stack.shape) // 2)
                             #     pos_shift_list[-1][pos_index] = shifts
                             #     last_reg_stacks[pos_index] = reg_stack
-
                             reg_stack_xy = np.min(np.stack(
-                                [apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
+                                [apply_intra_stack_registration(zyxc_stack[..., c], yx_translations,
                                                               background=np.mean(backgrounds), mode='float')
                                  for c in af_register_channels], axis=3), axis=3)
                             reg_stack_z = np.min(np.stack(
-                                [apply_intra_stack_registration(zyxc_stack[..., c], p_yx_translations[pos_index],
+                                [apply_intra_stack_registration(zyxc_stack[..., c], yx_translations,
                                                                 background=np.mean(backgrounds), mode='float')
                                  for c in z_register_channels], axis=3), axis=3)
                             if pos_index not in last_reg_stacks:
@@ -220,6 +221,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         #negate so it works properly with stitching code
         t_p_zyx_fourier_translations[:, :, 0] = -t_p_zyx_fourier_translations[:, :, 0]
         #take median shift at each timepoint as the global shift
+        #TODO: make this median to fix global shifts?
         t_zyx_global_shifts = np.round(np.mean(t_p_zyx_fourier_translations, axis=1)).astype(np.int)
         #include the residual as a starting point for the stitching
         t_p_zyx_residual_shifts = np.round((t_p_zyx_fourier_translations - t_zyx_global_shifts[:, None, :])).astype(np.int)
@@ -258,19 +260,19 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         shifted_z_size = np.ptp(np.ravel(t_p_z_positive_z_offset)) + 1
 
         p_zyxc_preprocessed_stacks = {}
-        for pos_index in t_p_zyxc_stacks[0].keys():
+        for index, pos_index in enumerate(t_p_zyxc_stacks[0].keys()):
             time_series = []
             for time_index in range(len(t_p_zyxc_stacks)):
                 p_zyxc_stacks = t_p_zyxc_stacks[time_index]
                 #apply yx translation and get only the registration channels
                 zyxc_registered_stack = np.stack([apply_intra_stack_registration(p_zyxc_stacks[pos_index][..., c],
-                                t_p_yx_translations[time_index][pos_index] - t_p_zyx_residual_shifts[time_index][pos_index][1:],
+                                t_p_yx_translations[time_index][index] - t_p_zyx_residual_shifts[time_index][index][1:],
                             background=np.mean(backgrounds[c]), mode='float') for c in range(p_zyxc_stacks[0].shape[3])], axis=3)
 
                 registered_stack = np.zeros([shifted_z_size + zyxc_registered_stack.shape[0], zyxc_registered_stack.shape[1],
                                              zyxc_registered_stack.shape[2], zyxc_registered_stack.shape[3]])
-                registered_stack[t_p_z_positive_z_offset[time_index, pos_index]:
-                                 t_p_z_positive_z_offset[time_index, pos_index] +
+                registered_stack[t_p_z_positive_z_offset[time_index, index]:
+                                 t_p_z_positive_z_offset[time_index, index] +
                                                     zyxc_registered_stack.shape[0]] = zyxc_registered_stack
                 time_series.append(registered_stack)
 

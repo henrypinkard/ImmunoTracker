@@ -108,8 +108,8 @@ def inter_stack_stitch_graph(p_yx_translations, p_zyx_translations_initial, p_zy
     p_zyx_translations_um = tf.reshape(p_zyx_translations_flat_um, [-1, 3]) #put into p_zyx shape
     p_zyx_translations = p_zyx_translations_um / tf.tile([[pixel_size_z, pixel_size_xy, pixel_size_xy]], (len(row_col_coords), 1))
     translated_stacks = [_interpolate_stack(p_zyxc_stacks[pos_index], fill_val=fill_val,
-                    zyx_translations=p_zyx_translations[pos_index] + p_zyx_translations_initial[pos_index],
-                    yx_translations=p_yx_translations[pos_index]) for pos_index in p_zyxc_stacks.keys()]
+                    zyx_translations=p_zyx_translations[index] + p_zyx_translations_initial[index],
+                    yx_translations=p_yx_translations[index]) for index, pos_index in enumerate(p_zyxc_stacks.keys())]
 
     # make sure z translations are all positive
     overlap_losses = []
@@ -302,7 +302,7 @@ def optimize_timepoint_stitching(p_zyxc_stacks, row_col_coords, overlap_shape, p
     p_zyxc_stacks_stitch = {}
     # downsample, mean subtract, remove unused channels
     pixel_size_xy = pixel_size_xy * stitch_downsample_factor_xy
-    for pos_index in p_zyxc_stacks.keys():
+    for index, pos_index in enumerate(p_zyxc_stacks.keys()):
         if inter_stack_channels is None:
             stack = p_zyxc_stacks[pos_index]
         else:
@@ -315,7 +315,7 @@ def optimize_timepoint_stitching(p_zyxc_stacks, row_col_coords, overlap_shape, p
                 stack[z, :, :, c] = ndi.gaussian_filter(stack[z, :, :, c], 2 * stitch_downsample_factor_xy / 6.0)
         p_zyxc_stacks_stitch[pos_index] = stack[:, ::stitch_downsample_factor_xy, ::stitch_downsample_factor_xy, :]
 
-        p_zyx_initial_downsampled[pos_index, 1:] = p_zyx_initial_downsampled[pos_index, 1:] / stitch_downsample_factor_xy
+        p_zyx_initial_downsampled[index, 1:] = p_zyx_initial_downsampled[index, 1:] / stitch_downsample_factor_xy
 
         # # filter z axis
         # for channel_index, z_sigma in enumerate(stitch_z_filters):
