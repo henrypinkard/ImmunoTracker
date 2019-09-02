@@ -252,7 +252,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             # get backgrounds from first time point
             backgrounds = estimate_background(t_p_zyxc_stacks[0], t_p_nonempty_pixels[0])
 
-        total_shifts = -t_zyx_global_shifts[:, None,:] - t_p_zyx_residual_shifts
+        t_zyx_global_shifts[:, None, 0] = -t_zyx_global_shifts[:, None, 0]
+        total_shifts = t_zyx_global_shifts[:, None, :] - t_p_zyx_residual_shifts
         t_p_z_positive_z_offset = total_shifts[:, :, 0] - np.min(total_shifts[:, :, 0])
         shifted_z_size = np.ptp(np.ravel(t_p_z_positive_z_offset)) + 1
 
