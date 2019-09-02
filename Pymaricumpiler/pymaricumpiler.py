@@ -118,7 +118,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     #iterate through all time points to compute all needed stitching and registration params
     backgrounds = None
     p_yx_series = []
-    p_zyx_series = []
     last_reg_stacks = {}
 
     #initilize to 0 and load from file if possible
@@ -329,14 +328,13 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
     #compute the size of teh stiched image accounting for movements in z
     stitched_image_size = [
-        np.ptp(np.reshape(t_p_zyx_translations, [-1, 3])[0]) + metadata['max_z_index'] - metadata['min_z_index'] + 1,
+        np.ptp(np.reshape(t_p_zyx_translations, [-1, 3])[:, 0]) + metadata['max_z_index'] - metadata['min_z_index'] + 1,
         (1 + np.ptp(metadata['row_col_coords'][:, 0], axis=0)) * (
                     metadata['tile_shape'][0] - metadata['tile_overlaps'][0]),
         (1 + np.ptp(metadata['row_col_coords'][:, 1], axis=0)) * (
                     metadata['tile_shape'][1] - metadata['tile_overlaps'][1])]
     #add in time point to timepoint registrations for the final imaris size
-    imaris_size = np.array(stitched_image_size) + np.max(t_zyx_global_shifts, axis=0).astype(np.int) + \
-                    np.max(t_p_zyx_translations[:, :, 0]).astype(np.int)
+    imaris_size = np.array(stitched_image_size) + np.max(t_zyx_global_shifts, axis=0).astype(np.int)
 
 
     output_basename = output_basename + suffix
