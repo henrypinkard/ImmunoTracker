@@ -217,8 +217,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
         #Make all shifts relative to a timepoint in the middle? because the timelapses seem to stabilize by then
         t_p_zyx_fourier_translations = t_p_zyx_fourier_translations - t_p_zyx_fourier_translations[t_p_zyx_fourier_translations.shape[0] // 2, :, :]
-        #negate so it works properly with stitching code
-        t_p_zyx_fourier_translations[:, :, 0] = -t_p_zyx_fourier_translations[:, :, 0]
+
         #take median shift at each timepoint as the global shift
         t_zyx_global_shifts = np.round(np.median(t_p_zyx_fourier_translations, axis=1)).astype(np.int)
         #the leftover encodes timepoint specifc shifts of positions relative to one another
@@ -228,9 +227,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         #pcache these values so they don't need to be recomputed
         np.savez('{}{}_optimized_params'.format(param_cache_dir, output_basename + '_time_reg'),
                  **{'t_zyx_global_shifts': t_zyx_global_shifts, 't_p_zyx_residual_shifts': t_p_zyx_residual_shifts})
-
-        #TODO: remove this
-        t_p_zyx_residual_shifts = np.zeros_like(t_p_zyx_residual_shifts)
 
     ##### Stitching loop #####
     #default to 0 if not loading or computing
@@ -256,8 +252,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             # get backgrounds from first time point
             backgrounds = estimate_background(t_p_zyxc_stacks[0], t_p_nonempty_pixels[0])
 
-        t_zyx_global_shifts[:, None, 0] = -t_zyx_global_shifts[:, None, 0]
-        total_shifts = t_zyx_global_shifts[:, None, :] - t_p_zyx_residual_shifts
+        total_shifts = t_zyx_global_shifts[:, None, :] + t_p_zyx_residual_shifts
         t_p_z_positive_z_offset = total_shifts[:, :, 0] - np.min(total_shifts[:, :, 0])
         shifted_z_size = np.ptp(np.ravel(t_p_z_positive_z_offset)) + 1
 
@@ -317,17 +312,17 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         np.savez('{}{}_optimized_stitch_params'.format(param_cache_dir, output_basename), **{'p_zyx_stitch': p_zyx_stitch})
 
 
-    #merge stitch and other one
-    t_p_zyx_translations = np.round(t_p_zyx_residual_shifts + p_zyx_stitch).astype(np.int)
-    t_p_zyx_translations[:, :, 0] -= np.min(t_p_zyx_translations[:, :, 0])
 
     if not export:
         return
 
-    #make all global shifts positive
+    #merge stitching zyx translations and the ones derived from timepoint cross correlations
+    t_p_zyx_translations = np.round(t_p_zyx_residual_shifts + p_zyx_stitch).astype(np.int)
+    #make them all nonnegative ints
+    t_p_zyx_translations[:, :, 0] -= np.min(t_p_zyx_translations[:, :, 0])
 
+    #make all global shifts nonnegative ints
     t_zyx_global_shifts -= np.min(t_zyx_global_shifts, axis=0)
-    t_zyx_global_shifts = np.round(t_zyx_global_shifts).astype(np.int)
 
     #compute the size of teh stiched image accounting for movements in z
     stitched_image_size = [
