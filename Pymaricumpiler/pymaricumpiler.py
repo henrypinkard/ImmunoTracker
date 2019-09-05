@@ -316,6 +316,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     if not export:
         return
 
+    t_p_zyx_residual_shifts = -np.copy(t_p_zyx_residual_shifts)
     #merge stitching zyx translations and the ones derived from timepoint cross correlations
     t_p_zyx_translations = np.round(t_p_zyx_residual_shifts + p_zyx_stitch).astype(np.int)
     #make them all nonnegative ints

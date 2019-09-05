@@ -76,11 +76,12 @@ for ID in ids:
     print('\nconverting ID: {} \t {}\n'.format(ID, magellan_dir))
     # isr_ch = [int(v) for v in get_value(ID, 'ISR ch').split('+')]
 
-    af_reg_channels = [int(v) for v in get_value(ID, 'af reg channels').split('+')]
-    other_reg_channels = [int(v) for v in get_value(ID, 'other reg channels').split('+')]
+    # af_reg_channels = [int(v) for v in get_value(ID, 'af reg channels').split('+')]
+    # other_reg_channels = [int(v) for v in get_value(ID, 'other reg channels').split('+')]
 
-    # af_reg_channels = [1, 4]
-    # other_reg_channels = [0, 5]
+    af_reg_channels = [5]
+    other_reg_channels = [0, 5]
+    z_register_channels = [1, 4]
 
     if (args.max_tp != -1):
         print('capping max_tp at: {}'.format(args.max_tp))
@@ -110,7 +111,7 @@ for ID in ids:
             stack_reg=args.stack_reg,
             af_register_channels=af_reg_channels, 
             other_register_channels=other_reg_channels,
-            z_register_channels=[0],
+            z_register_channels=z_register_channels,
             stitch_method='optimize',
             stitch_downsample_factor_xy=2,
             stitch_regularization_xy=args.stitch_reg_xy,
