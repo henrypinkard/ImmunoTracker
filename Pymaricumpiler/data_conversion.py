@@ -79,9 +79,9 @@ for ID in ids:
     # af_reg_channels = [int(v) for v in get_value(ID, 'af reg channels').split('+')]
     # other_reg_channels = [int(v) for v in get_value(ID, 'other reg channels').split('+')]
 
-    af_reg_channels = [5]
+    af_reg_channels = [1, 4]
     other_reg_channels = [0, 5]
-    z_register_channels = [1, 4]
+    z_register_channels = [0]
 
     if (args.max_tp != -1):
         print('capping max_tp at: {}'.format(args.max_tp))

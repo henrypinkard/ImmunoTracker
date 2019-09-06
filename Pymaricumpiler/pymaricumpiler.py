@@ -188,12 +188,12 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                             #     last_reg_stacks[pos_index] = reg_stack
                             reg_stack_xy = np.min(np.stack(
                                 [apply_intra_stack_registration(zyxc_stack[..., c], yx_translations,
-                                                              background=np.mean(backgrounds), mode='float')
-                                 for c in af_register_channels], axis=3), axis=3)
+                                                              background=np.mean(np.mean([backgrounds[chan] for chan in af_register_channels])), 
+                                                              mode='float') for c in af_register_channels], axis=3), axis=3)
                             reg_stack_z = np.min(np.stack(
                                 [apply_intra_stack_registration(zyxc_stack[..., c], yx_translations,
-                                                                background=np.mean(backgrounds), mode='float')
-                                 for c in z_register_channels], axis=3), axis=3)
+                                                                background=np.mean([backgrounds[chan] for chan in z_register_channels]),
+                                                                mode='float') for c in z_register_channels], axis=3), axis=3)
                             if pos_index not in last_reg_stacks:
                                 last_reg_stacks[pos_index] = (reg_stack_xy, reg_stack_z)
                                 pos_shift_list[-1][pos_index] = np.array([0, 0, 0])  # init with shift of 0p
@@ -210,8 +210,9 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
         #compile fourier translations into useful form
         t_p_zyx_fourier_translations = np.zeros((max_tp - min_tp, len(p_zyxc_stacks.keys()), 3))
         for tp, pos_shifts in enumerate(pos_shift_list):
-            for pos_index in p_zyxc_stacks.keys(): #iterate through all positions
-                t_p_zyx_fourier_translations[tp, pos_index] = pos_shifts[pos_index]
+            for index, pos_index in enumerate(p_zyxc_stacks.keys()): #iterate through all positions
+                if pos_index in pos_shifts.keys():
+                    t_p_zyx_fourier_translations[tp, index] = pos_shifts[pos_index]
         #compute timepoint relative shifts to cumulative shifts
         t_p_zyx_fourier_translations = np.cumsum(t_p_zyx_fourier_translations, axis=0)
 
