@@ -266,7 +266,7 @@ def stitch_single_channel(p_zyxc_stacks, p_zyx_translations, p_yx_translations, 
 
                 #add stuff from neighboring tile into strip if theres even anything to add
                 if np.ptp(axis0_neighbor_tile_coords) != 0 and np.ptp(axis1_neighbor_tile_coords) != 0:
-                    strip_destination[:, :] = p_zyxc_stacks[neighbor_p_index][neighbor_stack_z,
+                    strip_destination[:, :] = p_zyxc_stacks[list(p_zyxc_stacks.keys())[neighbor_p_index]][neighbor_stack_z,
                                         axis0_neighbor_tile_coords[0]:axis0_neighbor_tile_coords[1],
                                         axis1_neighbor_tile_coords[0]:axis1_neighbor_tile_coords[1], channel_index]
 
