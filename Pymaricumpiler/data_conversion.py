@@ -13,6 +13,7 @@ parser.add_argument('--stitch', action='store_true')
 parser.add_argument('--export', action='store_true')
 parser.add_argument('--time_reg', action='store_true')
 parser.add_argument('--no_param_load', action='store_true')
+parser.add_argument('--rereg_z', action='store_true')
 parser.add_argument('--stack_lr', type=float, default=1.0)
 parser.add_argument('--stack_reg', type=float, default=1e-2)
 parser.add_argument('--stitch_reg_xy', type=float, default=0.004)
@@ -120,4 +121,5 @@ for ID in ids:
             stitch=args.stitch,
             time_reg=args.time_reg,
             export=args.export,
+            rereg_z=args.rereg_z,
             load_params=not args.no_param_load)

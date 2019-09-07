@@ -53,7 +53,8 @@ def stitch_register_imaris_write(directory, name, imaris_size, n_time_points, ma
                 #                          shape=tuple(imaris_size), mode='w+')
                 # else:
                 tp_registered = np.zeros(imaris_size.astype(np.int), dtype=np.uint8 if int(byte_depth) == 1 else np.uint16)
-                tp_registered[abs_timepoint_registrations[time_index, 0]:abs_timepoint_registrations[time_index, 0] + stitched.shape[0],
+                center_shift_z = np.median(t_p_zyx_translations[time_index, :, 0])
+                tp_registered[center_shift_z + abs_timepoint_registrations[time_index, 0]:center_shift_z + abs_timepoint_registrations[time_index, 0] + stitched.shape[0],
                         abs_timepoint_registrations[time_index, 1]:abs_timepoint_registrations[time_index, 1] + stitched.shape[1],
                        abs_timepoint_registrations[time_index, 2]:abs_timepoint_registrations[time_index, 2] + stitched.shape[2]] = stitched
                 print('writing to Imaris channel {}'.format(channel_index))
