@@ -21,7 +21,7 @@ from stitcher import compute_inter_stack_registrations
 from utility import x_corr_register_3D, anisotropic_x_corr_register_3D
 from imaris_writing import stitch_register_imaris_write
 from data_reading import open_magellan, read_raw_data
-from optimization_stitcher import optimize_timepoint_stacks, optimize_timepoint_stitching
+from optimization_stitcher import optimize_timepoint_stacks, optimize_inter_stack_stitching, optimize_z_over_time
 from dual_logging import DualLogger
 import sys
 
@@ -76,7 +76,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             stitch_regularization_xy=0, stitch_regularization_z=0, stitch_downsample_factor_xy=3,
             param_cache_dir='./', log_dir='./',
             reverse_rank_filter=False, suffix='',
-            stitch=True, stack=True, time_reg=True, export=True, load_params=True):
+            stitch=True, stack=True, time_reg=True, export=True, load_params=True, rereg_z=True):
     """
     Convert Magellan dataset to imaris, stitching tiles together and performing registration corrections as specified
     :param magellan_dir: directory of magellan data to be converted
@@ -283,17 +283,17 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
 
         if stitch_method == 'optimize':
-            p_zyx_stitch = optimize_timepoint_stitching(p_zyxc_preprocessed_stacks,
-                                              row_col_coords=metadata['row_col_coords'],
-                                              overlap_shape=metadata['tile_overlaps'],
-                                              p_yx_translations=None,
-                                              p_zyx_intitial=None,
-                                              inter_stack_channels=None,
-                                              pixel_size_z=magellan.pixel_size_z_um,
-                                              pixel_size_xy=magellan.pixel_size_xy_um,
-                                              stitch_downsample_factor_xy=stitch_downsample_factor_xy,
-                                              stitch_regularization_xy=0,
-                                              stitch_regularization_z=0)
+            p_zyx_stitch = optimize_inter_stack_stitching(p_zyxc_preprocessed_stacks,
+                                                          row_col_coords=metadata['row_col_coords'],
+                                                          overlap_shape=metadata['tile_overlaps'],
+                                                          p_yx_translations=None,
+                                                          p_zyx_intitial=None,
+                                                          inter_stack_channels=None,
+                                                          pixel_size_z=magellan.pixel_size_z_um,
+                                                          pixel_size_xy=magellan.pixel_size_xy_um,
+                                                          stitch_downsample_factor_xy=stitch_downsample_factor_xy,
+                                                          stitch_regularization_xy=0,
+                                                          stitch_regularization_z=0)
 
 
         # elif 'fourier' in stitch_method:
@@ -314,14 +314,56 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
 
 
-    if not export:
-        return
-
     t_p_zyx_residual_shifts = -np.copy(t_p_zyx_residual_shifts)
     #merge stitching zyx translations and the ones derived from timepoint cross correlations
     t_p_zyx_translations = np.round(t_p_zyx_residual_shifts + p_zyx_stitch).astype(np.int)
     #make them all nonnegative ints
     t_p_zyx_translations[:, :, 0] -= np.min(t_p_zyx_translations[:, :, 0])
+
+
+
+    ###Final Z registation using optimization
+
+    #load params
+    # t_z_optimized_shifts = np.zeros((len(t_p_zyxc_stacks),))
+    # param_cache_name = output_basename
+    # saved_name = '{}{}_optimized_z_params.npz'.format(param_cache_dir, param_cache_name)
+    # if os.path.isfile(saved_name) and load_params:
+    #     with np.load(saved_name) as loaded:
+    #         if 'p_zyx_stitch' in loaded:
+    #             print('Loaded params from: ' + saved_name)
+    #             t_z_optimized_shifts = loaded['t_z_optimized_shifts']
+    #
+    # if rereg_z:
+    #     #compile stitced volumes
+    #     t_zyx_stacks = []
+    #     x_corr_shifts = []
+    #     last_stack = None
+    #     for time_index in range(len(t_p_zyxc_stacks)):
+    #         print('Frame {}'.format(time_index))
+    #         raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=time_index,
+    #                                                                reverse_rank_filter=reverse_rank_filter,
+    #                                                                input_filter_sigma=input_filter_sigma)
+    #         stitched = stitch_single_channel(raw_stacks, p_zyx_translations=t_p_zyx_translations[time_index],
+    #                                              p_yx_translations=t_p_yx_translations[time_index],
+    #                                              tile_overlap=metadata['tile_overlaps'],
+    #                                              row_col_coords=metadata['row_col_coords'], channel_index=0)
+    #         t_zyx_stacks.append(stitched)
+    #         if last_stack is None:
+    #             x_corr_shifts.append(np.array([0, 0, 0]))
+    #         else:
+    #             x_corr_shifts = x_corr_register_3D(last_stack, stitched, np.array([10, 10, 10]))
+    #         last_stack = stitched
+    #     t_z_optimized_shifts = np.cumsum(x_corr_shifts, axis=0)[:, 0]
+    #     print('extra_z_shifts')
+    #     print(t_z_optimized_shifts)
+    #     np.savez('{}{}_optimized_z_params'.format(param_cache_dir, param_cache_name),
+    #              **{'t_z_optimized_shifts': t_z_optimized_shifts})
+
+        # optimize_z_over_time(t_zyx_stacks)
+
+    if not export:
+        return
 
     #make all global shifts nonnegative ints
     t_zyx_global_shifts -= np.min(t_zyx_global_shifts, axis=0)
