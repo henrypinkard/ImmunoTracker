@@ -42,7 +42,7 @@ def stitch_register_imaris_write(directory, name, imaris_size, n_time_points, ma
             print('Frame {}'.format(time_index))
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=time_index,
                 reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
-            top_stack_relative_to_median = np.min(t_p_zyx_translations[time_index, :, 0]).astype(np.int) #TODO: maybe throw a negative inside here
+            top_stack_relative_to_median = np.min(-t_p_zyx_translations[time_index, :, 0]).astype(np.int) 
             for channel_index in range(num_channels):
                 stitched = stitch_single_channel(raw_stacks, p_zyx_translations=t_p_zyx_translations[time_index],
                                                  p_yx_translations=t_p_yx_translations[time_index], tile_overlap=metadata['tile_overlaps'],
