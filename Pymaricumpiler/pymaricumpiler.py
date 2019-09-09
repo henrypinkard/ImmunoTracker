@@ -124,7 +124,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     t_zyx_global_shifts = np.zeros((max_tp - min_tp, 3), np.int)
     t_p_zyx_residual_shifts = np.zeros((max_tp - min_tp, metadata['num_positions'], 3), dtype=np.int)
     # load time reg params if possible
-    saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, output_basename + '_time_reg')
+    saved_name = '{}{}_xcorr_params.npz'.format(param_cache_dir, output_basename + '_time_reg')
     if os.path.isfile(saved_name) and load_params:
         with np.load(saved_name) as loaded:
             if 't_zyx_global_shifts' in loaded and 't_p_zyx_residual_shifts' in loaded:
@@ -226,7 +226,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
 
         #pcache these values so they don't need to be recomputed
-        np.savez('{}{}_optimized_params'.format(param_cache_dir, output_basename + '_time_reg'),
+        np.savez('{}{}_xcorr_params'.format(param_cache_dir, output_basename + '_time_reg'),
                  **{'t_zyx_global_shifts': t_zyx_global_shifts, 't_p_zyx_residual_shifts': t_p_zyx_residual_shifts})
 
     ##### Stitching loop #####
@@ -317,8 +317,6 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     t_p_zyx_residual_shifts = -np.copy(t_p_zyx_residual_shifts)
     #merge stitching zyx translations and the ones derived from timepoint cross correlations
     t_p_zyx_translations = np.round(t_p_zyx_residual_shifts + p_zyx_stitch).astype(np.int)
-    #make them all nonnegative ints
-    t_p_zyx_translations[:, :, 0] -= np.min(t_p_zyx_translations[:, :, 0])
 
 
 
@@ -368,9 +366,14 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     #make all global shifts nonnegative ints
     t_zyx_global_shifts -= np.min(t_zyx_global_shifts, axis=0)
 
+    #make sure again their median is centered at 0
+    median_z_shift = np.median(np.reshape(t_p_zyx_translations, [-1, 3])[:, 0]).astype(np.int)
+    t_p_zyx_translations[:, :, 0] -= median_z_shift
+    median_z_shift_0_based = -np.min(np.reshape(t_p_zyx_translations, [-1, 3])[:, 0]).astype(np.int)
+
+    z_shift_range = np.ptp(np.reshape(t_p_zyx_translations, [-1, 3])[:, 0])
     #compute the size of teh stiched image accounting for movements in z
-    stitched_image_size = [
-        np.ptp(np.reshape(t_p_zyx_translations, [-1, 3])[:, 0]) + metadata['max_z_index'] - metadata['min_z_index'] + 1,
+    stitched_image_size = [z_shift_range + metadata['max_z_index'] - metadata['min_z_index'] + 1,
         (1 + np.ptp(metadata['row_col_coords'][:, 0], axis=0)) * (
                     metadata['tile_shape'][0] - metadata['tile_overlaps'][0]),
         (1 + np.ptp(metadata['row_col_coords'][:, 1], axis=0)) * (
@@ -381,5 +384,5 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
     output_basename = output_basename + suffix
     stitch_register_imaris_write(output_dir, output_basename, imaris_size, max_tp - min_tp, magellan, metadata, t_p_yx_translations,
-                                    t_p_zyx_translations, t_zyx_global_shifts, input_filter_sigma=input_filter_sigma,
+                                    t_p_zyx_translations, t_zyx_global_shifts, median_z_shift_0_based, input_filter_sigma=input_filter_sigma,
                                  reverse_rank_filter=reverse_rank_filter)

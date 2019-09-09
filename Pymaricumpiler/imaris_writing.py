@@ -29,7 +29,7 @@ def write_imaris(directory, name, time_series, pixel_size_xy_um, pixel_size_z_um
     print('Finshed!')
 
 def stitch_register_imaris_write(directory, name, imaris_size, n_time_points, magellan, metadata, t_p_yx_translations,
-                                 t_p_zyx_translations, abs_timepoint_registrations, input_filter_sigma=None,
+                                 t_p_zyx_translations, abs_timepoint_registrations, median_z_0_based, input_filter_sigma=None,
                                  reverse_rank_filter=False):
     num_channels = metadata['num_channels']
     byte_depth = metadata['byte_depth']
@@ -42,6 +42,7 @@ def stitch_register_imaris_write(directory, name, imaris_size, n_time_points, ma
             print('Frame {}'.format(time_index))
             raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=time_index,
                 reverse_rank_filter=reverse_rank_filter, input_filter_sigma=input_filter_sigma)
+            top_stack_relative_to_median = np.min(t_p_zyx_translations[time_index, :, 0]).astype(np.int) #TODO: maybe throw a negative inside here
             for channel_index in range(num_channels):
                 stitched = stitch_single_channel(raw_stacks, p_zyx_translations=t_p_zyx_translations[time_index],
                                                  p_yx_translations=t_p_yx_translations[time_index], tile_overlap=metadata['tile_overlaps'],
@@ -53,8 +54,8 @@ def stitch_register_imaris_write(directory, name, imaris_size, n_time_points, ma
                 #                          shape=tuple(imaris_size), mode='w+')
                 # else:
                 tp_registered = np.zeros(imaris_size.astype(np.int), dtype=np.uint8 if int(byte_depth) == 1 else np.uint16)
-                center_shift_z = np.median(t_p_zyx_translations[time_index, :, 0])
-                tp_registered[center_shift_z + abs_timepoint_registrations[time_index, 0]:center_shift_z + abs_timepoint_registrations[time_index, 0] + stitched.shape[0],
+                tp_registered[median_z_0_based + top_stack_relative_to_median + abs_timepoint_registrations[time_index, 0]:
+                              median_z_0_based + top_stack_relative_to_median + abs_timepoint_registrations[time_index, 0] + stitched.shape[0],
                         abs_timepoint_registrations[time_index, 1]:abs_timepoint_registrations[time_index, 1] + stitched.shape[1],
                        abs_timepoint_registrations[time_index, 2]:abs_timepoint_registrations[time_index, 2] + stitched.shape[2]] = stitched
                 print('writing to Imaris channel {}'.format(channel_index))

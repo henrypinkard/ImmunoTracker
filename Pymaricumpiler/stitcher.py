@@ -167,7 +167,7 @@ def stitch_single_channel(p_zyxc_stacks, p_zyx_translations, p_yx_translations, 
     #convert possibly floats to ints
     p_yx_translations = np.round(p_yx_translations).astype(np.int)
     p_zyx_translations = np.round(p_zyx_translations).astype(np.int)
-    p_zyx_translations = - p_zyx_translations
+    p_zyx_translations = - np.copy(p_zyx_translations)
     # make z coordinate 0-based
     p_zyx_translations[:, 0] -= np.min(p_zyx_translations[:, 0])
     # Figure out size of stitched image
@@ -183,9 +183,9 @@ def stitch_single_channel(p_zyxc_stacks, p_zyx_translations, p_yx_translations, 
         stitched = np.zeros(stitched_image_size, dtype=np.uint8 if byte_depth == 1 else np.uint16)
     if backgrounds is not None:
         stitched[:] = backgrounds[channel_index]
-
     def get_stitch_coords(stitched_z, p_index):
         stack_z = stitched_z - p_zyx_translations[p_index, 0]
+        #empty space for stacks that havent started or have already finished
         if stack_z < 0 or stack_z >= p_zyxc_stacks[list(p_zyxc_stacks.keys())[p_index]].shape[0]:
             return None, None, None, None  # the z registration puts things out of bounds
         intra_stack_reg = p_yx_translations[p_index, stack_z, :]
