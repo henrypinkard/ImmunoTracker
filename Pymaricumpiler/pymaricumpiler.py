@@ -369,7 +369,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
     #make sure again their median is centered at 0
     median_z_shift = np.median(np.reshape(t_p_zyx_translations, [-1, 3])[:, 0]).astype(np.int)
     t_p_zyx_translations[:, :, 0] -= median_z_shift
-    median_z_shift_0_based = -np.min(np.reshape(t_p_zyx_translations, [-1, 3])[:, 0]).astype(np.int)
+    median_z_shift_0_based = -np.min(np.reshape(-t_p_zyx_translations, [-1, 3])[:, 0]).astype(np.int)
 
     z_shift_range = np.ptp(np.reshape(t_p_zyx_translations, [-1, 3])[:, 0])
     #compute the size of teh stiched image accounting for movements in z
