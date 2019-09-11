@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" serverName="Cosmos" createEmptyFolders="true" traceLevel="DETAILS">
+    <serverData>
+      <paths name="Cosmos">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/IMSWriter" local="$PROJECT_DIR$/../../IMSWriter" web="/" />
+            <mapping deploy="/Pygellan" local="$PROJECT_DIR$/../../Pygellan/pygellan" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="Fuoco">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/IMSWrier" local="$PROJECT_DIR$/../../IMSWriter" web="/" />
+            <mapping deploy="/" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/Pygellan" local="$PROJECT_DIR$/../../Pygellan" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>
