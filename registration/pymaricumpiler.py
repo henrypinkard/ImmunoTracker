@@ -70,7 +70,7 @@ def stack_max_min_channels(zyxc_stack, channels_nested):
     """
     take max over channels outer dimension and min over inner
     """
-    return np.max(np.stack([np.min(np.stack([zyxc_stack[..., c] for chan in min_channels],
+    return np.max(np.stack([np.min(np.stack([zyxc_stack[..., c] for c in min_channels],
                                     axis=3), axis=3) for min_channels in 
                                     channels_nested], axis=3), axis=3)
 
