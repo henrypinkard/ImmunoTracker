@@ -204,8 +204,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                        
 
 
-                            reg_stack_xy = stack_max_min_channels(zyxc_stack, time_reg_channels, backgrounds, yx_translations)
-                            reg_stack_z = stack_max_min_channels(zyxc_stack, time_reg_z_channels, backgrounds, yx_translations)
+                            reg_stack_xy = stack_max_min_channels(zyxc_stack, time_reg_channels)
+                            reg_stack_z = stack_max_min_channels(zyxc_stack, time_reg_z_channels)
 
                             reg_stack_xy = apply_intra_stack_registration(reg_stack_xy, yx_translations, background=np.max(backgrounds), mode='float')
                             reg_stack_z = apply_intra_stack_registration(reg_stack_z, yx_translations, background=np.max(backgrounds), mode='float')
@@ -296,9 +296,14 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
             #take min of autofluor channels, and use the full parts of others
             # zyxc_preprocessed_stack = np.stack([np.min([zyxc_preprocessed_stack[..., c] for c in af_register_channels], axis=0)] + 
             #                             [zyxc_preprocessed_stack[..., c] for c in other_register_channels], axis=3)
-            zyxc_preprocessed_stack = np.stack([zyxc_preprocessed_stack[..., c] for c in stitch_channels], axis=3) 
+            images = []
+            for ch in stitch_channels:
+                if type(ch) == list:
+                    images.append(np.min([zyxc_preprocessed_stack[..., c] for c in ch], axis=0))
+                else:
+                    images.append(zyxc_preprocessed_stack[..., ch])
 
-            p_zyxc_preprocessed_stacks[pos_index] = zyxc_preprocessed_stack
+            p_zyxc_preprocessed_stacks[pos_index] = np.stack(images, axis=3) 
 
 
         if stitch_method == 'optimize':

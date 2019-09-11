@@ -36,7 +36,7 @@ if len(args.xy_reg_channels) > 0:
     x_corr_xy_channels += args.xy_reg_channels
 z_reg_channels = [args.z_reg_channels]
 #this one shouldn't be nested
-stitch_channels = args.stitch_reg_channels
+stitch_channels = [args.af_reg_channels] + args.stitch_reg_channels
 
 
 if len(sys.argv) == 1:
