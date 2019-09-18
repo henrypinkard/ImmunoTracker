@@ -70,9 +70,14 @@ def stack_max_min_channels(zyxc_stack, channels_nested):
     """
     take max over channels outer dimension and min over inner
     """
-    return np.max(np.stack([np.min(np.stack([zyxc_stack[..., c] for c in min_channels],
-                                    axis=3), axis=3) for min_channels in 
-                                    channels_nested], axis=3), axis=3)
+    max_channels = []
+    for min_channels in channels_nested:
+        if type(min_channels) == list:
+            max_channels.append(np.min(np.stack(
+                [zyxc_stack[..., c] for c in min_channels], axis=3), axis=3))
+        else:
+            max_channels.append(zyxc_stack[..., min_channels])
+    return np.max(np.stack(max_channels, axis=3), axis=3)
 
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, max_tp=None, min_tp=None,

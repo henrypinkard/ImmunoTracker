@@ -20,23 +20,15 @@ parser.add_argument('--stitch_reg_xy', type=float, default=0.004)
 parser.add_argument('--stitch_reg_z', type=float, default=0.0001)
 parser.add_argument('--ids', type=str, nargs='*')
 
-parser.add_argument('--af_reg_channels', type=str, nargs='*', default=[1,4])
-parser.add_argument('--xy_reg_channels', type=str, nargs='*', default=[])
-parser.add_argument('--z_reg_channels', type=str, nargs='*', default=[0])
-parser.add_argument('--stitch_reg_channels', type=str, nargs='*', default=[0,5])
+parser.add_argument('--af_reg_channels', type=int, nargs='*', default=[1,4])
+parser.add_argument('--extra_reg_channels', type=int, nargs='*', default=[])
+parser.add_argument('--z_reg_channels', type=int, nargs='*', default=[0])
 
 parser.add_argument('--max_tp', type=int, default=-1)
 parser.add_argument('--min_tp', type=int, default=-1)
 parser.add_argument('--suffix', type=str, default='')
 parser.add_argument('--param_cache', type=str, default='optimized_params')
 args = parser.parse_args()
-
-x_corr_xy_channels = [args.af_reg_channels]
-if len(args.xy_reg_channels) > 0:
-    x_corr_xy_channels += args.xy_reg_channels
-z_reg_channels = [args.z_reg_channels]
-#this one shouldn't be nested
-stitch_channels = [args.af_reg_channels] + args.stitch_reg_channels
 
 
 if len(sys.argv) == 1:
@@ -56,9 +48,9 @@ raw_data_dir = storage_path + 'raw_data/'
 param_cache_dir = storage_path + args.param_cache + '/'
 log_dir = storage_path + 'conversion_log/'
 #make sure they all exist
-for p in [imaris_dir, raw_data_dir, param_cache_dir, log_dir]:
-    if not os.path.exists(p):
-        os.makedirs(p)
+# for p in [imaris_dir, raw_data_dir, param_cache_dir, log_dir]:
+#     if not os.path.exists(p):
+#         os.makedirs(p)
 
 data_list = home + '/GitRepos/LymphoSight/LymphosightDatasets.csv'
 
@@ -91,7 +83,7 @@ for ID in ids:
     # isr_ch = [int(v) for v in get_value(ID, 'ISR ch').split('+')]
 
     # af_reg_channels = [int(v) for v in get_value(ID, 'af reg channels').split('+')]
-    # other_reg_channels = [int(v) for v in get_value(ID, 'other reg channels').split('+')]
+    extra_reg_channels = [int(v) for v in get_value(ID, 'extra_reg_channels').split('+') if v != '']
 
     if (args.max_tp != -1):
         print('capping max_tp at: {}'.format(args.max_tp))
@@ -105,6 +97,19 @@ for ID in ids:
     else:
         min_tp = 0
 
+
+    x_corr_xy_channels = [args.af_reg_channels]
+    if len(args.extra_reg_channels) > 0:
+        x_corr_xy_channels += args.extra_reg_channels
+    z_reg_channels = [args.z_reg_channels]
+    stitch_channels = [args.af_reg_channels, args.z_reg_channels[0]]
+    if len(args.extra_reg_channels) > 0:
+        stitch_channels += args.extra_reg_channels
+
+
+    # print(x_corr_xy_channels)
+    # print(z_reg_channels)
+    # print(stitch_channels)
 
     convert(magellan_dir,
             input_filter_sigma=2,

@@ -31,7 +31,7 @@ def open_magellan(path):
     num_rows, num_cols = magellan.get_num_rows_and_cols()
     metadata['num_rows'] = num_rows
     metadata['num_cols'] = num_cols
-    raw_row_col = np.array(magellan.row_col_tuples)[np.array(list(magellan.p_t_z_c_tree.keys()))]
+    raw_row_col = magellan.row_col_array[np.array(list(magellan.p_t_z_c_tree.keys()))]
     metadata['row_col_coords'] = raw_row_col - np.min(raw_row_col,axis=0)
     return magellan, metadata
 
