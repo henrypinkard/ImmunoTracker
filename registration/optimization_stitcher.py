@@ -264,7 +264,7 @@ def _optimize_stitching(p_yx_translations, p_zyxc_stacks_stitch, p_zyx_initial, 
             return sess.run(hessian_op, feed_dict={param_input: x})
 
         p_zyx_translations_flat_um = minimize(loss_fn, p_zyx_translations_flat_um, method='trust-exact', jac=grad_fn, hess=hessian_fn,
-                       options={'gtol': 1e-4, 'disp': True, 'initial_trust_radius': 3, 'max_trust_radius': 6}).x
+                       options={'gtol': 1e-3, 'disp': True, 'initial_trust_radius': 3, 'max_trust_radius': 6}).x
         #convert to pixel coords
         p_zyx_translations_pixel = np.reshape(p_zyx_translations_flat_um, [-1,3]) / np.tile(
             [[pixel_size_z, pixel_size_xy, pixel_size_xy]], (len(row_col_coords), 1))
