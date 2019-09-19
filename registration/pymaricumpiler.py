@@ -287,7 +287,7 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                 #apply yx translation and get only the registration channels
                 zyxc_registered_stack = np.stack([apply_intra_stack_registration(p_zyxc_stacks[pos_index][..., c],
                                 t_p_yx_translations[time_index][index] - t_p_zyx_residual_shifts[time_index][index][1:],
-                            background=np.mean(backgrounds[c]), mode='float') for c in range(p_zyxc_stacks[0].shape[3])], axis=3)
+                            background=np.mean(backgrounds[c]), mode='float') for c in range(p_zyxc_stacks[list(p_zyxc_stacks.keys())[0]].shape[3])], axis=3)
 
 
                 registered_stack = np.zeros([shifted_z_size + zyxc_registered_stack.shape[0], zyxc_registered_stack.shape[1],
