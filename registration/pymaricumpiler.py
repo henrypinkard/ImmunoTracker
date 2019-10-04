@@ -66,12 +66,23 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
 #     path = "{}{}.tif".format(path, name)
 #     imlist[0].save(path, compression="tiff_deflate", save_all=True, append_images=imlist[1:])
 
-
+def stack_max_min_channels(zyxc_stack, channels_nested):
+    """
+    take max over channels outer dimension and min over inner
+    """
+    max_channels = []
+    for min_channels in channels_nested:
+        if type(min_channels) == list:
+            max_channels.append(np.min(np.stack(
+                [zyxc_stack[..., c] for c in min_channels], axis=3), axis=3))
+        else:
+            max_channels.append(zyxc_stack[..., min_channels])
+    return np.max(np.stack(max_channels, axis=3), axis=3)
 
 def convert(magellan_dir, position_registrations=None, register_timepoints=True, input_filter_sigma=None,
             output_dir=None, output_basename=None, max_tp=None, min_tp=None,
             intra_stack_registration_channels=[1, 2, 3, 4, 5], stack_learning_rate=15, stack_reg=0,
-            af_register_channels=[2, 5], other_register_channels=[0, 5], z_register_channels = [0],
+            time_reg_channels=[1,4], stitch_channels=[[1, 4], 0,5], time_reg_z_channels = [0],
             stitch_method='optimize',
             stitch_regularization_xy=0, stitch_regularization_z=0, stitch_downsample_factor_xy=3,
             param_cache_dir='./', log_dir='./',
@@ -186,14 +197,25 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                             #     shifts = x_corr_register_3D(last_reg_stacks[pos_index], reg_stack, np.array(reg_stack.shape) // 2)
                             #     pos_shift_list[-1][pos_index] = shifts
                             #     last_reg_stacks[pos_index] = reg_stack
-                            reg_stack_xy = np.min(np.stack(
-                                [apply_intra_stack_registration(zyxc_stack[..., c], yx_translations,
-                                                              background=np.mean(np.mean([backgrounds[chan] for chan in af_register_channels])), 
-                                                              mode='float') for c in af_register_channels], axis=3), axis=3)
-                            reg_stack_z = np.min(np.stack(
-                                [apply_intra_stack_registration(zyxc_stack[..., c], yx_translations,
-                                                                background=np.mean([backgrounds[chan] for chan in z_register_channels]),
-                                                                mode='float') for c in z_register_channels], axis=3), axis=3)
+                            # reg_stack_xy = np.max(np.stack([np.min(np.stack(
+                            #     [apply_intra_stack_registration(zyxc_stack[..., c], yx_translations,
+                            #                                   background=np.mean(np.mean([backgrounds[chan] for chan in time_reg_channels])), 
+                            #                                   mode='float') for c in channels], axis=3), axis=3) for channels in 
+                            #                                     time_reg_channels], axis=3), axis=3)
+                            # reg_stack_z = np.min(np.stack(
+                            #     [apply_intra_stack_registration(zyxc_stack[..., c], yx_translations,
+                            #                                     background=np.mean([backgrounds[chan] for chan in time_reg_z_channels]),
+                            #                                     mode='float') for c in time_reg_z_channels], axis=3), axis=3)
+                       
+
+
+                            reg_stack_xy = stack_max_min_channels(zyxc_stack, time_reg_channels)
+                            reg_stack_z = stack_max_min_channels(zyxc_stack, time_reg_z_channels)
+
+                            reg_stack_xy = apply_intra_stack_registration(reg_stack_xy, yx_translations, background=np.max(backgrounds), mode='float')
+                            reg_stack_z = apply_intra_stack_registration(reg_stack_z, yx_translations, background=np.max(backgrounds), mode='float')
+
+
                             if pos_index not in last_reg_stacks:
                                 last_reg_stacks[pos_index] = (reg_stack_xy, reg_stack_z)
                                 pos_shift_list[-1][pos_index] = np.array([0, 0, 0])  # init with shift of 0p
@@ -265,7 +287,8 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
                 #apply yx translation and get only the registration channels
                 zyxc_registered_stack = np.stack([apply_intra_stack_registration(p_zyxc_stacks[pos_index][..., c],
                                 t_p_yx_translations[time_index][index] - t_p_zyx_residual_shifts[time_index][index][1:],
-                            background=np.mean(backgrounds[c]), mode='float') for c in range(p_zyxc_stacks[0].shape[3])], axis=3)
+                            background=np.mean(backgrounds[c]), mode='float') for c in range(p_zyxc_stacks[list(p_zyxc_stacks.keys())[0]].shape[3])], axis=3)
+
 
                 registered_stack = np.zeros([shifted_z_size + zyxc_registered_stack.shape[0], zyxc_registered_stack.shape[1],
                                              zyxc_registered_stack.shape[2], zyxc_registered_stack.shape[3]])
@@ -276,10 +299,16 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
             zyxc_preprocessed_stack = np.mean(time_series, axis=0)
             #take min of autofluor channels, and use the full parts of others
-            zyxc_preprocessed_stack = np.stack([np.min([zyxc_preprocessed_stack[..., c] for c in af_register_channels], axis=0)] + 
-                                        [zyxc_preprocessed_stack[..., c] for c in other_register_channels], axis=3)
+            # zyxc_preprocessed_stack = np.stack([np.min([zyxc_preprocessed_stack[..., c] for c in af_register_channels], axis=0)] + 
+            #                             [zyxc_preprocessed_stack[..., c] for c in other_register_channels], axis=3)
+            images = []
+            for ch in stitch_channels:
+                if type(ch) == list:
+                    images.append(np.min([zyxc_preprocessed_stack[..., c] for c in ch], axis=0))
+                else:
+                    images.append(zyxc_preprocessed_stack[..., ch])
 
-            p_zyxc_preprocessed_stacks[pos_index] = zyxc_preprocessed_stack
+            p_zyxc_preprocessed_stacks[pos_index] = np.stack(images, axis=3) 
 
 
         if stitch_method == 'optimize':
@@ -314,51 +343,12 @@ def convert(magellan_dir, position_registrations=None, register_timepoints=True,
 
 
 
+
+    p_zyx_stitch[:, 1:] = -p_zyx_stitch[:, 1:]
     t_p_zyx_residual_shifts = -np.copy(t_p_zyx_residual_shifts)
     #merge stitching zyx translations and the ones derived from timepoint cross correlations
     t_p_zyx_translations = np.round(t_p_zyx_residual_shifts + p_zyx_stitch).astype(np.int)
 
-
-
-    ###Final Z registation using optimization
-
-    #load params
-    # t_z_optimized_shifts = np.zeros((len(t_p_zyxc_stacks),))
-    # param_cache_name = output_basename
-    # saved_name = '{}{}_optimized_z_params.npz'.format(param_cache_dir, param_cache_name)
-    # if os.path.isfile(saved_name) and load_params:
-    #     with np.load(saved_name) as loaded:
-    #         if 'p_zyx_stitch' in loaded:
-    #             print('Loaded params from: ' + saved_name)
-    #             t_z_optimized_shifts = loaded['t_z_optimized_shifts']
-    #
-    # if rereg_z:
-    #     #compile stitced volumes
-    #     t_zyx_stacks = []
-    #     x_corr_shifts = []
-    #     last_stack = None
-    #     for time_index in range(len(t_p_zyxc_stacks)):
-    #         print('Frame {}'.format(time_index))
-    #         raw_stacks, nonempty_pixels, timestamp = read_raw_data(magellan, metadata, time_index=time_index,
-    #                                                                reverse_rank_filter=reverse_rank_filter,
-    #                                                                input_filter_sigma=input_filter_sigma)
-    #         stitched = stitch_single_channel(raw_stacks, p_zyx_translations=t_p_zyx_translations[time_index],
-    #                                              p_yx_translations=t_p_yx_translations[time_index],
-    #                                              tile_overlap=metadata['tile_overlaps'],
-    #                                              row_col_coords=metadata['row_col_coords'], channel_index=0)
-    #         t_zyx_stacks.append(stitched)
-    #         if last_stack is None:
-    #             x_corr_shifts.append(np.array([0, 0, 0]))
-    #         else:
-    #             x_corr_shifts = x_corr_register_3D(last_stack, stitched, np.array([10, 10, 10]))
-    #         last_stack = stitched
-    #     t_z_optimized_shifts = np.cumsum(x_corr_shifts, axis=0)[:, 0]
-    #     print('extra_z_shifts')
-    #     print(t_z_optimized_shifts)
-    #     np.savez('{}{}_optimized_z_params'.format(param_cache_dir, param_cache_name),
-    #              **{'t_z_optimized_shifts': t_z_optimized_shifts})
-
-        # optimize_z_over_time(t_zyx_stacks)
 
     if not export:
         return
