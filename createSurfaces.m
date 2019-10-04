@@ -64,7 +64,6 @@ framesPerLoop = 2; %number of frames for which surfaces are created with each lo
 
 %add java libraries to dynamic path
 javaaddpath('./ImarisLib.jar');
-javaaddpath('./Magellan.jar');
 
 %connect to imaris
 imarisIndex = 0;
@@ -75,31 +74,17 @@ if (isempty(imaris))
     return;
 end
 
-%select magellan dataset for reading of metadata, etc
-magellanDir = uigetdir('','select Magellan dataset');
-if (magellanDir == 0)
-    return; %canceled
-end
-mmData = org.micromanager.plugins.magellan.acq.MultiResMultipageTiffStorage(magellanDir);
-
-summaryMD = JSON.parse(char(mmData.getSummaryMetadata.toString));
-posList = mmData.getSummaryMetadata.getJSONArray('InitialPositionList');
-imageWidth = summaryMD.Width;
-imageHeight = summaryMD.Height;
-xPixelOverlap = summaryMD.GridPixelOverlapX;
-yPixelOverlap  = summaryMD.GridPixelOverlapY;
-pixelSizeXY = summaryMD.PixelSize_um;
-pixelSizeZ = summaryMD.z_step_um;
-numTimePoints = mmData.getNumFrames;
-%remove data points within _ um of edges of tiles
-distanceFromEdge = summaryMD.PixelSize_um * summaryMD.GridPixelOverlapX * 0.5; 
-% 
-
 % Create matlab file to save surface data in
 filename = imaris.GetCurrentFileName;
 imageProcessing = imaris.GetImageProcessing;
 ds = imaris.GetDataSet;
 fovSize = [ds.GetExtendMaxX ds.GetExtendMaxY];
+
+numTimePoints = ds.GetSizeT;
+imageWidth = ds.GetSizeX;
+imageHeight = ds.GetSizeY;
+pixelSizeXY = ds.GetExtendMaxX / ds.GetSizeX;
+pixelSizeZ = ds.GetExtendMaxZ / ds.GetSizeZ;
 
 %generate saving name
 imsFileFullPath = strsplit(char(filename),'.');
@@ -129,20 +114,20 @@ if ~any(strcmp('vertices',who(saveFile)))
     saveFile.numVertices = int32([]);
     saveFile.name = surfName;
     saveFile.surfInterpPoints = {};
-    saveFile.summaryMD = summaryMD;
+%     saveFile.summaryMD = summaryMD;
     %get channel offsets. this is stochastic so do it a few times and median
-    offsets = zeros(6,20);
-    for i  = 1:20
-        offsets(:,i) = mmData.readBackgroundPixelValues;
+    offsets = zeros(6, 1);
+    for c  = 0:5
+        offsets(c + 1) = median(ds.GetDataVolumeAs1DArrayBytes(c, 0));
     end
-    saveFile.channelOffsets = median(offsets,2);
+    saveFile.channelOffsets = offsets;
 else
     startIndex = saveFile.lastWrittenFrameIndex + 1;
 end
 
 
 %Incrementally segment surfaces, get and save their info, and delete
-maxFrameIndex = numTimePoints*posList.length-1;
+maxFrameIndex = numTimePoints-1;
 for startFrame = startIndex:framesPerLoop:maxFrameIndex
     tic
     fprintf('Calculating surfaces on frame %i-%i of %i\n',startFrame, min(startFrame + framesPerLoop-1,maxFrameIndex),maxFrameIndex);
@@ -161,7 +146,7 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
     %get stats
     stats = xtgetstats(imaris, surface, 'ID', 'ReturnUnits', 1);
     %modify stats to reflect stitching
-    stats = modify_stats_for_stitched_view(stats);
+%     stats = modify_stats_for_stitched_view(stats);
     
     % iterate through batches of segmeneted surfaces (so as to not overflow
     % memory),
@@ -171,8 +156,8 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
         fprintf('%d to %d of %d\n',startIndex+1, endIndex +1, surface.GetNumberOfSurfaces)
         surfList = surface.GetSurfacesList(startIndex:endIndex);
         %stitch surfaces
-        [vertices, tIndices] = modify_surfaces_for_stitched_view(surfList.mVertices, surfList.mTimeIndexPerSurface, surfList.mNumberOfVerticesPerSurface,...
-            posList, imageWidth, imageHeight, xPixelOverlap, yPixelOverlap, pixelSizeXY, numTimePoints);
+%         [vertices, tIndices] = modify_surfaces_for_stitched_view(surfList.mVertices, surfList.mTimeIndexPerSurface, surfList.mNumberOfVerticesPerSurface,...
+%             posList, imageWidth, imageHeight, xPixelOverlap, yPixelOverlap, pixelSizeXY, numTimePoints);
         
         maskTemp = cell(endIndex-startIndex+1,1);
         imgTemp = cell(endIndex-startIndex+1,1);
@@ -183,25 +168,24 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
             boundingBoxSize = [stats(find(strcmp({stats.Name},'BoundingBoxAA Length X'))).Values(index + 1),...
                 stats(find(strcmp({stats.Name},'BoundingBoxAA Length Y'))).Values(index + 1),...
                 stats(find(strcmp({stats.Name},'BoundingBoxAA Length Z'))).Values(index + 1)];
-            positionUnstitched = surface.GetCenterOfMass(index);
-            positionStitched = [stats(find(strcmp({stats.Name},'Stitched Position X'))).Values(index + 1),...
-                stats(find(strcmp({stats.Name},'Stitched Position Y'))).Values(index + 1),...
-                stats(find(strcmp({stats.Name},'Stitched Position Z'))).Values(index + 1)];
-            
+            positionUnstitched = surface.GetCenterOfMass(index);            
             
             %Mask is in unstitched coordinates, image data is in stitched coordinates
-            topLeftUnstitched = positionUnstitched -  boundingBoxSize / 2;
-            bottomRightUnstitched = positionUnstitched + boundingBoxSize / 2;
-            topLeftStitched = positionStitched -  boundingBoxSize / 2;
-            pixelResolution = int32(ceil((bottomRightUnstitched - topLeftUnstitched) ./ [pixelSizeXY pixelSizeXY pixelSizeZ]));
-            topLeftPixStitched = int32(floor([topLeftStitched(1:2) ./ pixelSizeXY topLeftStitched(3) ./ pixelSizeZ]));
-            mask = surface.GetSingleMask(index, topLeftUnstitched(1), topLeftUnstitched(2), topLeftUnstitched(3), bottomRightUnstitched(1), bottomRightUnstitched(2),...
-                bottomRightUnstitched(3), pixelResolution(1), pixelResolution(2), pixelResolution(3));
+            topLeft = positionUnstitched -  boundingBoxSize / 2;
+            bottomRight = positionUnstitched + boundingBoxSize / 2;
+%             topLeftStitched = positionStitched -  boundingBoxSize / 2;
+            pixelResolution = int32(floor((bottomRight - topLeft) ./ [pixelSizeXY pixelSizeXY pixelSizeZ]));
+            topLeftPix = int32(floor([topLeft(1:2) ./ pixelSizeXY topLeft(3) ./ pixelSizeZ]));
+            mask = surface.GetSingleMask(index, topLeft(1), topLeft(2), topLeft(3), bottomRight(1), bottomRight(2),...
+                bottomRight(3), pixelResolution(1), pixelResolution(2), pixelResolution(3));
             byteMask = uint8(squeeze(mask.GetDataBytes));
-            
-            timeIndex = tIndices(index+1 - startIndex);
-            
-            [imgData, md] = readRawMagellan( mmData, byteMask, topLeftPixStitched - int32([xPixelOverlap/2, yPixelOverlap/2, 0]), timeIndex );
+            timeIndex = surface.GetTimeIndex(index);
+            imgData = zeros(pixelResolution(1), pixelResolution(2), pixelResolution(3), 6);
+            for c = 0:5
+                imgData(:,:,:,c+1) = ds.GetDataSubVolumeBytes(topLeftPix(1), topLeftPix(2), topLeftPix(3), c, timeIndex,...
+                pixelResolution(1), pixelResolution(2), pixelResolution(3));
+            end
+
             
             %trim to border of mask
             maskBorder = false(size(byteMask));
@@ -222,54 +206,54 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
             imgTemp{index + 1 - startIndex} = imgData;
             
             %get surface interpolation and laser excitation
-            try
-                mdString = char(md.toString);                
-                mdString(mdString == ' ') = '';
-                mdString(mdString == '#') = '';
-                mdString(mdString == ')') = '';
-                mdString(mdString == '(') = '';
-                md = JSON.parse(mdString);
-                laser1Power = cellfun(@str2num,strsplit(md.TeensySLM1_SLM_Pattern,'-'),'UniformOutput',0);
-                laser2Power = cellfun(@str2num,strsplit(md.TeensySLM2_SLM_Pattern,'-'),'UniformOutput',0);
-                laser1Power = cell2mat(reshape(laser1Power(1:end-1),16,16));
-                laser2Power = cell2mat(reshape(laser2Power(1:end-1),16,16));
-                %bilinear interpolation
-                indices = (positionUnstitched(1:2) ./ fovSize) * 15;
-                fractional = mod(indices,1.0);
-                lowerIndices = indices - fractional + 1;
-                lowerIndexWeight = 1 - fractional;
-                blinterp = @(grid, lowerInd, lowerWeight)...
-                    grid(lowerInd(1), lowerInd(2)) * lowerWeight(1) * lowerWeight(2) +...
-                    grid(lowerInd(1) + 1, lowerInd(2)) * (1- lowerWeight(1)) * lowerWeight(2) +...
-                    grid(lowerInd(1), lowerInd(2) + 1) * lowerWeight(1) * (1 - lowerWeight(2)) +...
-                    grid(lowerInd(1) + 1, lowerInd(2) + 1) * (1- lowerWeight(1)) * (1 - lowerWeight(2));                              
-                excitations(index + 1 - startIndex,:) = [blinterp(laser1Power, lowerIndices, lowerIndexWeight) blinterp(laser2Power, lowerIndices, lowerIndexWeight)];                
-                %store one copy of surface interpoaltion per a time point
-                if size(saveFile, 'surfInterpPoints', 1) < timeIndex + 1 || isempty(saveFile.surfInterpPoints(timeIndex+1,1))
-                    interpPoints = md.DistanceFromFixedSurfacePoints;
-                    saveFile.surfInterpPoints = cell2mat(cellfun(@(entry) cellfun(@str2num, strsplit(entry,'_')),interpPoints,'UniformOutput',0)');
-                end
-            catch
-                excitations(index + 1 - startIndex,:) = nan;
-            end
+%             try
+%                 mdString = char(md.toString);                
+%                 mdString(mdString == ' ') = '';
+%                 mdString(mdString == '#') = '';
+%                 mdString(mdString == ')') = '';
+%                 mdString(mdString == '(') = '';
+%                 md = JSON.parse(mdString);
+%                 laser1Power = cellfun(@str2num,strsplit(md.TeensySLM1_SLM_Pattern,'-'),'UniformOutput',0);
+%                 laser2Power = cellfun(@str2num,strsplit(md.TeensySLM2_SLM_Pattern,'-'),'UniformOutput',0);
+%                 laser1Power = cell2mat(reshape(laser1Power(1:end-1),16,16));
+%                 laser2Power = cell2mat(reshape(laser2Power(1:end-1),16,16));
+%                 %bilinear interpolation
+%                 indices = (positionUnstitched(1:2) ./ fovSize) * 15;
+%                 fractional = mod(indices,1.0);
+%                 lowerIndices = indices - fractional + 1;
+%                 lowerIndexWeight = 1 - fractional;
+%                 blinterp = @(grid, lowerInd, lowerWeight)...
+%                     grid(lowerInd(1), lowerInd(2)) * lowerWeight(1) * lowerWeight(2) +...
+%                     grid(lowerInd(1) + 1, lowerInd(2)) * (1- lowerWeight(1)) * lowerWeight(2) +...
+%                     grid(lowerInd(1), lowerInd(2) + 1) * lowerWeight(1) * (1 - lowerWeight(2)) +...
+%                     grid(lowerInd(1) + 1, lowerInd(2) + 1) * (1- lowerWeight(1)) * (1 - lowerWeight(2));                              
+%                 excitations(index + 1 - startIndex,:) = [blinterp(laser1Power, lowerIndices, lowerIndexWeight) blinterp(laser2Power, lowerIndices, lowerIndexWeight)];                
+%                 %store one copy of surface interpoaltion per a time point
+%                 if size(saveFile, 'surfInterpPoints', 1) < timeIndex + 1 || isempty(saveFile.surfInterpPoints(timeIndex+1,1))
+%                     interpPoints = md.DistanceFromFixedSurfacePoints;
+%                     saveFile.surfInterpPoints = cell2mat(cellfun(@(entry) cellfun(@str2num, strsplit(entry,'_')),interpPoints,'UniformOutput',0)');
+%                 end
+%             catch
+%                 excitations(index + 1 - startIndex,:) = nan;
+%             end
         end
         
         %store masks, pixels, and other data
-        indicesInFile = size(saveFile, 'excitations', 1)+1:size(saveFile, 'excitations', 1)+endIndex-startIndex+1;
+        indicesInFile = size(saveFile, 'masks', 1)+1:size(saveFile, 'masks', 1)+endIndex-startIndex+1;
         
-        saveFile.excitations(indicesInFile,1:2) = excitations;
+%         saveFile.excitations(indicesInFile,1:2) = excitations;
         saveFile.masks(indicesInFile,1) = maskTemp;
         saveFile.imageData(indicesInFile,1) = imgTemp;
-        saveFile.stitchedXYZPositions(indicesInFile,1:3) = [stats(find(strcmp({stats.Name},'Stitched Position X'))).Values(startIndex+1:endIndex+1),...
-            stats(find(strcmp({stats.Name},'Stitched Position Y'))).Values(startIndex+1:endIndex+1),...
-            stats(find(strcmp({stats.Name},'Stitched Position Z'))).Values(startIndex+1:endIndex+1)];
+%         saveFile.stitchedXYZPositions(indicesInFile,1:3) = [stats(find(strcmp({stats.Name},'Stitched Position X'))).Values(startIndex+1:endIndex+1),...
+%             stats(find(strcmp({stats.Name},'Stitched Position Y'))).Values(startIndex+1:endIndex+1),...
+%             stats(find(strcmp({stats.Name},'Stitched Position Z'))).Values(startIndex+1:endIndex+1)];
         
         
         %store surface data in file
-        saveFile.vertices(size(saveFile, 'vertices', 1)+1:size(saveFile, 'vertices', 1)+size(surfList.mVertices,1),1:3) = single(vertices);
+        saveFile.vertices(size(saveFile, 'vertices', 1)+1:size(saveFile, 'vertices', 1)+size(surfList.mVertices,1),1:3) = surfList.mVertices;
         saveFile.triangles(size(saveFile, 'triangles', 1)+1:size(saveFile, 'triangles', 1)+size(surfList.mTriangles,1),1:3) = surfList.mTriangles;
         saveFile.normals(size(saveFile, 'normals', 1)+1:size(saveFile, 'normals', 1)+size(surfList.mNormals,1),1:3) =  surfList.mNormals;
-        saveFile.timeIndex(size(saveFile, 'timeIndex',1)+1 : size(saveFile, 'timeIndex',1)+length(surfList.mTimeIndexPerSurface),1) = int32(tIndices);
+        saveFile.timeIndex(size(saveFile, 'timeIndex',1)+1 : size(saveFile, 'timeIndex',1)+length(surfList.mTimeIndexPerSurface),1) = surfList.mTimeIndexPerSurface;
         saveFile.numTriangles(size(saveFile, 'numTriangles',1)+1 : size(saveFile, 'numTriangles',1)+length(surfList.mNumberOfTrianglesPerSurface),1) = surfList.mNumberOfTrianglesPerSurface;
         saveFile.numVertices(size(saveFile, 'numVertices',1)+1 : size(saveFile, 'numVertices',1)+length(surfList.mNumberOfVerticesPerSurface),1) =  surfList.mNumberOfVerticesPerSurface;
         
@@ -307,18 +291,20 @@ xPosIdx = find(strcmp(featureNames,'Position X'));
 xPosIdy = find(strcmp(featureNames,'Position Y'));
 % distanceToBorder = min([rawFeatures(:,xPosIdx), rawFeatures(:,xPosIdy),...
 %     max(rawFeatures(:,xPosIdx)) - rawFeatures(:,xPosIdx),  max(rawFeatures(:,xPosIdy)) - rawFeatures(:,xPosIdy) ],[],2);
-inCenter = rawFeatures(:,xPosIdx) > distanceFromEdge & rawFeatures(:,xPosIdx) < (max(rawFeatures(:,xPosIdx)) - distanceFromEdge) &...
-    rawFeatures(:,xPosIdy) > distanceFromEdge & rawFeatures(:,xPosIdy) < (max(rawFeatures(:,xPosIdy)) - distanceFromEdge);
+% inCenter = rawFeatures(:,xPosIdx) > distanceFromEdge & rawFeatures(:,xPosIdx) < (max(rawFeatures(:,xPosIdx)) - distanceFromEdge) &...
+%     rawFeatures(:,xPosIdy) > distanceFromEdge & rawFeatures(:,xPosIdy) < (max(rawFeatures(:,xPosIdy)) - distanceFromEdge);
 %use only central surfaces
-saveFile.imarisIndices = imarisIndices(inCenter);
-excitations = saveFile.excitations;
-saveFile.excitations = excitations(inCenter,:);
-xyzPos = saveFile.stitchedXYZPositions;
-saveFile.stitchedXYZPositions = xyzPos(inCenter,:);
-ti = saveFile.timeIndex;
-saveFile.designMatrixTimeIndices = ti(inCenter);
+% saveFile.imarisIndices = imarisIndices(inCenter);
+saveFile.imarisIndices = imarisIndices;
+% excitations = saveFile.excitations;
+% saveFile.excitations = excitations(inCenter,:);
+% xyzPos = saveFile.stitchedXYZPositions;
+% saveFile.stitchedXYZPositions = xyzPos(inCenter,:);
+% ti = saveFile.timeIndex;
+% saveFile.designMatrixTimeIndices = ti(inCenter);
 
-saveFile.rawFeatures = rawFeatures(inCenter,:);
+% saveFile.rawFeatures = rawFeatures(inCenter,:);
+saveFile.rawFeatures = rawFeatures;
 saveFile.rawFeatureNames = featureNames;
 
 % Copy to backup directory on different drive
@@ -329,108 +315,108 @@ saveFile.rawFeatureNames = featureNames;
 % end
 % copyfile(saveName, strcat(backupDirectory,dirs{end-1},'_',dirs{end},'_',char(surfName),'.mat') );
 
-mmData.close;
-clear mmData;
+% mmData.close;
+% clear mmData;
 
-    function [newStats] = modify_stats_for_stitched_view(stats)
-        newStats = stats;
-        pxIdx = find(ismember({stats.Name},'Position X'));
-        pyIdx = find(ismember({stats.Name},'Position Y'));
-        pzIdx = find(ismember({stats.Name},'Position Z'));
-        tIdxIdx = find(ismember({stats.Name},'Time Index'));
-        
-        %rename original position stats
-        % newStats(pxIdx).Name = 'Tile Position X';
-        % newStats(pyIdx).Name = 'Tile Position Y';
-        % newStats(pzIdx).Name = 'Tile Position Z';
-        
-        timeIndex = newStats(tIdxIdx).Values;
-        %time index stat is one based, so subtract one
-        stitchedTimeIndex = mod(timeIndex - 1,numTimePoints);
-        %add actual time index in
-        newStats(tIdxIdx).Values = stitchedTimeIndex;
-        
-        posIndices = floor(double(timeIndex - 1) ./ numTimePoints);
-        posIndicesCell = num2cell(posIndices);
-        
-        rows = cellfun(@(index) posList.get(index).getInt('GridRowIndex'),posIndicesCell);
-        cols = cellfun(@(index) posList.get(index).getInt('GridColumnIndex'),posIndicesCell);
-        %calculate offset to translate from individual field of view to proper
-        %position in stitched image
-        translation = [(cols * (imageWidth - xPixelOverlap)) * pixelSizeXY, (rows * (imageHeight - yPixelOverlap)) * pixelSizeXY];
-        
-        singlestruct = @(name, values) struct('Ids',newStats(1).Ids,'Name',name,'Values',values,'Units','');
-        
-        newStats(length(newStats) + 1) = singlestruct('Stitched Position X',newStats(pxIdx).Values + translation(:,1));
-        newStats(length(newStats) + 1) = singlestruct('Stitched Position Y',newStats(pyIdx).Values + translation(:,2));
-        newStats(length(newStats) + 1) = singlestruct('Stitched Position Z',newStats(pzIdx).Values );
-        
-        %sort into alphabetical order
-        [~, statOrder] = sort({newStats.Name});
-        newStats = newStats(statOrder);
-    end
+%     function [newStats] = modify_stats_for_stitched_view(stats)
+%         newStats = stats;
+%         pxIdx = find(ismember({stats.Name},'Position X'));
+%         pyIdx = find(ismember({stats.Name},'Position Y'));
+%         pzIdx = find(ismember({stats.Name},'Position Z'));
+%         tIdxIdx = find(ismember({stats.Name},'Time Index'));
+%         
+%         %rename original position stats
+%         % newStats(pxIdx).Name = 'Tile Position X';
+%         % newStats(pyIdx).Name = 'Tile Position Y';
+%         % newStats(pzIdx).Name = 'Tile Position Z';
+%         
+%         timeIndex = newStats(tIdxIdx).Values;
+%         %time index stat is one based, so subtract one
+%         stitchedTimeIndex = mod(timeIndex - 1,numTimePoints);
+%         %add actual time index in
+%         newStats(tIdxIdx).Values = stitchedTimeIndex;
+%         
+%         posIndices = floor(double(timeIndex - 1) ./ numTimePoints);
+%         posIndicesCell = num2cell(posIndices);
+%         
+%         rows = cellfun(@(index) posList.get(index).getInt('GridRowIndex'),posIndicesCell);
+%         cols = cellfun(@(index) posList.get(index).getInt('GridColumnIndex'),posIndicesCell);
+%         %calculate offset to translate from individual field of view to proper
+%         %position in stitched image
+%         translation = [(cols * (imageWidth - xPixelOverlap)) * pixelSizeXY, (rows * (imageHeight - yPixelOverlap)) * pixelSizeXY];
+%         
+%         singlestruct = @(name, values) struct('Ids',newStats(1).Ids,'Name',name,'Values',values,'Units','');
+%         
+%         newStats(length(newStats) + 1) = singlestruct('Stitched Position X',newStats(pxIdx).Values + translation(:,1));
+%         newStats(length(newStats) + 1) = singlestruct('Stitched Position Y',newStats(pyIdx).Values + translation(:,2));
+%         newStats(length(newStats) + 1) = singlestruct('Stitched Position Z',newStats(pzIdx).Values );
+%         
+%         %sort into alphabetical order
+%         [~, statOrder] = sort({newStats.Name});
+%         newStats = newStats(statOrder);
+%     end
 end
 
-function [ pixelData, metadata ] = readRawMagellan( magellanDataset, surfaceMask, offset, timeIndex )
-%return metadata from middle requested slice
-%offset is in in 0 indexed pixels
-%timeIndexStarts with 0
-unsign = @(arr) uint8(bitset(arr,8,0)) + uint8(128*(arr < 0));
+% function [ pixelData, metadata ] = readRawMagellan( magellanDataset, surfaceMask, offset, timeIndex )
+% %return metadata from middle requested slice
+% %offset is in in 0 indexed pixels
+% %timeIndexStarts with 0
+% unsign = @(arr) uint8(bitset(arr,8,0)) + uint8(128*(arr < 0));
+% 
+% metadata = [];
+% %Read raw pixels from magellan
+% %take stiched pixels instead of decoding position indices
+% pixelData = zeros(size(surfaceMask,1),size(surfaceMask,2),size(surfaceMask,3),6, 'uint8');
+% for channel = 0:5
+%     for relativeSlice = 0:size(surfaceMask,3)-1
+%         slice = offset(3) + relativeSlice;
+%         ti = magellanDataset.getImageForDisplay(channel, slice, timeIndex, 0, offset(1), offset(2),...
+%             size(pixelData,1), size(pixelData,2));
+%         pixels = reshape(unsign(ti.pix),size(pixelData,1),size(pixelData,2));
+%         if (isempty(metadata) && floor(size(surfaceMask,3)/2) == relativeSlice )
+%             metadata = ti.tags;
+%         end
+%         pixelData(:,:,relativeSlice+1,channel+1) = pixels;
+%     end
+% end
 
-metadata = [];
-%Read raw pixels from magellan
-%take stiched pixels instead of decoding position indices
-pixelData = zeros(size(surfaceMask,1),size(surfaceMask,2),size(surfaceMask,3),6, 'uint8');
-for channel = 0:5
-    for relativeSlice = 0:size(surfaceMask,3)-1
-        slice = offset(3) + relativeSlice;
-        ti = magellanDataset.getImageForDisplay(channel, slice, timeIndex, 0, offset(1), offset(2),...
-            size(pixelData,1), size(pixelData,2));
-        pixels = reshape(unsign(ti.pix),size(pixelData,1),size(pixelData,2));
-        if (isempty(metadata) && floor(size(surfaceMask,3)/2) == relativeSlice )
-            metadata = ti.tags;
-        end
-        pixelData(:,:,relativeSlice+1,channel+1) = pixels;
-    end
-end
-
-end
+% end
 
 
-function [newVertices, newTimeIndex] = modify_surfaces_for_stitched_view(vertices, timeIndex, numVertices, posList, imageWidth, imageHeight,...
-    xPixelOverlap, yPixelOverlap, pixelSize, numTimePoints)
-
-newVertices = zeros(size(vertices));
-newTimeIndex = zeros(size(timeIndex));
-
-%go through each surface and add it to the new surfaces as appropriate
-posIndices = floor(double(timeIndex) ./ numTimePoints);
-
-surfCount = 0;
-while surfCount < length(timeIndex)
-    %process in batches with same positon index (which means same offset in
-    %larger sitched image)
-    numInBatch = find(posIndices(1 + surfCount:end) ~= posIndices(1 + surfCount),1) - 1;
-    if (isempty(numInBatch))
-        numInBatch = length(posIndices) - surfCount; %last batch
-    end
-    verticesInBatch = sum(numVertices(1+surfCount:surfCount+numInBatch));
-    firstVertex = 1 + sum(numVertices(1:surfCount));
-    
-    
-    %offsets for spots in the larger stitched image
-    row = posList.get(posIndices(1 + surfCount)).getInt('GridRowIndex');
-    col = posList.get(posIndices(1 + surfCount)).getInt('GridColumnIndex');
-    %calculate offset to translate from individual field of view to proper
-    %position in stitched image
-    offset = [(col * (imageWidth - xPixelOverlap)) * pixelSize, (row * (imageHeight - yPixelOverlap)) * pixelSize, 0];
-    
-    %modify vertices and time
-    newVertices(firstVertex:firstVertex+verticesInBatch - 1,:) = vertices(firstVertex:firstVertex+verticesInBatch - 1,:) + repmat(offset,verticesInBatch,1);
-    newTimeIndex(1+surfCount:surfCount+numInBatch) = mod(timeIndex(1+surfCount:surfCount+numInBatch),numTimePoints);
-    
-    surfCount = surfCount + numInBatch;
-end
-
-end
+% function [newVertices, newTimeIndex] = modify_surfaces_for_stitched_view(vertices, timeIndex, numVertices, posList, imageWidth, imageHeight,...
+%     xPixelOverlap, yPixelOverlap, pixelSize, numTimePoints)
+% 
+% newVertices = zeros(size(vertices));
+% newTimeIndex = zeros(size(timeIndex));
+% 
+% %go through each surface and add it to the new surfaces as appropriate
+% posIndices = floor(double(timeIndex) ./ numTimePoints);
+% 
+% surfCount = 0;
+% while surfCount < length(timeIndex)
+%     %process in batches with same positon index (which means same offset in
+%     %larger sitched image)
+%     numInBatch = find(posIndices(1 + surfCount:end) ~= posIndices(1 + surfCount),1) - 1;
+%     if (isempty(numInBatch))
+%         numInBatch = length(posIndices) - surfCount; %last batch
+%     end
+%     verticesInBatch = sum(numVertices(1+surfCount:surfCount+numInBatch));
+%     firstVertex = 1 + sum(numVertices(1:surfCount));
+%     
+%     
+%     %offsets for spots in the larger stitched image
+%     row = posList.get(posIndices(1 + surfCount)).getInt('GridRowIndex');
+%     col = posList.get(posIndices(1 + surfCount)).getInt('GridColumnIndex');
+%     %calculate offset to translate from individual field of view to proper
+%     %position in stitched image
+%     offset = [(col * (imageWidth - xPixelOverlap)) * pixelSize, (row * (imageHeight - yPixelOverlap)) * pixelSize, 0];
+%     
+%     %modify vertices and time
+%     newVertices(firstVertex:firstVertex+verticesInBatch - 1,:) = vertices(firstVertex:firstVertex+verticesInBatch - 1,:) + repmat(offset,verticesInBatch,1);
+%     newTimeIndex(1+surfCount:surfCount+numInBatch) = mod(timeIndex(1+surfCount:surfCount+numInBatch),numTimePoints);
+%     
+%     surfCount = surfCount + numInBatch;
+% end
+% 
+% end
 

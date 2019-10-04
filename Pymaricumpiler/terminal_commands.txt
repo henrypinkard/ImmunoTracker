@@ -99,14 +99,34 @@ Whole LN timelapses
 46 47 25 31 34 21
 
 static LNs
+?
 
-singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 52 54 --suffix _corrected_new
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/GitRepos/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 52 54 --suffix _corrected_new
 
-singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 45 36 --suffix _corrected_new
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/GitRepos/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 45 36 --suffix _corrected_new
 
-singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 32 16 --suffix _corrected_new
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/GitRepos/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 32 16 --suffix _corrected_new
+
+
+Whole LN timelapses
+46 47 25 31 34 21
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/GitRepos/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --time_reg --export --ids 46 47 25 31 34 21 --suffix _corrected_new
 
 
 
+#computing time_regs for whole LN on cosmos
+python3 $HOME/GitRepos/LymphoSight/registration/data_conversion.py --time_reg --export --ids 34 --suffix _corrected_correct_no_stitch --xy_reg_channels 5
+
+#Doing final stitching on GCP
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/GitRepos/LymphoSight/registration/data_conversion.py --stitch --ids  21 24 25 31 34 38 44 46 47 48 51 53
+
+#redo remaining with bug ficpx
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/GitRepos/LymphoSight/registration/data_conversion.py --stitch --ids  24 25 31 34 38 44 46 47 48 51 53
+
+34 seems to have gone out of memory
+
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/GitRepos/LymphoSight/registration/data_conversion.py --stitch --ids  38 44 46 47 48 51 53
 
 
