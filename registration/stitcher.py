@@ -162,6 +162,7 @@ def stitch_single_channel(p_zyxc_stacks, p_zyx_translations, p_yx_translations, 
     :param params:
     :return:
     """
+    row_col_coords = row_col_coords.astype(np.int)
     stack_shape = p_zyxc_stacks[list(p_zyxc_stacks.keys())[0]].shape[:3]
     byte_depth = 1 if p_zyxc_stacks[list(p_zyxc_stacks.keys())[0]].dtype == np.uint8 else 2
     #convert possibly floats to ints

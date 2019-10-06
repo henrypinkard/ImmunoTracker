@@ -161,26 +161,37 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
         
         maskTemp = cell(endIndex-startIndex+1,1);
         imgTemp = cell(endIndex-startIndex+1,1);
-        excitations = zeros(endIndex-startIndex+1,2);
         %iterate through each surface to get its mask and image data
         for index = startIndex:endIndex
             %get axis aligned bounding box
             boundingBoxSize = [stats(find(strcmp({stats.Name},'BoundingBoxAA Length X'))).Values(index + 1),...
                 stats(find(strcmp({stats.Name},'BoundingBoxAA Length Y'))).Values(index + 1),...
                 stats(find(strcmp({stats.Name},'BoundingBoxAA Length Z'))).Values(index + 1)];
-            positionUnstitched = surface.GetCenterOfMass(index);            
+            positionUnstitched = [stats(find(strcmp({stats.Name},'Position X'))).Values(index + 1),...
+                stats(find(strcmp({stats.Name},'Position Y'))).Values(index + 1),...
+                stats(find(strcmp({stats.Name},'Position Z'))).Values(index + 1)];           
             
             %Mask is in unstitched coordinates, image data is in stitched coordinates
             topLeft = positionUnstitched -  boundingBoxSize / 2;
             bottomRight = positionUnstitched + boundingBoxSize / 2;
-%             topLeftStitched = positionStitched -  boundingBoxSize / 2;
-            pixelResolution = int32(floor((bottomRight - topLeft) ./ [pixelSizeXY pixelSizeXY pixelSizeZ]));
+            
             topLeftPix = int32(floor([topLeft(1:2) ./ pixelSizeXY topLeft(3) ./ pixelSizeZ]));
+            bottomRightPix = int32(ceil(bottomRight ./ [pixelSizeXY pixelSizeXY pixelSizeZ]));
+            maxExtent = [ds.GetSizeX, ds.GetSizeY, ds.GetSizeZ];
+            if any(bottomRightPix > maxExtent)
+               bottomRightPix = min(bottomRightPix, int32(maxExtent));
+            end
+            if any(topLeftPix > 0)
+               topLeftPix = min(topLeftPix, int32([0 0 0]));
+            end
+            pixelResolution = bottomRightPix - topLeftPix;
+            
+            
             mask = surface.GetSingleMask(index, topLeft(1), topLeft(2), topLeft(3), bottomRight(1), bottomRight(2),...
                 bottomRight(3), pixelResolution(1), pixelResolution(2), pixelResolution(3));
             byteMask = uint8(squeeze(mask.GetDataBytes));
             timeIndex = surface.GetTimeIndex(index);
-            imgData = zeros(pixelResolution(1), pixelResolution(2), pixelResolution(3), 6);
+            imgData = zeros(pixelResolution(1),  pixelResolution(2), pixelResolution(3), 6);
             for c = 0:5
                 imgData(:,:,:,c+1) = ds.GetDataSubVolumeBytes(topLeftPix(1), topLeftPix(2), topLeftPix(3), c, timeIndex,...
                 pixelResolution(1), pixelResolution(2), pixelResolution(3));
