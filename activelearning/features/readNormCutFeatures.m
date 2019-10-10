@@ -1,7 +1,7 @@
-function [features, featureNames  ] = readNormCutFeatures( filename )
+function [features, featureNames, roiAbsoluteCentroid ] = readNormCutFeatures( dataFile )
 %unpack previously calculated normalized cut features and put them into
 %design matrix format
-load(filename, 'normCutFeatures')
+normCutFeatures = dataFile.normCutFeatures
 
 totalProjNormedIntesnity = cell2mat(normCutFeatures(:,1));
 totalProjUnnormedIntesnity =  cell2mat(normCutFeatures(:,2));
@@ -13,6 +13,7 @@ corrMatROI = normCutFeatures(:,7);
 corrMatGlob = normCutFeatures(:,8);
 roiTotalPixels = cell2mat(normCutFeatures(:,9));
 roiCentroidOffset = cell2mat(normCutFeatures(:,10));
+roiAbsoluteCentroid = cell2mat(normCutFeatures(:,11));
 
 unpackCorrMat = @(input) cellfun(@(datum) [datum(1,2:6) datum(2,3:6) datum(3,4:6) datum(4,5:6) datum(5,6)]  ,input, 'UniformOutput', false);
 

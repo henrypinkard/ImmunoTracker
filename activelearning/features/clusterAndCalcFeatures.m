@@ -1,7 +1,7 @@
 function [ totalProjNormedIntesnity, totalProjUnnormedIntesnity, avgProjNormedIntensity,...
     avgProjUnnormedIntensity, roiMeanIntensitySpectrum, roiMeanIntensityMagnitude,...
-    corrMatROI, corrMatGlob, roiTotalPixels, roiCentroidOffset ] = clusterAndCalcFeatures( pixels, mask,...
-    channelOffsets, referenceVector)
+    corrMatROI, corrMatGlob, roiTotalPixels, roiCentroidOffset, roiCentroid] = clusterAndCalcFeatures( pixels, mask,...
+    channelOffsets, referenceVector, pixelSizeXY, pixelSizeZ)
 % totalProjNormedIntesnity -- sum of all projected normalized pixels in ROI
 % totalProjUnnormedIntesnity -- sum of all projected unnormalized pixels in ROI
 % avgProjNormedIntensity -- average projected normalized intenisty in ROI
@@ -17,10 +17,9 @@ function [ totalProjNormedIntesnity, totalProjUnnormedIntesnity, avgProjNormedIn
 %TODO: which of these need to be changed with new data with new piel sizes
 %etc
 
-%TODO: remove reverse rank filtering?
 maxEclideanDistance = 10;
 numSlices2Use = 6; %window size of slices used for ROI calculation
-pixelsPerCluster = 250; %approximate size of T cell
+pixelsPerCluster = 60; %approximate size of T cell
 
 alpha = 0.7; %spatial distance weight
 beta = 1; %spectral distance weight
@@ -30,10 +29,7 @@ gamma = 0; %intenisty distance weight
 channelOffsets = uint8(channelOffsets);
 channelOffsets = reshape(channelOffsets,1,1,1,6);
 %background subtract pixels
-pixels = pixels - repmat(channelOffsets,size(pixels,1),size(pixels,2),size(pixels,3),1);
-
-%reverse rank filter
-pixels = reverseRankFilter(pixels);
+pixels = double(pixels) - double(repmat(channelOffsets,size(pixels,1),size(pixels,2),size(pixels,3),1));
 
 %remove border to limit filtering artifacts
 pixels = pixels(2:end-1,2:end-1,:,:);
@@ -65,9 +61,6 @@ for sliceIndex = 1:numSlices
     sliceMask = sliceMasks{sliceIndex};
     maskIndices = sliceMaskIndices{sliceIndex};
     maskSize = size(sliceMask);
-    %TODO: read from metadata
-    pixelSizeXY = 0.363;
-    pixelSizeZ = 4.5;
     %each pixel is a vertex
     nPixels = sum(sliceMask(:));
     %compute number of clusters based on number of pixels
@@ -176,7 +169,7 @@ for sliceIndex = 1:numSlices
 
 %     % Visualize
 %     figure(1)
-%     imshow(imfuse(pixels(:,:,sliceIndex,3),10*pixels(:,:,sliceIndex,5)),[])
+%     imshow(imfuse(pixels(:,:,sliceIndex,3),pixels(:,:,sliceIndex,5)),[])
 %     %green image
 %     figure(2)
 %     imshow(pixels(:,:,sliceIndex,3),[])
@@ -184,7 +177,7 @@ for sliceIndex = 1:numSlices
 %     %red image
 %     figure(3)
 %     redImg = pixels(:,:,sliceIndex,5);
-%     imshow(redImg,[min(redImg(:)) max(redImg(:))*0.5])
+%     imshow(redImg,[min(redImg(:)) max(redImg(:))])
 %     colormap([linspace(0,1,256)' zeros(256,1) linspace(0,1,256)'])
 %     %show mask
 %     figure(4)

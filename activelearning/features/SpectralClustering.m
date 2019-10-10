@@ -51,13 +51,16 @@ end
 
 % compute the eigenvectors corresponding to the k smallest
 % eigenvalues
-diff   = eps;
-[U, ~] = eigs(L, k, diff);
+% diff   = eps;
+% [U, ~] = eigs(L + eye(size(L)) * 1e-10, k, 'sm');
+warning('off', 'MATLAB:eigs:SigmaNearExactEig')
+[U, ~] = eigs(L, k, eps);
+
 
 % in case of the Jordan-Weiss algorithm, we need to normalize
 % the eigenvectors row-wise
 if Type == 3
-    U = bsxfun(@rdivide, U, sqrt(sum(U.^2, 2)));
+    U = bsxfun(@rdivide, U, eps + sqrt(sum(U.^2, 2)));
 end
 
 % now use the k-means algorithm to cluster U row-wise

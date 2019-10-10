@@ -129,4 +129,8 @@ singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $
 
 singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/GitRepos/LymphoSight/registration/data_conversion.py --stitch --ids  38 44 46 47 48 51 53
 
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/sing.sif python3 $HOME/GitRepos/LymphoSight/registration/data_conversion.py --stitch --ids  34
 
+
+#convert all to imaris
+python3 $HOME/GitRepos/LymphoSight/registration/data_conversion.py --export --ids  21 24 25 31 34 38 44 46 47 48 51 53

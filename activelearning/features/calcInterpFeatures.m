@@ -1,7 +1,6 @@
 function [vertDistBelowSurface, normalAngleWithVertical, normalProjection] = calcInterpFeatures(...
-    features, featureNames,summaryMD, interpPoints)
+    features, featureNames, interpPoints, pixelSize)
 
-pixelSize = summaryMD.PixelSize_um;
 
 stitchedPosX = features(:,strcmp(featureNames,'Stitched Position X'));
 stitchedPosY = features(:,strcmp(featureNames,'Stitched Position Y'));
