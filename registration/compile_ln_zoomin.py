@@ -40,13 +40,13 @@ def estimate_background(p_zyxc_stacks, nonempty_pixels):
     return np.array(backgrounds)
 
 
-def convert_single_tp(magellan, metadata, ID, param_cache_dir, time_index, max_tp=1, min_tp=0):
+def convert_single_tp(magellan, metadata, ID, param_cache_dir, time_index):
     input_filter_sigma = 2
     reverse_rank_filter=True
 
     # load time reg params if possible
-    t_zyx_global_shifts = np.zeros((max_tp - min_tp, 3), np.int)
-    t_p_zyx_residual_shifts = np.zeros((max_tp - min_tp, metadata['num_positions'], 3), dtype=np.int)
+    t_zyx_global_shifts = np.zeros((1, 3), np.int)
+    t_p_zyx_residual_shifts = np.zeros((1, metadata['num_positions'], 3), dtype=np.int)
     saved_name = '{}{}_xcorr_params.npz'.format(param_cache_dir, ID + '_time_reg')
     if os.path.isfile(saved_name):
         with np.load(saved_name) as loaded:
@@ -55,21 +55,13 @@ def convert_single_tp(magellan, metadata, ID, param_cache_dir, time_index, max_t
                 t_zyx_global_shifts = loaded['t_zyx_global_shifts']  # so stitcher can use it
                 t_p_zyx_residual_shifts = loaded['t_p_zyx_residual_shifts']
     # load stack params if possible
-    p_yx_list = []
-    for frame_index in range(min_tp, max_tp):
-        # initialize to a default of 0
-        p_yx_translations = metadata['num_positions'] * [np.zeros((metadata['max_z_index']
-                                                                   - metadata['min_z_index'] + 1, 2))]
-        # load parameters from saved file if preset
-        param_cache_name = ID + '_tp{}'.format(frame_index)
-        saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)
-        if os.path.isfile(saved_name) and ID:
-            with np.load(saved_name) as loaded:
-                if 'p_yx_translations' in loaded:
-                    print('Loaded params from: ' + saved_name)
-                    p_yx_translations = loaded['p_yx_translations']
-        p_yx_list.append(p_yx_translations)
-    t_p_yx_translations = np.stack(p_yx_list)
+    param_cache_name = ID + '_tp{}'.format(time_index)
+    saved_name = '{}{}_optimized_params.npz'.format(param_cache_dir, param_cache_name)
+    if os.path.isfile(saved_name) and ID:
+        with np.load(saved_name) as loaded:
+            if 'p_yx_translations' in loaded:
+                print('Loaded params from: ' + saved_name)
+                p_yx_translations = loaded['p_yx_translations']
 
     param_cache_name = ID
     saved_name = '{}{}_optimized_stitch_params.npz'.format(param_cache_dir, param_cache_name)
@@ -105,8 +97,6 @@ def convert_single_tp(magellan, metadata, ID, param_cache_dir, time_index, max_t
                                    metadata['tile_shape'][1] - metadata['tile_overlaps'][1])]
 
 
-
-
     # add in time point to timepoint registrations for the final imaris size
     imaris_size = np.array(stitched_image_size) + np.max(t_zyx_global_shifts, axis=0).astype(np.int)
 
@@ -120,7 +110,7 @@ def convert_single_tp(magellan, metadata, ID, param_cache_dir, time_index, max_t
     for channel_index in range(num_channels):
         top_stack_relative_to_median = np.min(-t_p_zyx_translations[time_index, :, 0]).astype(np.int)
         stitched = stitch_single_channel(raw_stacks, p_zyx_translations=t_p_zyx_translations[time_index],
-                                         p_yx_translations=t_p_yx_translations[time_index],
+                                         p_yx_translations=p_yx_translations,
                                          tile_overlap=metadata['tile_overlaps'],
                                          row_col_coords=metadata['row_col_coords'], channel_index=channel_index)
 
@@ -187,7 +177,7 @@ imaris_size_z = max_shape[0]
 num_frames = 20
 byte_depth = 1
 
-with ImarisJavaWrapper(imaris_dir, '48-49_fusion', (imaris_size_x, imaris_size_y, imaris_size_z), byte_depth, 6,
+with ImarisJavaWrapper(imaris_dir, '48-49_fusion_zoomin', (imaris_size_x, imaris_size_y, imaris_size_z), byte_depth, 6,
                        num_frames, magellan49.pixel_size_xy_um, float(magellan49.pixel_size_z_um)) as writer:
     for time_index in range(20):
         data = np.zeros([max_shape[0], max_shape[1], max_shape[2], 6], dtype=volume48.dtype)
@@ -203,10 +193,10 @@ with ImarisJavaWrapper(imaris_dir, '48-49_fusion', (imaris_size_x, imaris_size_y
         elapsed_time_ms = 0
         for channel_index in range(6):
             stack = data[..., channel_index]
+            print('Frame: {} of {}, Channel: {}'.format(
+                time_index + 1, num_frames, channel_index + 1))
             for z_index, image in enumerate(stack):
                 image = image.astype(np.uint8 if byte_depth == 1 else np.uint16)
                 # add image to imaris writer
-                print('Frame: {} of {}, Channel: {} of {}, Slice: {} of {}'.format(
-                    time_index + 1, num_frames, channel_index + 1, 6, z_index, imaris_size_z))
                 writer.write_z_slice(image, z_index, channel_index, time_index, elapsed_time_ms)
 print('Finshed!')
