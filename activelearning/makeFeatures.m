@@ -1,12 +1,13 @@
-clear
+function [] = makeFeatures(fullpath)
 normalizedCutFeatures = 1;
-[file, path] = uigetfile('*.mat','Select .mat data file');
-if (file == 0)
-    return; %canceled
-end
+% [file, path] = uigetfile('*.mat','Select .mat data file');
+% if (file == 0)
+%     return; %canceled
+% end
+% fullpath = strcat(path,file)
 
-dataFile = matfile(strcat(path,file),'Writable',true);
-% summaryMD = dataFile.summaryMD;
+dataFile = matfile(fullpath,'Writable',true);
+% summaryMD = dataFile.summasryMD;
 interpPoints = dataFile.surfInterpPoints;
 features = dataFile.rawFeatures;
 featureNames = dataFile.rawFeatureNames;
