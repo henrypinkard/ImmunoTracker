@@ -28,8 +28,8 @@ while ~isempty(remainingCalcIndices)
     masks = saveFile.masks(calcIndices,:);
     cellSize = 11;
     normCutFeatures = cell(length(calcIndices),cellSize);
-%     for i = 1:length(calcIndices)      
-    parfor i = 1:length(calcIndices)      
+    for i = 1:length(calcIndices) 
+%     parfor i = 1:length(calcIndices)      
         [ totalProjNormedIntesnity, totalProjUnnormedIntesnity, avgProjNormedIntensity,...
             avgProjUnnormedIntensity, roiMeanIntensitySpectrum, roiMeanIntensityMagnitude,...
             corrMatROI, corrMatGlob, roiTotalPixels, roiCentroidOffset, roiCentroid ] =...

@@ -32,8 +32,8 @@ channelOffsets = reshape(channelOffsets,1,1,1,6);
 pixels = double(pixels) - double(repmat(channelOffsets,size(pixels,1),size(pixels,2),size(pixels,3),1));
 
 %remove border to limit filtering artifacts
-pixels = pixels(2:end-1,2:end-1,:,:);
-mask = mask(2:end-1,2:end-1,:);
+% pixels = pixels(2:end-1,2:end-1,:,:);
+% mask = mask(2:end-1,2:end-1,:);
 %smooth pixels
 pixels = imgaussfilt(pixels,1);
 %remove slices with no masked pixels
