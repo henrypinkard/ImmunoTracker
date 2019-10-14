@@ -134,3 +134,6 @@ singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $
 
 #convert all to imaris
 python3 $HOME/GitRepos/LymphoSight/registration/data_conversion.py --export --ids  21 24 25 31 34 38 44 46 47 48 51 53
+
+#redo 44
+python3 $HOME/GitRepos/LymphoSight/registration/data_conversion.py --stack --suffix redo_stack --export --ids  44
