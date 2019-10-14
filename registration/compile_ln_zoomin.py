@@ -146,15 +146,15 @@ def get_dataset_path(ID):
 
 
 #TODO: Load time point from each dataset
-data_path = get_dataset_path('48')
+data_path = get_dataset_path('44')
 magellan_dir = raw_data_dir + data_path
 magellan48, metadata48 = open_magellan(magellan_dir)
-volume48 = convert_single_tp(magellan48, metadata48, '48', param_cache_dir, 0)
+volume48 = convert_single_tp(magellan48, metadata48, '44', param_cache_dir, 0)
 
-data_path = get_dataset_path('49')
+data_path = get_dataset_path('45')
 magellan_dir = raw_data_dir + data_path
 magellan49, metadata49 = open_magellan(magellan_dir)
-volume49 = convert_single_tp(magellan49, metadata49, '49', param_cache_dir, 0)
+volume49 = convert_single_tp(magellan49, metadata49, '45', param_cache_dir, 0)
 
 max_shape = np.maximum(np.array(volume48.shape[:3]), np.array(volume49.shape[:3]))
 v48_padded = np.zeros(max_shape, dtype=volume48.dtype)
@@ -174,10 +174,10 @@ offset49[offset49 < 0] = 0
 imaris_size_x = max_shape[2]
 imaris_size_y = max_shape[1]
 imaris_size_z = max_shape[0]
-num_frames = 20
+num_frames = 21
 byte_depth = 1
 
-with ImarisJavaWrapper(imaris_dir, '48-49_fusion_zoomin', (imaris_size_x, imaris_size_y, imaris_size_z), byte_depth, 6,
+with ImarisJavaWrapper(imaris_dir, '44-45_fusion_zoomin', (imaris_size_x, imaris_size_y, imaris_size_z), byte_depth, 6,
                        num_frames, magellan49.pixel_size_xy_um, float(magellan49.pixel_size_z_um)) as writer:
     for time_index in range(20):
         data = np.zeros([max_shape[0], max_shape[1], max_shape[2], 6], dtype=volume48.dtype)
@@ -189,7 +189,7 @@ with ImarisJavaWrapper(imaris_dir, '48-49_fusion_zoomin', (imaris_size_x, imaris
             data[offset49[0]:offset49[0] + volume49.shape[0],
                     offset49[1]:offset49[1] + volume49.shape[1],
                      offset49[2]:offset49[2] + volume49.shape[2]] = convert_single_tp(
-                            magellan49, metadata49, '49', param_cache_dir, time_index - 1)
+                            magellan49, metadata49, '45', param_cache_dir, time_index - 1)
         elapsed_time_ms = 0
         for channel_index in range(6):
             stack = data[..., channel_index]

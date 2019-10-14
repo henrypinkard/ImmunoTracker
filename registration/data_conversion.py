@@ -134,7 +134,7 @@ for ID in ids:
             stitch_downsample_factor_xy=2,
             stitch_regularization_xy=args.stitch_reg_xy,
             stitch_regularization_z=args.stitch_reg_z,
-            stack=args.stack and int(get_value(ID, 'Explant')) != 1,
+            stack=args.stack,
             stitch=args.stitch,
             time_reg=args.time_reg,
             export=args.export,
