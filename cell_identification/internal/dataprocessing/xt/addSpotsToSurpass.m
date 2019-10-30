@@ -1,14 +1,12 @@
-function [xSpots] = addSpotsToSurpass(xImarisApp, spotIndicesToAdd)
+function [xSpots] = addSpotsToSurpass(xImarisApp, spotIndicesToAdd, name, spotCenters, timeIndices)
 %surfIndicesToAdd is 0 index imarisIndices
 spotIndicesToAdd = spotIndicesToAdd + 1;
 
 h = figure(1);
-spotCenters = getappdata(h,'spotCenters');
-timeIndices = getappdata(h,'timeIndices');
 
 xSurpass = xImarisApp.GetSurpassScene;
 xPopulationSpots = xImarisApp.GetFactory.CreateSpots;
-xPopulationSpots.SetName('Cells of interest');
+xPopulationSpots.SetName(name);
 xSurpass.AddChild(xPopulationSpots,-1);
 
         

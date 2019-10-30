@@ -181,15 +181,11 @@ for startFrame = startIndex:framesPerLoop:maxFrameIndex
         %store masks, pixels, and other data
         indicesInFile = size(saveFile, 'masks', 1)+1:size(saveFile, 'masks', 1)+endIndex-startIndex+1;
         
-%         saveFile.excitations(indicesInFile,1:2) = excitations;
         saveFile.masks(indicesInFile,1) = maskTemp;
         saveFile.imageData(indicesInFile,1) = imgTemp;
-%         saveFile.stitchedXYZPositions(indicesInFile,1:3) = [stats(find(strcmp({stats.Name},'Stitched Position X'))).Values(startIndex+1:endIndex+1),...
-%             stats(find(strcmp({stats.Name},'Stitched Position Y'))).Values(startIndex+1:endIndex+1),...
-%             stats(find(strcmp({stats.Name},'Stitched Position Z'))).Values(startIndex+1:endIndex+1)];
         saveFile.stitchedXYZPositions(indicesInFile,1:3) = [stats(find(strcmp({stats.Name},'Position X'))).Values(startIndex+1:endIndex+1),...
-        stats(find(strcmp({stats.Name},'Position Y'))).Values(startIndex+1:endIndex+1),...
-        stats(find(strcmp({stats.Name},'Position Z'))).Values(startIndex+1:endIndex+1)];
+                                                            stats(find(strcmp({stats.Name},'Position Y'))).Values(startIndex+1:endIndex+1),...
+                                                            stats(find(strcmp({stats.Name},'Position Z'))).Values(startIndex+1:endIndex+1)];
         
         
         %store surface data in file

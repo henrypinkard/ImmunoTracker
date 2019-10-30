@@ -10,12 +10,17 @@ function [ index ] = nextSampleToClassify( currentTPPredValue, mask )
 
 designMatrixIndices = find(mask);
 certaintyThreshold = 0.05; %pick random sample within certainty bounds
-certainty = abs(currentTPPredValue - 0.5);
-[~,sortedIndices] = sort(certainty);
-numInRange = min(1,sum(certainty < certaintyThreshold));
+numInRange = 0;
+while numInRange == 0
+    certaintyThreshold = certaintyThreshold * 2;    
+    certainty = abs(currentTPPredValue - 0.5);
+    [~,sortedIndices] = sort(certainty);
+    numInRange = min(1,sum(certainty < certaintyThreshold));
+end
 
 
 dmIndex = sortedIndices(randi(numInRange));
+
 %index should be 1-based
 index = designMatrixIndices(dmIndex);
 

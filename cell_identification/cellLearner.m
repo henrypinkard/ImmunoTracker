@@ -2,11 +2,15 @@ function [  ] = cellLearner(  )
 %change to folder above
 cd(fileparts(mfilename('fullpath')))
 
+%Connect to Imaris
+[ xImarisApp, xPopulationSurface, xSurfaceToClassify ] = xtSetupSurfaceTransfer(  );
+
 [file, path] = uigetfile('*.mat','Select .mat data file');
 if (file == 0)
     return; %canceled
 end
 
+fprintf('opening data from: %s\n', strcat(path,file)); 
 
 dataFile = matfile(strcat(path,file),'Writable',true);
 useRawFeatures = ~any(strcmp('features',who(dataFile)));
@@ -21,22 +25,27 @@ otherCOIFeatures = zeros(0, size(features,2));
 otherNCOIFeatures = zeros(0, size(features,2));
 files = dir(strcat(path, '*', dataFile.name,'*.mat'));
 for f = files'
-    if ~strcmp(file, f.name)
-        otherDataFile = matfile(strcat(path, f.name),'Writable',false);
-        if ~any(strcmp('coiIndices',who(otherDataFile))) ||...
-                (size(otherDataFile, 'coiIndices', 1) == 0 && size(otherDataFile, 'ncoiIndices', 1) == 0)
-            continue %no labels here
-        end
-        fprintf('Loading classifcation labels from %s', f.name);
-        if ~useRawFeatures
-           otherFeatures = otherDataFile.features;
+    if ~strcmp(file, f.name)    
+        load(strcat(path, f.name),'coiIndices');
+        load(strcat(path, f.name),'ncoiIndices');
+        if exist('coiIndices','var') || exist('ncoiIndices','var')
+            fprintf('Found existing labels from %s\n', f.name);
+            otherDataFile = matfile(strcat(path,f.name),'Writable',false);
+            if ~useRawFeatures
+                otherFeatures = otherDataFile.features;
+            else
+                otherFeatures = otherDataFile.rawFeatures;
+            end
+            otherCOIFeatures = [otherCOIFeatures; otherFeatures(otherDataFile.coiIndices, :) ];
+            otherNCOIFeatures = [otherNCOIFeatures; otherFeatures(otherDataFile.ncoiIndices, :) ];
+            clear coiIndices
+            clear ncoiIndices
         else
-           otherFeatures = otherDataFile.rawFeatures; 
-        end
-        otherCOIFeatures = [otherCOIFeatures; otherFeatures(otherDataFile.coiIndices, :) ];
-        otherNCOIFeatures = [otherNCOIFeatures; otherFeatures(otherDataFile.ncoiIndices, :) ];    
+            fprintf('No existing labels from %s\n', f.name);
+        end        
     end
 end
+
 
 storeReferenceVector = 0;
 try 
@@ -83,10 +92,9 @@ else
     %TODO normalized cut roi centers
     g = 5;
 end
-setappdata(h,'spotCenters', spotCenters);
+% setappdata(h,'spotCenters', spotCenters);
 
-%Connect to Imaris
-[ xImarisApp, xPopulationSurface, xSurfaceToClassify ] = xtSetupSurfaceTransfer(  );
+
 xSurpassCam = xImarisApp.GetSurpassCamera;
 %make stuff for manual selection
 %delete old  clipping planes
@@ -130,7 +138,7 @@ printSelectionInstructions();
         %get indices corresponding to set of all surfaces, sorted by
         %distance to axis
         %don't take more than 1000
-        indices = currentTPIndices(closestIndices(1:1000));        
+        indices = currentTPIndices(closestIndices(1:100));        
     end
 
     function [intersectionPoint] = getcrosshairintersectionpoint() 
@@ -246,7 +254,8 @@ printSelectionInstructions();
             updatepreviewsurface();   
         %%%%%%%%% Active Learning %%%%%%%%%
         elseif strcmp(key,'q')
-            if (isempty(coiIndices) || isempty(ncoiIndices))
+            if ((isempty(coiIndices) || isempty(ncoiIndices)) &&...
+                    (isempty(otherCOIFeatures) || isempty(otherNCOIFeatures)))
                error('Must manually select 2 small populations of cells to train classifier'); 
             end
             %disable manual selection mode

@@ -12,6 +12,16 @@ interpPoints = dataFile.surfInterpPoints;
 features = dataFile.rawFeatures;
 featureNames = dataFile.rawFeatureNames;
 channelOffsets = reshape(dataFile.channelOffsets,1,6);
+%check for NANs
+nanIndices = find(sum(isnan(features)));
+if  ~isempty(nanIndices)
+    for i = 1:length(nanIndices)
+        fprintf('Warning: NAN feature %. Replacing with 0', featureNames{nanIndices(i)}) 
+    end
+    features(isnan(features)) = 0;
+end
+
+
 
 %%%%%%%%%%%%  Derived features from differences in COMs and Intensity weighted COMs
 fprintf('Calculating COM features...\n');

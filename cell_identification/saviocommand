@@ -1,0 +1,49 @@
+for name in /global/scratch/hbp/lymphosight/surface_candidates/25_xcr1_candidates.mat    /global/scratch/hbp/lymphosight/surface_candidates/48_rfp_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/49_vpd_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/21_xcr1_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/45_gfp_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/48_vpd_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/49_xcr1_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/25_e670_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/45_vpd_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/48_xcr1_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/25_rfp_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/45_xcr1_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/49_gfp_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/25_vpd_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/48_gfp_candidates.mat     /global/scratch/hbp/lymphosight/surface_candidates/49_rfp_candidates.mat; do sbatch launch2.sh $name; done
+
+
+#ones that get stuck in kmeans loop
+/global/scratch/hbp/lymphosight/surface_candidates/25_xcr1_candidates.mat
+/global/scratch/hbp/lymphosight/surface_candidates/45_gfp_candidates.mat
+
+
+
+for name in /global/scratch/hbp/lymphosight/surface_candidates/25_xcr1_candidates.mat; do sbatch launch2.sh $name; done
+
+
+
+#redo some ones that were not ready before or corrupted
+/global/scratch/hbp/lymphosight/surface_candidates/44_gfp_candidates.mat
+/global/scratch/hbp/lymphosight/surface_candidates/44_vpd_candidates.mat
+/global/scratch/hbp/lymphosight/surface_candidates/44_xcr1_candidates.mat
+/global/scratch/hbp/lymphosight/surface_candidates/49_rfp_candidates.mat
+/global/scratch/hbp/lymphosight/surface_candidates/49_vpd_candidates.mat
+
+for name in /global/scratch/hbp/lymphosight/surface_candidates/44_gfp_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/44_vpd_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/44_xcr1_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/49_rfp_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/49_vpd_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/25_xcr1_candidates.mat; do sbatch launch2.sh $name; done
+
+#for some reason these 4 didnt complete normalized cut features
+No features? 49_xcr1_candidates.mat  
+No features? 49_gfp_candidates.mat   
+No features? 45_xcr1_candidates.mat  
+No features? 21_xcr1_candidates.mat 
+
+for name in /global/scratch/hbp/lymphosight/surface_candidates/49_xcr1_candidates.mat  /global/scratch/hbp/lymphosight/surface_candidates/49_gfp_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/45_xcr1_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/21_xcr1_candidates.mat; do sbatch launch2.sh $name; done
+
+
+
+45_gfp_candidates.mat -- need to download
+25_xcr1_candidates.mat -- need to download
+49_rfp_candidates.mat -- need to download
+49_vpd_candidates.mat -- need to download
+44_xcr1_candidates.mat -- need to download
+44_gfp_candidates.mat -- need to download
+44_vpd_candidates.mat -- need to download
+
+scp  hbp@dtn.brc.berkeley.edu:"/global/scratch/hbp/lymphosight/surface_candidates/45_gfp_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/25_gfp_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/49_rfp_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/49_vpd_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/44_xcr1_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/44_gfp_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/44_vpd_candidates.mat" .
+
+scp hbp@dtn.brc.berkeley.edu:/global/scratch/hbp/lymphosight/surface_candidates/25_xcr1_candidates.mat .
+
+
+/global/scratch/hbp/lymphosight/surface_candidates/21_xcr1_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/45_xcr1_candidates.mat /global/scratch/hbp/lymphosight/surface_candidates/49_xcr1_candidates.mat
+
+
+

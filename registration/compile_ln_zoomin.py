@@ -163,7 +163,9 @@ v49_padded = np.zeros(max_shape, dtype=volume48.dtype)
 v48_padded[:volume48.shape[0], :volume48.shape[1], :volume48.shape[2]] = volume48[..., 0]
 v49_padded[:volume49.shape[0], :volume49.shape[1], :volume49.shape[2]] = volume49[..., 0]
 
-offsets = x_corr_register_3D(v48_padded, v49_padded, np.array(v48_padded.shape) // 2) #[-10 692 857]
+offsets = x_corr_register_3D(v48_padded, v49_padded, np.array(v48_padded.shape) // 2)
+#44-45: [  -2, 1102,  587]
+#48-49: [-10 692 857]
 
 offset48 = np.copy(offsets)
 offset49 = np.copy(offsets)

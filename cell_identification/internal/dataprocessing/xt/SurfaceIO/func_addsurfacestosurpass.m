@@ -91,8 +91,8 @@ for i = 0:numBatches - 1
 end
 
 %check if file has track edges
-if (any(strcmp('trackEdges',who(file))))
-    xSurfaces.SetTrackEdges(file.trackEdges);
-end
+% if (any(strcmp('trackEdges',who(file))))
+%     xSurfaces.SetTrackEdges(file.trackEdges);
+% end
 
 end
