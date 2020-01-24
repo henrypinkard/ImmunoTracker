@@ -181,7 +181,7 @@ byte_depth = 1
 
 with ImarisJavaWrapper(imaris_dir, '44-45_fusion_zoomin', (imaris_size_x, imaris_size_y, imaris_size_z), byte_depth, 6,
                        num_frames, magellan49.pixel_size_xy_um, float(magellan49.pixel_size_z_um)) as writer:
-    for time_index in range(20):
+    for time_index in range(21):
         data = np.zeros([max_shape[0], max_shape[1], max_shape[2], 6], dtype=volume48.dtype)
         if time_index == 0:
             data[offset48[0]:offset48[0] + volume48.shape[0],
