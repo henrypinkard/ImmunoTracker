@@ -6,3 +6,6 @@ imagingNN/log/**
 **/workspace.xml
 Pymaricumpiler/.idea
 analysis/.idea
+analysis/figures/*
+analysis/.ipynb_checkpoints/
+analysis/Users/**
