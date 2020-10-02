@@ -11,13 +11,13 @@ factory = xImarisApp.GetFactory;
 
 xSurpass = xImarisApp.GetSurpassScene;
 
-load('/Users/henrypinkard/Desktop/imaris_analysis/48_49_fusion_spots.mat')
+load('/Users/henrypinkard/Desktop/imaris_analysis/4445_spots.mat')
 
 spots = factory.CreateSpots;
-spots.SetName('XCR1')
-spots.Set(double(XCR1_coords(:, 1:3)), double(XCR1_time_indices(:)), double(XCR1_coords(:, 4)))
+spots.SetName('XCR1_clustering')
+spots.Set(double(XCR1_clustering_coords(:, 1:3)), double(XCR1_clustering_time_indices(:)), double(XCR1_clustering_coords(:, 4)))
 xSurpass.AddChild(spots, -1);
-spots.SetTrackEdges(double(XCR1_edges))
+spots.SetTrackEdges(double(XCR1_clustering_edges))
 
 
 spots = factory.CreateSpots;
@@ -26,11 +26,11 @@ spots.Set(double(GFP_coords(:, 1:3)), double(GFP_time_indices(:)), double(GFP_co
 xSurpass.AddChild(spots, -1);
 spots.SetTrackEdges(double(GFP_edges))
 
-spots = factory.CreateSpots;
-spots.SetName('RFP')
-spots.Set(double(RFP_coords(:, 1:3)), double(RFP_time_indices(:)), double(RFP_coords(:, 4)))
-xSurpass.AddChild(spots, -1);
- spots.SetTrackEdges(double(RFP_edges))
+% spots = factory.CreateSpots;
+% spots.SetName('RFP')
+% spots.Set(double(RFP_coords(:, 1:3)), double(RFP_time_indices(:)), double(RFP_coords(:, 4)))
+% xSurpass.AddChild(spots, -1);
+%  spots.SetTrackEdges(double(RFP_edges))
 
 spots = factory.CreateSpots;
 spots.SetName('VPD')

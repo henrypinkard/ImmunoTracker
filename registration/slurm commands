@@ -1,0 +1,61 @@
+sbatch singularity_job.sh "python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --export --stitch_reg 0.0001 --ids 36 --max_tp 5 --suffix reg_test0.0001"
+
+
+for gcp
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --min_tp 3 --max_tp 4 --stitch_reg 0.1 --ids 36 --max_tp 4 --suffix reg_test0.1
+
+
+regularization experiment on stitcha (GCP)
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --z_smooth_stitch --export --ids 36 --stitch_reg_xy 0.03 --stitch_reg_z 0.03 --suffix _xyreg_0.03_zreg_0.03 --max_tp 5
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --z_smooth_stitch --export --ids 36 --stitch_reg_xy 0.03 --stitch_reg_z 0.004 --suffix _xyreg_0.03_zreg_0.004 --max_tp 5
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --z_smooth_stitch --export --ids 36 --stitch_reg_xy 0.03 --stitch_reg_z 0.0 --suffix _xyreg_0.03_zreg_0.0 --max_tp 5
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --z_smooth_stitch --export --ids 36 --stitch_reg_xy 0.01 --stitch_reg_z 0.004 --suffix _xyreg_0.01_zreg_0.004 --max_tp 5
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --z_smooth_stitch --export --ids 36 --stitch_reg_xy 0.01 --stitch_reg_z 0.0 --suffix _xyreg_0.01_zreg_0.0 --max_tp 5
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --z_smooth_stitch --export --ids 36 --stitch_reg_xy 0.0004 --stitch_reg_z 0.0004 --suffix _xyreg_0.0004_zreg_0.0004 --max_tp 5
+
+singularity exec -B /mnt/disks/lymphosight_data/:/home/henry/lymphosight_data/ $HOME/ln_reg_singularity.sif python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --z_smooth_stitch --export --ids 36 --stitch_reg_xy 0.0004 --stitch_reg_z 0.0 --suffix _xyreg_0.0004_zreg_0.0 --max_tp 5
+
+and on cosmos
+singularity python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stitch --z_smooth_stitch --export --ids 36 --stitch_reg_xy 0.0 --stitch_reg_z 0.0 --suffix _xyreg_0.0_zreg_0.0 --max_tp 5
+
+
+
+
+
+python3 data_conversion.py --stitch --z_smooth_stitch --export --ids 36
+
+
+
+
+#subset of datasets for testing
+for idx in 10 36 42 50; do sbatch stack_reg.sh "python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stack_lr 0.4 --stack --ids $idx"; done
+
+#convert on cosmsos
+python3 data_conversion.py --export --ids 50
+
+
+
+
+
+
+#all datasets
+for idx in 1 3 4 5 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61; do sbatch stack_reg.sh "python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stack_lr 1.0 --stack --export --suffix _stack_reg_only --ids $idx"; done
+
+### Final commands for computing stitching on t
+#all datasets excluding explants
+for idx in 1 3 4 5 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 24 25 26 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do sbatch stack_reg.sh "python3 /opt/LymphoSight/Pymaricumpiler/data_conversion.py --stack_lr 1.0 --stack_reg 0.008 --stack --export --suffix _stack_reg_only --ids $idx"; done
+
+
+
+whole LN priority:
+25 46 47 48 51 53 31 37 38 34 35 21 1 7 44 40 42 56 58 12 15 17 3 8
+timelapse priority
+39 36 45 13 14 16 18 19 4 5 49 52 54 41 43 57 59 60 9 10
+
+
+
