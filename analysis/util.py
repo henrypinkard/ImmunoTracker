@@ -49,7 +49,10 @@ def read_time_calibration(time_cal_filepath):
     elapsed_time_s = np.array(time_cals)
     return elapsed_time_s
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
 def get_spots(file, name):
     for folder_name in file['Scene']['Content']:
         object = file['Scene']['Content'][folder_name]
@@ -112,7 +115,11 @@ def compute_displacements(coords, tracks, time_indices, elapsed_time_s):
         end_xyz = coords[max_index]
         displacements.append(np.linalg.norm(end_xyz - start_xyz, 2))
     d = np.array(displacements)
+<<<<<<< HEAD
     t = np.array(total_times / 60)
+=======
+    t = np.array(total_times) / 60
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
     m = d ** 2 / (6 * t)
     return t, m
 
@@ -211,7 +218,12 @@ def bootstrap_and_plot(x, y, n_query_points=40, num_bootstraps=100, alpha=0.4, z
 
 def generate_ln_subregion_masks(imaris_file, xyz_coords, dataset_id):
 
+<<<<<<< HEAD
     cell_measurements_file = h5py.File('/Users/henrypinkard/Desktop/imaris_analysis/density_maps.hdf', 'r')
+=======
+#     cell_measurements_file = h5py.File('/Users/henrypinkard/Desktop/imaris_analysis/density_maps.hdf', 'r')
+    cell_measurements_file = h5py.File('/home/henry/lymphosight_data/imaris_analysis/density_maps.hdf', 'r')
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
 
     cortex_dist_map_name = '{}_cortex'.format(dataset_id)
     t_cell_zone_mask = cell_measurements_file['{}_t_cell_mask'.format(dataset_id)]
@@ -272,7 +284,13 @@ def compute_cell_density(distance_threshold=100, file_id=25, num_samples=150, ce
     Compute number of DCs within threshold um at each pixel in resampled volume of the image
     """
 
+<<<<<<< HEAD
     root_path = '/Users/henrypinkard/Desktop/imaris_analysis/'
+=======
+#     root_path = '/Users/henrypinkard/Desktop/imaris_analysis/'
+    root_path = '/home/henry/lymphosight_data/imaris_analysis/'
+
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
     filepath = root_path + '{}.ims'.format(file_id)
     with h5py.File(filepath, mode='r') as file:
         cell_coords, time_indices, tracks = get_spots(file, cell_name)
@@ -388,7 +406,11 @@ def dc_motility_ln_subzones(imaris_files, dataset_ids, time_cal_paths, num_boots
         bootstrap_and_plot(np.sqrt(displacement_time_data[:, 0]), displacement_time_data[:, 1], n_query_points=10,
                            num_bootstraps=num_bootstraps, alpha=alpha, zero_bias=False)
 
+<<<<<<< HEAD
         plt.xlabel('Square root time ($\sqrt{s}$)')
+=======
+        plt.xlabel('Square root time ($\sqrt{min}$)')
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
         plt.ylabel('Displacement ($\mu$m)')
     plt.legend(['Deep T control', 'Deep T 24 hours post-infection', 'IFR control', 'IFR 24 hours post-infection',
                 'Subcapsular control', 'Subcapsular 24 hours post-infection'])
@@ -437,6 +459,11 @@ def motility_vs_hev_cortex_distance(file, cell_population, elapsed_time_s,
         cortex_dists_filtered = None
     if do_hev:
         hev_dists_filtered = cell_hev_dists[[track[0] for track in filtered_tracks]]
+<<<<<<< HEAD
+=======
+    else:
+        hev_dists_filtered = None
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
     _, motility = compute_displacements(spots_xyz, filtered_tracks, spots_time_indices, elapsed_time_s)
 
     return cortex_dists_filtered, hev_dists_filtered, motility
@@ -463,7 +490,11 @@ def motility_vs_hev_cortex_distance(file, cell_population, elapsed_time_s,
 
 @memory.cache
 def resmaple_dist_map(name, target_shape):
+<<<<<<< HEAD
     hev_cortex_file = h5py.File('/Users/henrypinkard/Desktop/imaris_analysis/with_surface_masks/distance_transforms.h5',
+=======
+    hev_cortex_file = h5py.File('/home/henry/lymphosight_data/imaris_analysis/distance_transforms.h5',
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
                                 mode='r')
     dist = hev_cortex_file[name]
     return ndi.zoom(dist, np.array(target_shape) / np.array(dist.shape))
@@ -476,7 +507,11 @@ def measure_distances_and_densities(file_id, file, cell_xyz, distance=100):
     :param distance:
     :return:
     """
+<<<<<<< HEAD
     cell_measurements_file = h5py.File('/Users/henrypinkard/Desktop/imaris_analysis/density_maps.hdf', 'r')
+=======
+    cell_measurements_file = h5py.File('/home/henry/lymphosight_data/imaris_analysis/density_maps.hdf', 'r')
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
 
     target_shape = np.array([900, 900, 900])
     cortex_name = '{}_cortex'.format(file_id[:2])
@@ -500,9 +535,19 @@ def measure_distances_and_densities(file_id, file, cell_xyz, distance=100):
     return dc_densities, cell_cortex_dists, cell_hev_dists
 
 def measure_densities(file_id, file, cell_xyz, distance=100, time_index=0, density_cell_name='xcr1'):
+<<<<<<< HEAD
     cell_measurements_file = h5py.File('/Users/henrypinkard/Desktop/imaris_analysis/density_maps.hdf', 'r')
 
     dc_density = cell_measurements_file['{}_{}_within_{}_tp_{}'.format(file_id, density_cell_name.lower(), distance, time_index)]
+=======
+    cell_measurements_file = h5py.File('/home/henry/lymphosight_data/imaris_analysis/density_maps.hdf', 'r')
+
+    if time_index is None:
+        name ='{}_{}_within_{}'.format(file_id, density_cell_name.lower(), distance)
+    else:
+        name = '{}_{}_within_{}_tp_{}'.format(file_id, density_cell_name.lower(), distance, time_index)
+    dc_density = cell_measurements_file[name]
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
     # normalize by total numbers of cells
     # dc_density = np.array(dc_density) / cell_xyz.shape[0]
 
@@ -537,7 +582,11 @@ def cell_motility_vs_cell_density(imaris_file, track_id, density_id, elapsed_tim
                          cell_name, density_cell_name='xcr1', distance_threshold=100, n_query=10, alpha=0.7,
                          weight_fn='tricubic', window_sigma=0.5, raw_data=False):
 
+<<<<<<< HEAD
     cell_measurements_file = h5py.File('/Users/henrypinkard/Desktop/imaris_analysis/density_maps.hdf', 'r')
+=======
+    cell_measurements_file = h5py.File('/home/henry/lymphosight_data/imaris_analysis/density_maps.hdf', 'r')
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
 
     # 	Deep T, IFR - Define by proximity to both T cells and cortex, B cell
     cell_xyz, time_indices, tracks = get_spots(imaris_file, cell_name)
@@ -614,7 +663,11 @@ def compute_t_cell_zone_mask(image_shape, all_t_coords, num_samples=150, percent
 
     #Threshold the percentile image to defin a zone for the T cell mask
     t_cell_mask = dist_prctile_image < threshold
+<<<<<<< HEAD
     with h5py.File('/Users/henrypinkard/Desktop/imaris_analysis/density_maps.hdf', 'r+') as out_file:
+=======
+    with h5py.File('/home/henry/lymphosight_data/imaris_analysis/density_maps.hdf', 'r+') as out_file:
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
         if save_name in out_file:
             del out_file[save_name]
         out_file.create_dataset(name=save_name, data=t_cell_mask)
@@ -623,7 +676,11 @@ def compute_cell_density_gradient(distance_threshold=100, file_id=25, num_sample
     """
     Compute number of DCs within threshold um at each pixel in resampled volume of the image
     """
+<<<<<<< HEAD
     root_path = '/Users/henrypinkard/Desktop/imaris_analysis/'
+=======
+    root_path = '/home/henry/lymphosight_data/imaris_analysis/'
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
     filepath = root_path + '{}.ims'.format(file_id)
     with h5py.File(filepath, mode='r') as file:
         cell_coords, time_indices, tracks = get_spots(file, cell_name)
@@ -662,7 +719,11 @@ def compute_cell_density_gradient(distance_threshold=100, file_id=25, num_sample
 def compute_density_gradient_motility_angles(imaris_file, density_file_id, elapsed_time_s,
                  cell_name,  motility_cutoff=0.04, density_cell_name='xcr1', distance_threshold=100):
 
+<<<<<<< HEAD
     cell_measurements_file = h5py.File('/Users/henrypinkard/Desktop/imaris_analysis/density_maps.hdf', 'r')
+=======
+    cell_measurements_file = h5py.File('/home/henry/lymphosight_data/imaris_analysis/density_maps.hdf', 'r')
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
     cell_xyz, time_indices, tracks = get_spots(imaris_file, cell_name)
     gradient = cell_measurements_file['{}_{}_gradient_{}'.format(density_file_id, density_cell_name.lower(), distance_threshold)]
 
@@ -699,7 +760,11 @@ def compute_xcr1_density_time_series_for_all_spot_times(file, id, name, distance
     xcr1_xyz, xcr1_times, _ = get_spots(file, 'XCR1')
     for t_index in set(time_indices):
         density = measure_densities(id, file, coords, distance, time_index=t_index)
+<<<<<<< HEAD
         tp_denisities.append(density / coords.shape[0])
+=======
+        tp_denisities.append(density / np.sum(xcr1_times==t_index))
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
     return tp_denisities
 
 def compute_xcr1_density_time_series(file, id, name, elapsed_time, distance=100):
@@ -712,8 +777,13 @@ def compute_xcr1_density_time_series(file, id, name, elapsed_time, distance=100)
         coords_at_tp = coords[time_indices == t_index]
         tp_time_indices.append(coords_at_tp.shape[0] * [elapsed_time[t_index] / 60])
 
+<<<<<<< HEAD
         density_control = measure_densities(id, file, coords_at_tp, distance, time_index=t_index)
         tp_denisities.append(density_control / np.sum(xcr1_times == t_index))
+=======
+        density = measure_densities(id, file, coords_at_tp, distance, time_index=t_index)
+        tp_denisities.append(density / np.sum(xcr1_times == t_index))
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
     return np.concatenate(tp_time_indices), np.concatenate(tp_denisities)
 
 def compute_xcr1_density_at_time_index(file, id, name, t_index, distance=100):
@@ -763,6 +833,7 @@ def compute_xcr1_density_at_time_index(file, id, name, t_index, distance=100):
 # cell_motility_vs_cell_density(file45, None, '45', elapsed_time_s45,
 #                           num_bootstraps=5, min_track_duration=min_track_duration,
 #                           density_cell_name='XCR1', cell_name='GFP', raw_data=False, alpha=0.5)
+<<<<<<< HEAD
 
 #
 # time_cal_filepath25 = '/Users/henrypinkard/Desktop/imaris_analysis/files_with_time_md/25_uncorrected.ims'
@@ -772,3 +843,5 @@ def compute_xcr1_density_at_time_index(file, id, name, t_index, distance=100):
 # file21 = h5py.File('/Users/henrypinkard/Desktop/imaris_analysis/21.ims', 'r')
 
 pass
+=======
+>>>>>>> 9aeec8e3c6eca7e704bdfff00c5366e955e4f5fc
