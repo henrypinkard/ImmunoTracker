@@ -1,14 +1,10 @@
-import h5py
-import numpy as np
 from scipy.spatial import Delaunay
-import napari
 from tensorflow import keras
 from scipy.ndimage import gaussian_filter1d
 
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-import numpy as np
 
 # settings for exporting plots to illustrator
 matplotlib.rcParams['pdf.fonttype'] = 42
@@ -26,7 +22,7 @@ plt.rc('legend', fontsize=SMALL_SIZE)  # legend fontsize
 plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 
-from lami_analysis_functions import *
+from automated_excitation.lami_helper import *
 
 # f = h5py.File(
 #     '/Users/henrypinkard/Desktop/Lymphosight/2017 data/2017-4-4 medLN/C_40_600_70_1--Positions as time_GFPCandidates.mat',

@@ -3,7 +3,7 @@ import h5py
 from tensorflow import keras
 from tensorflow.keras import layers
 import tensorflow as tf
-from automated_excitation.surface_interp_sandbox import bin_surface_distance
+from automated_excitation.lami_helper import bin_surface_distance
 
 def load_data():
 
@@ -30,7 +30,7 @@ def load_data():
     return normalized_tile_position, normalized_brightness, distances_to_surface, excitations
 
 
-model_export_name = 'e670_LAMI_model'
+model_export_name = 'GFP_LAMI_model'
 normalized_tile_position, normalized_brightness, distances_to_surface, excitations = load_data()
 
 distance_histograms = bin_surface_distance(distances_to_surface)
@@ -55,7 +55,7 @@ model.add(layers.Dense(1, activation=None))
 
 def excitation_power_loss(y_true, y_pred):
     voltage_to_power = lambda x: (tf.cos(3.1415 + 2 * 3.1415 / 510 * x) + 1) / 2
-    #dont overly penalize values outside of acutal range
+    # dont overly penalize values outside of physical range eom can apply range
     clampedy = tf.minimum(255.0, tf.maximum(0.0, y_pred))
     totalSqError = tf.square(voltage_to_power(clampedy) - voltage_to_power(y_true))
     return tf.sqrt(tf.reduce_mean(totalSqError))

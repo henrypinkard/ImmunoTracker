@@ -1,5 +1,3 @@
-import h5py
-import numpy as np
 from scipy.spatial import Delaunay
 import napari
 from tensorflow import keras
@@ -7,8 +5,7 @@ from tensorflow import keras
 import matplotlib
 
 matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-from lami_analysis_functions import *
+from automated_excitation.lami_helper import *
 
 
 
@@ -24,7 +21,7 @@ interp_points[:, 2] -= np.min(interp_points[:, 2])
 tris = Delaunay(interp_points[:, :2])
 
 
-model = keras.models.load_model('../GFP_LAMI_model', custom_objects={'excitation_power_loss': None})
+model = keras.models.load_model('GFP_LAMI_model', custom_objects={'excitation_power_loss': None})
 # model = keras.models.load_model('../e670_LAMI_model', custom_objects = {'excitation_power_loss': None})
 
 
@@ -77,14 +74,15 @@ with napari.gui_qt():
     # v.add_image(min_distance_to_interp)
     # v.add_image(mask)
     v.add_image( (z_diff > 0) * prediction_img_power, colormap='inferno')
+    v.add_image(z_diff)
     # v.add_image(prediction_img_power, colormap='inferno')
 
 
 # show surf 3d
-# with napari.gui_qt():
-#     v = napari.Viewer()
-#     v.add_surface((interp_points, tris.simplices, -interp_points[:, 2] / 400), colormap='turbo')
-#
+with napari.gui_qt():
+    v = napari.Viewer()
+    v.add_surface((interp_points, tris.simplices, -interp_points[:, 2] / 400), colormap='turbo')
+
 #
 
 
